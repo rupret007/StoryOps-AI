@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true
+  },
+  "imports": {
+    "@/domain": "../../src/domain/index.ts",
+    "@openai/agents": "npm:@openai/agents@0.14.0",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.110.9",
+    "decimal.js": "npm:decimal.js@10.6.0",
+    "openai": "npm:openai@6.46.0",
+    "openai/helpers/zod": "npm:openai@6.46.0/helpers/zod",
+    "zod": "npm:zod@4.4.3"
+  }
+}

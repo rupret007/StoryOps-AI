@@ -1,0 +1,84 @@
+name: storyops-ai
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_STORYOPS_ENV: ${VITE_STORYOPS_ENV:-sandbox}
+        VITE_STORYOPS_DATA_MODE: ${VITE_STORYOPS_DATA_MODE:?Run docker compose with --env-file .env.local}
+        VITE_STORYOPS_TIME_ZONE: ${VITE_STORYOPS_TIME_ZONE:-America/Chicago}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_STORYOPS_COMPANY_ID: ${VITE_STORYOPS_COMPANY_ID:-}
+        VITE_INTEGRATION_HEALTH_REFRESH_SECONDS: ${VITE_INTEGRATION_HEALTH_REFRESH_SECONDS:-60}
+        STORYOPS_BUILD_REVISION: ${STORYOPS_BUILD_REVISION:-local-uncommitted}
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      STORYOPS_EXPECTED_DATA_MODE: ${VITE_STORYOPS_DATA_MODE:?Run docker compose with --env-file .env.local}
+    ports:
+      - '127.0.0.1:${STORYOPS_PORT:-8080}:8080'
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  # Optional routing engine. It is intentionally behind a profile because the
+  # application has a deterministic no-key routing sandbox. Start with:
+  # docker compose --env-file .env.local --profile routing up --build
+  vroom:
+    profiles:
+      - routing
+    build:
+      context: ./infra/vroom
+      dockerfile: Dockerfile
+      args:
+        VROOM_REF: 43dd7d0b8b560431eb555bf335cf4797eb7343c4
+        VROOM_VERSION: v1.15.0
+        VROOM_EXPRESS_REF: 5475901e60ec13ed9eec6cc87c811206a779eb03
+        VROOM_EXPRESS_VERSION: v0.12.0
+    environment:
+      VROOM_ROUTER: ${VROOM_ROUTER:-osrm}
+      VROOM_LOG: /tmp/vroom
+    ports:
+      - '127.0.0.1:${VROOM_PORT:-3000}:3000'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 5

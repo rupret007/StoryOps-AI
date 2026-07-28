@@ -1,0 +1,74 @@
+{
+  "name": "storyops-ai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.3 <23"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "check:edge": "node scripts/check-edge.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:infra": "node --test tests/integration/infra-scripts.test.mjs tests/integration/backup-restore-hardening.test.mjs",
+    "test:supabase": "node scripts/verify-local-supabase.mjs",
+    "verify": "npm run licenses:check && npm run lint && npm run typecheck && npm run check:edge && npm test && npm run test:infra && npm run build",
+    "mcp": "tsx mcp/storyops-server.ts",
+    "setup:app": "node scripts/setup.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
+    "demo:proof": "node scripts/demo-proof.mjs",
+    "licenses:generate": "node scripts/generate-npm-notices.mjs",
+    "licenses:check": "node scripts/generate-npm-notices.mjs --check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@openai/agents": "0.14.0",
+    "@supabase/supabase-js": "2.110.9",
+    "decimal.js": "10.6.0",
+    "idb": "8.0.3",
+    "lucide-react": "1.27.0",
+    "openai": "6.46.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "22.19.19",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "@vitejs/plugin-react": "6.0.4",
+    "eslint": "10.8.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.3",
+    "globals": "16.3.0",
+    "jsdom": "26.1.0",
+    "prettier": "3.9.6",
+    "tsx": "4.20.6",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5",
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "4.1.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-arm64-musl": "4.62.3",
+    "@rollup/rollup-linux-x64-musl": "4.62.3"
+  },
+  "overrides": {
+    "ejs": "5.0.2"
+  }
+}

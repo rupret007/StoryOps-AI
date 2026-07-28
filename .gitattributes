@@ -1,0 +1,2 @@
+*.md whitespace=-blank-at-eol
+NPM_THIRD_PARTY_NOTICES.txt -whitespace

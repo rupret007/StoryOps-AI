@@ -1,0 +1,153 @@
+name: StoryOps CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'codex/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storyops-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  STORYOPS_PROVIDER_MODE: sandbox
+  OPENAI_MODE: sandbox
+  TWILIO_MODE: sandbox
+  EMAIL_MODE: sandbox
+  STRIPE_MODE: sandbox
+  GOOGLE_CALENDAR_MODE: sandbox
+  MAPS_MODE: sandbox
+  WEATHER_MODE: sandbox
+  ROUTING_MODE: sandbox
+  STORAGE_MODE: sandbox
+  QUICKBOOKS_MODE: sandbox
+
+jobs:
+  quality:
+    name: Locked install, audit, tests, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit dependency graph
+        run: npm audit --audit-level=high
+
+      - name: Verify generated third-party notices
+        run: npm run licenses:check
+
+      - name: Validate no-key configuration
+        run: npm run setup:app -- --check --skip-install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Check, lint, and test pinned Supabase Edge functions
+        run: npm run check:edge
+
+      - name: Unit and UI tests
+        run: npm test
+
+      - name: Infrastructure integration tests
+        run: npm run test:infra
+
+      - name: Production build
+        run: npm run build
+
+      - name: Preserve production bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: storyops-production-bundle
+          path: |
+            dist
+            NOTICE.md
+            LICENSE.atomic-crm.md
+            THIRD_PARTY.md
+            NPM_THIRD_PARTY_NOTICES.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  e2e:
+    name: Desktop and mobile golden path
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright projects
+        run: npm run test:e2e
+
+      - name: Preserve failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: storyops-playwright-failure
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+  database:
+    name: Supabase migration, seed, and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Start pinned local Supabase
+        run: npx --yes supabase@2.110.0 start
+
+      - name: Run migration, RLS, RPC, and Edge release contract
+        run: npm run test:supabase -- --reset
+
+      - name: Stop local Supabase
+        if: always()
+        run: npx --yes supabase@2.110.0 stop --no-backup

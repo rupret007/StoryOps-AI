@@ -1,0 +1,17 @@
+.git
+.github
+.supabase
+supabase/.temp
+.DS_Store
+.env
+.env.*
+!.env.example
+artifacts
+backups
+coverage
+dist
+node_modules
+playwright-report
+test-results
+*.log
+*.zip

@@ -1,0 +1,33 @@
+cliArgs:
+  geometry: false
+  planmode: false
+  threads: 2
+  explore: 5
+  limit: '2mb'
+  logdir: '/../tmp/vroom'
+  logsize: '20M'
+  maxlocations: 250
+  maxvehicles: 25
+  override: false
+  path: ''
+  port: 3000
+  router: 'osrm'
+  timeout: 10000
+  baseurl: '/'
+
+# Matrix-based requests do not contact a routing server and are the supported
+# no-key sandbox path. Coordinate-based live requests must point these entries
+# at an operator-approved OSRM/ORS/Valhalla instance.
+routingServers:
+  osrm:
+    car:
+      host: '127.0.0.1'
+      port: '5000'
+  ors:
+    driving-car:
+      host: '127.0.0.1/ors/v2'
+      port: '8080'
+  valhalla:
+    auto:
+      host: '127.0.0.1'
+      port: '8002'

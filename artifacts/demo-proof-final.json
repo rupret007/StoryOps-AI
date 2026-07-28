@@ -1,0 +1,106 @@
+{
+  "format": "storyops-demo-proof-v1",
+  "status": "passed",
+  "startedAt": "2026-07-28T23:10:19.425Z",
+  "completedAt": "2026-07-28T23:11:45.133Z",
+  "mode": "full",
+  "sandbox": true,
+  "e2eSkipped": false,
+  "providerCredentialsUsed": false,
+  "results": [
+    {
+      "name": "no-key sandbox prerequisite check",
+      "status": "passed",
+      "durationMs": 68,
+      "detail": {
+        "code": 0,
+        "stdout": "OK Node v22.22.3\nOK repository structure\nOK provider configuration (sandbox default)\nStoryOps AI prerequisite check passed.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "backup safety dry run",
+      "status": "passed",
+      "durationMs": 74,
+      "detail": {
+        "code": 0,
+        "stdout": "Backup target: /Users/jeffstory/Documents/StoryOps-AI/backups/storyops-2026-07-28T23-10-19-560Z\nDatabase target: 127.0.0.1:54322/postgres (local)\nStorage objects: not included\nSecurity: output is owner-only but unencrypted; encrypt it with the approved backup system before off-site transfer.\n$ npx --yes supabase@2.110.0 db dump --db-url 'postgresql://postgres:[REDACTED]@127.0.0.1:54322/postgres' --file /Users/jeffstory/Documents/StoryOps-AI/backups/.storyops-backup-tmp-9f301f10-9763-4e84-b95a-3633fcdeae44/roles.sql --role-only\n$ npx --yes supabase@2.110.0 db dump --db-url 'postgresql://postgres:[REDACTED]@127.0.0.1:54322/postgres' --file /Users/jeffstory/Documents/StoryOps-AI/backups/.storyops-backup-tmp-9f301f10-9763-4e84-b95a-3633fcdeae44/schema.sql\n$ npx --yes supabase@2.110.0 db dump --db-url 'postgresql://postgres:[REDACTED]@127.0.0.1:54322/postgres' --file /Users/jeffstory/Documents/StoryOps-AI/backups/.storyops-backup-tmp-9f301f10-9763-4e84-b95a-3633fcdeae44/data.sql --use-copy --data-only --exclude storage.buckets_vectors --exclude storage.vector_indexes\nPLAN verify StoryOps schema sentinels, required migration, schema fingerprint, and estimated table counts\nDry run complete; no database, network, or filesystem changes were made.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "infra script integration tests",
+      "status": "passed",
+      "durationMs": 5283,
+      "detail": {
+        "code": 0,
+        "stdout": "\n> storyops-ai@1.0.0 test:infra\n> node --test tests/integration/infra-scripts.test.mjs tests/integration/backup-restore-hardening.test.mjs\n\nTAP version 13\n# Subtest: backup source evidence requires the exact release migration set and StoryOps sentinels\nok 1 - backup source evidence requires the exact release migration set and StoryOps sentinels\n  ---\n  duration_ms: 1.807833\n  type: 'test'\n  ...\n# Subtest: executable backup refuses a dump whose source lacks the required migration\nok 2 - executable backup refuses a dump whose source lacks the required migration\n  ---\n  duration_ms: 501.624459\n  type: 'test'\n  ...\n# Subtest: executable backup publishes fingerprints and explicitly estimated counts\nok 3 - executable backup publishes fingerprints and explicitly estimated counts\n  ---\n  duration_ms: 548.929167\n  type: 'test'\n  ...\n# Subtest: backup evidence fingerprints migrations and labels catalog counts as estimates\nok 4 - backup evidence fingerprints migrations and labels catalog counts as estimates\n  ---\n  duration_ms: 8.345208\n  type: 'test'\n  ...\n# Subtest: schema dump must contain setup, outbound, and trusted-media StoryOps sentinels\nok 5 - schema dump must contain setup, outbound, and trusted-media StoryOps sentinels\n  ---\n  duration_ms: 2.325542\n  type: 'test'\n  ...\n# Subtest: recovery migration authority exactly matches the repository migration set\nok 6 - recovery migration authority exactly matches the repository migration set\n  ---\n  duration_ms: 0.576625\n  type: 'test'\n  ...\n# Subtest: Storage restore fails closed on public, size, or MIME policy drift\nok 7 - Storage restore fails closed on public, size, or MIME policy drift\n  ---\n  duration_ms: 0.480208\n  type: 'test'\n  ...\n# Subtest: Storage bucket manifests reject duplicate bucket identities\nok 8 - Storage bucket manifests reject duplicate bucket identities\n  ---\n  duration_ms: 0.080625\n  type: 'test'\n  ...\n# Subtest: no-key setup check passes in forced sandbox mode\nok 9 - no-key setup check passes in forced sandbox mode\n  ---\n  duration_ms: 70.456458\n  type: 'test'\n  ...\n# Subtest: Google Calendar live setup accepts server-side refresh credentials\nok 10 - Google Calendar live setup accepts server-side refresh credentials\n  ---\n  duration_ms: 83.101417\n  type: 'test'\n  ...\n# Subtest: provider setup requires both switches before treating OpenAI as live\nok 11 - provider setup requires both switches before treating OpenAI as live\n  ---\n  duration_ms: 276.550667\n  type: 'test'\n  ...\n# Subtest: MCP OpenAI adapter requires both live switches\nok 12 - MCP OpenAI adapter requires both live switches\n  ---\n  duration_ms: 714.18\n  type: 'test'\n  ...\n# Subtest: signed inbound lead intake remains the explicit mode-only boundary\nok 13 - signed inbound lead intake remains the explicit mode-only boundary\n  ---\n  duration_ms: 158.379709\n  type: 'test'\n  ...\n# Subtest: all script-level Supabase execution uses the exact pinned npx package\nok 14 - all script-level Supabase execution uses the exact pinned npx package\n  ---\n  duration_ms: 6.181542\n  type: 'test'\n  ...\n# Subtest: Docker binding classifier rejects IPv4, IPv6, and empty wildcard hosts\nok 15 - Docker binding classifier rejects IPv4, IPv6, and empty wildcard hosts\n  ---\n  duration_ms: 0.22525\n  type: 'test'\n  ...\n# Subtest: setup verification runs the live contract without reset unless explicitly requested\nok 16 - setup verification runs the live contract without reset unless explicitly requested\n  ---\n  duration_ms: 155.294542\n  type: 'test'\n  ...\n# Subtest: setup stops a just-started Supabase stack with wildcard ports unless explicitly overridden\nok 17 - setup stops a just-started Supabase stack with wildcard ports unless explicitly overridden\n  ---\n  duration_ms: 1221.953708\n  type: 'test'\n  ...\n# Subtest: Compose and Docker builds require an explicit, complete data-mode contract\nok 18 - Compose and Docker builds require an explicit, complete data-mode contract\n  ---\n  duration_ms: 1.0595\n  type: 'test'\n  ...\n# Subtest: the distributable CI artifact preserves every required notice\nok 19 - the distributable CI artifact preserves every required notice\n  ---\n  duration_ms: 0.468208\n  type: 'test'\n  ...\n# Subtest: static runtime reports compiled mode and revision and rejects expected-mode mismatch\nok 20 - static runtime reports compiled mode and revision and rejects expected-mode mismatch\n  ---\n  duration_ms: 282.589667\n  type: 'test'\n  ...\n# Subtest: backup dry run performs no writes and redacts database credentials\nok 21 - backup dry run performs no writes and redacts database credentials\n  ---\n  duration_ms: 78.6865\n  type: 'test'\n  ...\n# Subtest: restore dry run validates checksums and never exposes the target password\nok 22 - restore dry run validates checksums and never exposes the target password\n  ---\n  duration_ms: 150.9775\n  type: 'test'\n  ...\n# Subtest: VROOM is commit-pinned and compiled without GLPK\nok 23 - VROOM is commit-pinned and compiled without GLPK\n  ---\n  duration_ms: 0.576042\n  type: 'test'\n  ...\n# Subtest: environment template leaves server-side credentials empty\nok 24 - environment template leaves server-side credentials empty\n  ---\n  duration_ms: 0.465541\n  type: 'test'\n  ...\n1..24\n# tests 24\n# suites 0\n# pass 24\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5089.401416\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "lint",
+      "status": "passed",
+      "durationMs": 8361,
+      "detail": {
+        "code": 0,
+        "stdout": "\n> storyops-ai@1.0.0 lint\n> eslint . --max-warnings=0\n\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typecheck",
+      "status": "passed",
+      "durationMs": 332,
+      "detail": {
+        "code": 0,
+        "stdout": "\n> storyops-ai@1.0.0 typecheck\n> tsc -b --pretty false\n\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "unit and integration test suite",
+      "status": "passed",
+      "durationMs": 7553,
+      "detail": {
+        "code": 0,
+        "stdout": "\n> storyops-ai@1.0.0 test\n> vitest run\n\n\n RUN  v4.1.0 /Users/jeffstory/Documents/StoryOps-AI\n\n\n Test Files  26 passed (26)\n      Tests  140 passed (140)\n   Start at  18:10:33\n   Duration  7.07s (transform 3.85s, setup 5.38s, import 9.75s, tests 3.43s, environment 21.88s)\n\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "production build",
+      "status": "passed",
+      "durationMs": 2121,
+      "detail": {
+        "code": 0,
+        "stdout": "\n> storyops-ai@1.0.0 build\n> tsc -b && vite build\n\nvite v8.1.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 1958 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/manifest.webmanifest                          0.32 kB\ndist/index.html                                    0.77 kB │ gzip:   0.43 kB\ndist/assets/index-Hq7zg5ih.css                    77.92 kB │ gzip:  14.67 kB\ndist/assets/workbox-window.prod.es5-Bd17z0YL.js    5.65 kB │ gzip:   2.20 kB\ndist/assets/index-DNgiLFIc.js                    868.41 kB │ gzip: 238.64 kB\n\n✓ built in 407ms\n\nPWA v1.3.0\nmode      generateSW\nprecache  6 entries (930.44 KiB)\nfiles generated\n  dist/sw.js\n  dist/workbox-9c191d2f.js\n",
+        "stderr": "[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 800 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+      }
+    },
+    {
+      "name": "Playwright desktop and mobile golden path",
+      "status": "passed",
+      "durationMs": 61492,
+      "detail": {
+        "code": 0,
+        "stdout": "\n> storyops-ai@1.0.0 test:e2e\n> playwright test\n\n\nRunning 18 tests using 1 worker\n\n  ✓   1 [chromium] › tests/e2e/golden-path.spec.ts:11:1 › runs the golden path from qualification through recurring maintenance (20.1s)\n  ✓   2 [chromium] › tests/e2e/guardrails.spec.ts:11:1 › large discounts require one exact-payload owner approval (7.4s)\n  ✓   3 [chromium] › tests/e2e/guardrails.spec.ts:34:1 › role permissions block technician access to approvals and invoice writes (1.0s)\n  ✓   4 [chromium] › tests/e2e/guardrails.spec.ts:52:1 › booking cannot bypass quote acceptance and deposit truth (949ms)\n  ✓   5 [chromium] › tests/e2e/guardrails.spec.ts:60:1 › sandbox operational state is labeled synthetic and never presented as provider truth (1.5s)\n  ✓   6 [chromium] › tests/e2e/guardrails.spec.ts:93:1 › offline field changes recover through an idempotent outbox (2.1s)\n  ✓   7 [chromium] › tests/e2e/guardrails.spec.ts:128:1 › incident reports preserve facts and pause affected work (912ms)\n  ✓   8 [chromium] › tests/e2e/guardrails.spec.ts:148:1 › setup persists the exact local profile across reload (657ms)\n  ✓   9 [chromium] › tests/e2e/guardrails.spec.ts:163:1 › setup service exclusions fail closed at deterministic pricing (1.3s)\n  ✓  10 [mobile] › tests/e2e/golden-path.spec.ts:11:1 › runs the golden path from qualification through recurring maintenance (5.4s)\n  ✓  11 [mobile] › tests/e2e/guardrails.spec.ts:11:1 › large discounts require one exact-payload owner approval (1.8s)\n  ✓  12 [mobile] › tests/e2e/guardrails.spec.ts:34:1 › role permissions block technician access to approvals and invoice writes (1.7s)\n  ✓  13 [mobile] › tests/e2e/guardrails.spec.ts:52:1 › booking cannot bypass quote acceptance and deposit truth (1.1s)\n  ✓  14 [mobile] › tests/e2e/guardrails.spec.ts:60:1 › sandbox operational state is labeled synthetic and never presented as provider truth (1.5s)\n  ✓  15 [mobile] › tests/e2e/guardrails.spec.ts:93:1 › offline field changes recover through an idempotent outbox (1.6s)\n  ✓  16 [mobile] › tests/e2e/guardrails.spec.ts:128:1 › incident reports preserve facts and pause affected work (2.1s)\n  ✓  17 [mobile] › tests/e2e/guardrails.spec.ts:148:1 › setup persists the exact local profile across reload (1.5s)\n  ✓  18 [mobile] › tests/e2e/guardrails.spec.ts:163:1 › setup service exclusions fail closed at deterministic pricing (1.4s)\n\n  18 passed (1.0m)\n",
+        "stderr": "[WebServer] (node:82474) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)\n[WebServer] [plugin builtin:vite-reporter] \n[WebServer] (!) Some chunks are larger than 800 kB after minification. Consider:\n[WebServer] - Using dynamic import() to code-split the application\n[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n[WebServer] (node:82534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)\n(node:82539) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:82919) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+      }
+    },
+    {
+      "name": "VROOM deterministic custom-matrix route",
+      "status": "passed",
+      "durationMs": 421,
+      "detail": {
+        "url": "http://127.0.0.1:3000",
+        "code": 0,
+        "routes": 1,
+        "unassigned": 0,
+        "durationSeconds": 1200,
+        "distanceMeters": 16000
+      }
+    }
+  ],
+  "error": null
+}
