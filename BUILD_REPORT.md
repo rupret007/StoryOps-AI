@@ -335,5 +335,7 @@ and [docs/compliance/BACKUP-RESTORE.md](docs/compliance/BACKUP-RESTORE.md).
 
 ## Release provenance
 
-The verified source commit will be recorded here after the implementation
-commit is created. The branch is intentionally not pushed.
+The verified implementation is commit
+`7a3947160541bbe2c1bce6303480a447bc04a85a` on
+`codex/storyops-v1`. This report-only provenance update follows that commit.
+The branch is intentionally not pushed.
