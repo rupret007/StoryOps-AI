@@ -4,7 +4,9 @@
 **Branch:** `codex/storyops-v1`  
 **Release posture:** **YELLOW — production-shaped V1 is locally verified; live customer use is not authorized**  
 **Data used:** synthetic sandbox and local synthetic Supabase fixtures only  
-**External actions:** no deployment, push, purchase, customer contact, provider enrollment, or secret activation
+**External actions:** private source publication to `rupret007/StoryOps-AI`
+`main` only; no deployment, purchase, customer contact, provider enrollment, or
+secret activation
 
 ## Outcome
 
@@ -313,7 +315,8 @@ and [docs/compliance/BACKUP-RESTORE.md](docs/compliance/BACKUP-RESTORE.md).
   checklists are engineering aids, not legal, tax, environmental, insurance, or
   safety approval.
 - The StoryOps AI root license is undecided.
-- Nothing was deployed or pushed.
+- Nothing was deployed. Source was published only to the private
+  `rupret007/StoryOps-AI` repository on `main`.
 
 ## Next priorities
 
@@ -338,4 +341,5 @@ and [docs/compliance/BACKUP-RESTORE.md](docs/compliance/BACKUP-RESTORE.md).
 The verified implementation is commit
 `7a3947160541bbe2c1bce6303480a447bc04a85a` on
 `codex/storyops-v1`. This report-only provenance update follows that commit.
-The branch is intentionally not pushed.
+The verified source is published to the private
+`https://github.com/rupret007/StoryOps-AI` repository on `main`.
