@@ -214,6 +214,16 @@ Boundary rules:
   post-service worker commits an unknown-submission quarantine before the live
   create call; any timeout/crash/invalid-response ambiguity is excluded from
   resend and reconciled by authoritative SID/callback/account evidence.
+- Keep provider submission truth separate from provider read availability. If a
+  known live SID cannot be read after the bounded reconciliation budget,
+  StoryOps retains `submitted`, the SID, communication record, and last known
+  provider status; records `RECONCILIATION_EXHAUSTED` plus the read error;
+  requires manual reconciliation; and excludes the action from automatic
+  resend. A signed callback can still resolve it. It must not be rewritten as a
+  provider delivery failure.
+- Serialize one active transactional quote-delivery or on-my-way attempt per
+  company and business entity across all channels. Channel switching is not a
+  retry escape hatch.
 - The generic AI `communications.send_sms` tool is sandbox-only in this
   release. Its metadata is non-idempotent and it fails before a live Twilio
   create. Only the durable post-service outbox/quarantine path may submit a live

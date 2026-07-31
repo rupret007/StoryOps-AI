@@ -1,13 +1,15 @@
 # StoryOps AI V1.1 pilot readiness
 
-**Assessment date:** **PENDING — root to fill after source freeze**  
+**Assessment date:** July 30, 2026 (America/Chicago); evidence collected
+through `2026-07-31T03:04Z`  
 **Target operator:** one owner-operated DFW exterior-cleaning company  
 **First industry pack:** pressure/soft washing, gutter/downspout cleaning,
 roof washing, window cleaning, and related exterior add-ons  
 **Decision:** **YELLOW — suitable for a bounded sandbox/operator rehearsal;
 not authorized for live customers**  
-**Release evidence:** pending final source-freeze verification, fresh
-screenshots, independent audit, and local release commit
+**Tested implementation:** `83950180d63e3455fa2047cd838ba5a2df8d9491`  
+**Release evidence:** source-frozen local verification passed; no fresh V1.1
+screenshots or hosted/provider evidence exists
 
 ## Executive decision
 
@@ -26,28 +28,33 @@ reviewed Supabase deployment. No hosted environment, real credential, external
 provider canary, real customer workflow, or professional launch approval was
 provided. Those omissions are launch blockers, not test failures.
 
-This assessment describes the current source boundary. It does not assert final
-test counts, migration counts, hashes, timestamps, screenshots, backup proof, or
-commit provenance. Earlier V1 evidence is not V1.1 release evidence.
+This assessment is bound to implementation SHA
+`83950180d63e3455fa2047cd838ba5a2df8d9491`. The demo proof started from that
+clean tree. The later evidence/report commit packages results but is not the
+revision against which the matrix ran. Earlier V1 screenshots and evidence are
+not substituted for V1.1 proof.
 
 ## Two separate readiness decisions
 
-| Decision boundary                 | Current decision                                                                                                                                                                                                                                                             |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local product/operator rehearsal  | **READY FOR BOUNDED LOCAL REHEARSAL, SUBJECT TO FINAL SOURCE-FREEZE EVIDENCE.** The no-key sandbox and local authenticated contracts are the supported proof boundary. They may be used with synthetic identities and data; they do not authorize customer or provider work. |
-| Live customer/provider operations | **YELLOW — NOT AUTHORIZED.** No hosted deployment, real credential, external canary, professional launch approval, or named production operator evidence is recorded. A passing local suite cannot turn this decision green.                                                 |
+| Decision boundary                 | Current decision                                                                                                                                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local product/operator rehearsal  | **READY FOR BOUNDED LOCAL REHEARSAL.** The source-frozen no-key sandbox, local authenticated contracts, isolated restore, and hardened local images passed. Rehearsal is limited to synthetic identities and data; it does not authorize customer or provider work. |
+| Live customer/provider operations | **YELLOW — NOT AUTHORIZED.** No hosted deployment, real credential, external canary, professional launch approval, or named production operator evidence is recorded. A passing local suite cannot turn this decision green.                                        |
 
-The local release record remains intentionally incomplete until the final,
-byte-current source is frozen:
+## Source-frozen verification record
 
-| Final evidence field                         | Handoff value              |
-| -------------------------------------------- | -------------------------- |
-| Reviewed local release commit                | **PENDING — root to fill** |
-| Full command matrix and exact results        | **PENDING — root to fill** |
-| Migration/schema inventory and current hash  | **PENDING — root to fill** |
-| Signed isolated backup/restore proof         | **PENDING — root to fill** |
-| Byte-current screenshot inventory            | **PENDING — root to fill** |
-| Independent release audit and P0/P1 decision | **PENDING — root to fill** |
+| Evidence field                        | Source-frozen result                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tested implementation                 | `83950180d63e3455fa2047cd838ba5a2df8d9491`; the evidence/report commit follows this tested implementation and must not be represented as independently retested.                                                                                                                                                                                                                                                                                                                                |
+| Dependencies and audits               | `npm ci` passed. Root and VROOM-runtime high-severity audits completed with zero reported vulnerabilities.                                                                                                                                                                                                                                                                                                                                                                                      |
+| Static and Edge gates                 | Format, license inventory, lint, TypeScript, Edge checks, and `git diff --check` passed; Edge contracts passed **128/128**.                                                                                                                                                                                                                                                                                                                                                                     |
+| Application and infrastructure suites | Vitest passed **409/409**; infrastructure/hardening tests passed **52/52**; the isolated upgrade rehearsal passed; the production build passed; Playwright desktop/mobile golden paths passed **28/28**; AI evaluations passed **18/18**.                                                                                                                                                                                                                                                       |
+| Supabase release contract             | A clean reset applied all **67** migrations, then passed SQL contracts, concurrency tests, and live local Edge contracts. Migration `20260728660000_private_worker_launch_readiness.sql` and schema mirror both hash to `70e7c7a695ab245aba4ffc41725e403b25f34ef7c02a6b77ce7c79dbf54ffa79`; the exact 67-migration set fingerprint is `98979fde9f841c360d1729ae8312f7f1c332175b51018633533baba9f3c1d894`.                                                                                       |
+| Clean demo proof                      | [`artifacts/demo-proof-v1.1-20260731T0300Z.json`](artifacts/demo-proof-v1.1-20260731T0300Z.json) passed from a clean tree bound to the tested implementation. Artifact SHA-256: `8439838e3a59fab7a4a7b5fdacb193292d63924661a2b57a7b516ba3afbaf213`. It used sandbox mode and no provider credentials.                                                                                                                                                                                           |
+| Executed backup and restore           | Trusted source-manifest SHA-256 `b51e0b03891e5e66cb8a31db7dfcb53b47752d48701c0fbc9fdaabcfcfae2490` was restored into an isolated loopback target with distinct source/target database identities. Three Storage objects totaling 204 bytes matched fingerprint `2d7211ff109bd741427ecc7bd9431c6326dd0b48f7fa24a518823a54399e0ea7`; HMAC proof verification, owner-only mode `0600`, and target cleanup passed. The backup remains unencrypted local evidence, not an off-site recovery program. |
+| Runtime images and routing            | Hardened app image `sha256:2d413155a3eba850edf1968516521e0bb622f9b9987f8c4f9ea2d672628ee6b5` passed its local runtime/health contract. Commit-pinned VROOM image `sha256:dc13226d56361ffe7a895806910076a4be999746aeefd0d2e9f7dca692ca29b4` passed dependency-pin, health, and deterministic route checks. These are local image IDs, not registry attestations.                                                                                                                                 |
+| Independent release audit             | The final independent audit found **0 P0** and **0 P1** issues. An initial provider-truth P1 was fixed and regression-tested before the source freeze.                                                                                                                                                                                                                                                                                                                                          |
+| Screenshot inventory                  | **No fresh byte-current V1.1 screenshots were captured.** The four images under `artifacts/screenshots/` predate this source freeze and are excluded as V1.1 release evidence. This is an explicit visual/UX evidence gap, not a test pass.                                                                                                                                                                                                                                                     |
 
 ## What an operator can rehearse now
 
@@ -126,6 +133,15 @@ not a business canary; an owner-attested canary record does not itself execute
 the canary. Company `active` state, current launch authority, consent/policy,
 approval, and the exact pre-provider reservation remain independent gates.
 
+Provider truth fails closed. A provider read failure is not evidence of
+delivery failure. When a live provider ID is already known and reconciliation
+is exhausted, the attempt remains `submitted`, is marked for manual
+`RECONCILIATION_EXHAUSTED` handling, preserves the communication/provider
+identity, and is excluded from automatic resend; only authoritative callback or
+provider evidence may settle it. Active attempts are serialized at the company
+and entity boundary across channels so an SMS retry cannot race an email send
+for the same business action.
+
 | Capability                  | Activation switches                                                                             | Minimum configuration boundary                                                                                                   | Health and external-canary proof                                                                                                                         | Manual YELLOW gate                                                                                          |
 | --------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | OpenAI structured AI        | `OPENAI_MODE=live` + `OPENAI_LIVE_ENABLED=true`                                                 | Server-only API key and explicitly selected model                                                                                | Active model probe plus representative prompt/tool/guardrail, trace-redaction, budget, timeout, and spend canary                                         | Owner approves model, prompts, tools, budgets, privacy/retention, kill switch, and incident owner           |
@@ -150,21 +166,31 @@ release. Activation must proceed one capability at a time using
 and
 [`docs/compliance/PROVIDER-BOUNDARIES.md`](docs/compliance/PROVIDER-BOUNDARIES.md).
 
+Live launch also requires all four private operational workers:
+`post_service`, `transactional_outbound`, `scheduling_reconciliation`, and
+`scope_photo_cleanup`. Each must have its own high-entropy credential, reviewed
+scheduled trigger, release fingerprint/configuration hash, current scheduled
+heartbeat, bounded queue/lease behavior, and alertable readiness evidence.
+Missing, stale, unknown, or drifted worker evidence blocks launch. Local tests
+proved these contracts; no hosted scheduler or current hosted heartbeat was
+observed. These operational workers are distinct from the AI Office, for which
+no unattended agent scheduler is claimed.
+
 ## Pilot release gates
 
-| Gate                                                  | Local posture                                                                                                                                     | Live requirement                                                                                                                                                                 |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product and deterministic rules                       | Implemented and locally testable                                                                                                                  | Operator validates every enabled service, formula, minimum, duration, exclusion, package, travel ZIP, tax, deposit, and margin rule against real jobs.                           |
-| Identity, RBAC, and tenant isolation                  | Auth/RLS/RPC contracts implemented                                                                                                                | Hosted cross-role and cross-company canary; production invitation/offboarding/session procedure approved.                                                                        |
-| Scope and field media                                 | Private Storage and exact evidence contracts implemented                                                                                          | Hosted device, quota, lifecycle, malware/content process, signed-link expiry, loss/recovery, and representative-media canary.                                                    |
-| Scheduling                                            | Durable calendar/route/weather/equipment receipt and compensation contracts implemented                                                           | Approved Google calendar, maps, NWS, and VROOM configuration; fresh provider canary; orphan-event compensation drill.                                                            |
-| Communications                                        | Consent, opt-out, webhook, receipt, ambiguity, and reconciliation boundaries implemented                                                          | Owned Twilio/email identities, registration/domain controls, approved language, signed callbacks, delivery/STOP/bounce/complaint canaries.                                       |
-| Billing                                               | Checkout/invoice/payment/refund interfaces, checkout retirement, allocation quarantine, and exact approved current-balance resolution implemented | Stripe account/configuration, tax/accounting review, signed webhook, expiry/replacement/late-success, amount/idempotency/reconciliation canaries; no real card data in StoryOps. |
-| AI                                                    | Sandbox and disabled-without-key modes, guarded server execution, evaluations, budgets, and redacted traces implemented                           | Model/privacy review, approved prompts/tools/budgets, representative staged canary, monitoring, kill switch, and incident owner.                                                 |
-| Backup and restore                                    | Local logical DB/roles/blobs backup and checksum/restore dry-run tooling implemented                                                              | Encrypted off-site destination, retention, isolated restore drill, measured RPO/RTO, and named operator.                                                                         |
-| Legal, safety, environmental, tax, insurance, privacy | Official-source DFW/Texas checklists supplied and explicitly marked for review                                                                    | Signed professional and jurisdiction-specific decisions, products/SDS/SOPs, wastewater/backflow/permit plan, terms, retention, consent, insurance, and tax treatment.            |
-| Deployment and operations                             | Static production image, health boundary, runbooks, incidents, and observability contracts available                                              | Reviewed hosting, TLS, secret manager, access restrictions, alerts, on-call, rollback, capacity/rate/spend limits, and production canaries.                                      |
-| Distribution license                                  | Upstream MIT/notices and third-party inventory preserved                                                                                          | Select and record the root StoryOps AI distribution license before distribution.                                                                                                 |
+| Gate                                                  | Local posture                                                                                                                                                                                                                | Live requirement                                                                                                                                                                                                             |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product and deterministic rules                       | Implemented and locally testable                                                                                                                                                                                             | Operator validates every enabled service, formula, minimum, duration, exclusion, package, travel ZIP, tax, deposit, and margin rule against real jobs.                                                                       |
+| Identity, RBAC, and tenant isolation                  | Auth/RLS/RPC contracts implemented                                                                                                                                                                                           | Hosted cross-role and cross-company canary; production invitation/offboarding/session procedure approved.                                                                                                                    |
+| Scope and field media                                 | Private Storage and exact evidence contracts implemented                                                                                                                                                                     | Hosted device, quota, lifecycle, malware/content process, signed-link expiry, loss/recovery, and representative-media canary.                                                                                                |
+| Scheduling                                            | Durable calendar/route/weather/equipment receipt and compensation contracts implemented                                                                                                                                      | Approved Google calendar, maps, NWS, and VROOM configuration; fresh provider canary; orphan-event compensation drill.                                                                                                        |
+| Communications                                        | Consent, opt-out, webhook, receipt, ambiguity, and reconciliation boundaries implemented                                                                                                                                     | Owned Twilio/email identities, registration/domain controls, approved language, signed callbacks, delivery/STOP/bounce/complaint canaries.                                                                                   |
+| Billing                                               | Checkout/invoice/payment/refund interfaces, checkout retirement, allocation quarantine, and exact approved current-balance resolution implemented                                                                            | Stripe account/configuration, tax/accounting review, signed webhook, expiry/replacement/late-success, amount/idempotency/reconciliation canaries; no real card data in StoryOps.                                             |
+| AI                                                    | Sandbox and disabled-without-key modes, guarded server execution, evaluations, budgets, and redacted traces implemented                                                                                                      | Model/privacy review, approved prompts/tools/budgets, representative staged canary, monitoring, kill switch, and incident owner.                                                                                             |
+| Backup and restore                                    | Executed isolated loopback restore passed for DB, roles, policies, and three byte-verified Storage objects; trusted detached manifest, HMAC proof, distinct database identities, `0600` evidence, and cleanup were verified. | Encrypted off-site destination, retention, recurring independent restore drill, measured RPO/RTO, and named operator.                                                                                                        |
+| Legal, safety, environmental, tax, insurance, privacy | Official-source DFW/Texas checklists supplied and explicitly marked for review                                                                                                                                               | Signed professional and jurisdiction-specific decisions, products/SDS/SOPs, wastewater/backflow/permit plan, terms, retention, consent, insurance, and tax treatment.                                                        |
+| Deployment and operations                             | Hardened app and pinned VROOM images passed local health/runtime and deterministic-route checks.                                                                                                                             | Reviewed hosting, TLS, secret manager, access restrictions, alerts, on-call, rollback, capacity/rate/spend limits, production canaries, immutable OS-package inputs, final image CVE scan, SBOM, and provenance attestation. |
+| Distribution license                                  | Upstream MIT/notices and third-party inventory preserved                                                                                                                                                                     | Select and record the root StoryOps AI distribution license before distribution.                                                                                                                                             |
 
 ## Bounded first-pilot conditions
 
@@ -192,13 +218,25 @@ pilot should remain limited to:
   industry-pack lifecycle rather than a hidden V1.1 exception.
 - Manual authenticated AI Office runs exist, but no cron/queue scheduler is
   activated or represented as running.
-- Final source-freeze verification and byte-current V1.1 screenshots are
-  pending. Until recorded, this report authorizes neither a real pilot nor a
-  provider canary.
+- The four operational worker contracts are locally verified, but no hosted
+  worker schedule, current hosted heartbeat, credential installation, or alert
+  path is evidenced.
+- No fresh byte-current V1.1 screenshots were available. The legacy screenshot
+  set is excluded, so the release has no current visual/UX review artifact even
+  though desktop/mobile Playwright contracts passed.
+- Migration 66's unambiguous legacy repair and fail-closed ambiguity guard are
+  covered by the clean reset and SQL regressions. A separate disposable pre-66
+  data upgrade rehearsal was not executed and remains a non-blocking hardening
+  gap.
 - QuickBooks support is a checksummed, formula-safe export boundary, not a live
-  accounting sync or general ledger.
+  accounting sync or general ledger; accountant acceptance remains required.
 - No payroll, inventory ERP, franchise/multi-company SaaS billing, licensed-
   trade diagnosis, or autonomous legal/safety/bank/vendor action is included.
+- Ubuntu package repositories used during image construction are not pinned to
+  an immutable snapshot, and no final OS/container CVE scan or signed SBOM
+  attestation is release evidence.
+- The root StoryOps AI distribution license has not been selected. Preserved
+  upstream notices do not resolve that distribution decision.
 - Local synthetic and provider-contract tests do not prove a hosted deployment,
   external delivery, funds movement, legal compliance, or safe field work.
 
@@ -210,10 +248,12 @@ photo-optional manual evidence, first-clean versus maintenance duration,
 recurrence mutation, cleaner continuity, and non-blocking weather. The ready-
 to-run objective is [`NEXT_GOAL_PROMPT.md`](NEXT_GOAL_PROMPT.md).
 
-The authoritative final command results, migration count, screenshots, backup
-proof, and commit provenance will be recorded in
-[`BUILD_REPORT.md`](BUILD_REPORT.md) after final source freeze. Operational
-authority remains
+The authoritative command transcript, restore and image details, screenshot
+exclusion, and commit provenance are packaged in
+[`BUILD_REPORT.md`](BUILD_REPORT.md). This readiness assessment records the
+tested implementation SHA separately from the later evidence/report commit.
+Operational authority remains
 [`docs/SOURCE_OF_TRUTH.md`](docs/SOURCE_OF_TRUTH.md), and the current gate
-status remains [`docs/STATUS.md`](docs/STATUS.md). No push or deployment is
-authorized by this readiness assessment.
+status remains [`docs/STATUS.md`](docs/STATUS.md). No deploy, real provider,
+real customer contact, or money movement occurred. This readiness assessment
+does not authorize any of them.

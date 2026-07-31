@@ -146,6 +146,13 @@ approval workflow as appropriate.
   classified recovery call may reconcile an already accepted external action
   only against a current trusted deployment capability; it never becomes
   permission for a resend, new charge, new booking, or new customer contact.
+- A provider receipt-read failure is not evidence of provider delivery failure.
+  Once a live provider identity is known, exhausted read retries preserve
+  `submitted` provider/message truth, record `RECONCILIATION_EXHAUSTED`, require
+  manual reconciliation, and stay excluded from automatic resend; a verified
+  callback or deliberate authoritative reconciliation may still resolve the
+  receipt. Active transactional contact is serialized by company and business
+  entity across channels.
 - Stripe Checkout Session and PaymentIntent identifiers remain distinct.
   Terminal failed/expired checkout attempts are retired before replacement.
   A late success or incompatible amount/version is retained as verified but

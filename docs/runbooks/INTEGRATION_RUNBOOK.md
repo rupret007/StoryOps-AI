@@ -162,6 +162,16 @@ For every run:
 7. alert when the oldest queued/submitted record, any `submitted_unknown`
    record, or retry count exceeds the reviewed operational threshold.
 
+Provider retrieval failure must never be diagnosed as provider delivery
+failure. When the worker has a known live provider ID and exhausts its bounded
+receipt-read budget, the durable row remains `submitted`, retains the
+provider/message identity and last provider status, records
+`RECONCILIATION_EXHAUSTED` and the separate provider-read error, requires manual
+reconciliation, and is excluded from automatic resend. A verified callback can
+still resolve it. For transactional quote and on-my-way messages, one active
+attempt is permitted per company and business entity across channels; do not
+switch channels to bypass that serialization.
+
 The claim/start boundary also requires an active company. While paused, it
 claims no new queued follow-up and cannot begin a pre-claimed send. A previously
 submitted provider action may still move through signed callback/retrieval
@@ -263,6 +273,14 @@ legacy global/no-company claim signatures are dropped by migration
 `20260728660000`; no scheduler or recovery script may call them. A request for
 one company cannot lease, expire, cancel, reconcile, or clean another company's
 record.
+
+Migration `20260728660000` also repairs only the unambiguous legacy rows whose
+known provider/message identities prove that earlier receipt-read exhaustion
+was misclassified as delivery failure. Its private upgrade assertion stops the
+migration when the legacy state is ambiguous, and active cross-channel
+duplicates make the entity-level unique index fail rather than selecting a
+customer contact to trust. Reconcile those rows from authoritative provider
+evidence before retrying the upgrade.
 
 Scheduled refresh snapshots are bounded operational telemetry, not canonical
 audit evidence. StoryOps retains the 2,048 most recent scheduled refreshes and

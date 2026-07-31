@@ -297,7 +297,14 @@ stable StoryOps correlation key. Before a live Twilio create call it commits a
 fail-safe `submitted_unknown` boundary; an ambiguous result is excluded from
 automatic resend and requires provider reconciliation, while a returned
 authoritative SID advances to `submitted` until callback/poll delivery
-reconciliation. Live post-service marketing email is intentionally disabled
+reconciliation. A later provider read failure is not a provider delivery
+failure: bounded read retries that exhaust leave the known live receipt
+`submitted` with `RECONCILIATION_EXHAUSTED`, preserve the provider/message
+identity and last provider status, require manual reconciliation, and remain
+ineligible for automatic resend. A signed callback may still resolve that
+receipt. Transactional quote and on-my-way attempts are serialized per company
+and business entity across channels, so changing SMS to email cannot create a
+second active customer contact. Live post-service marketing email is intentionally disabled
 until a signed unsubscribe/suppression path is implemented. In the no-key path
 the durable result is explicitly `sandboxed`; the communication record remains
 queued and does not claim that a customer was contacted.

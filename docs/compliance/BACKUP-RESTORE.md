@@ -368,6 +368,28 @@ After retaining the approved evidence, stop only the dedicated target:
 npx --yes supabase@2.110.0 stop --workdir infra/restore-proof --no-backup
 ```
 
+### V1.1 local rehearsal record
+
+On 2026-07-31 UTC, implementation commit
+`83950180d63e3455fa2047cd838ba5a2df8d9491` completed the executable isolated
+rehearsal `restore-drill-20260731T025435Z`. The independently retained manifest
+digest was
+`b51e0b03891e5e66cb8a31db7dfcb53b47752d48701c0fbc9fdaabcfcfae2490`.
+The source and target each proved all 67 migrations through
+`20260728660000`; the migration-set fingerprint was
+`98979fde9f841c360d1729ae8312f7f1c332175b51018633533baba9f3c1d894`.
+The restore verified three private Storage objects totaling 204 bytes with
+fingerprint
+`2d7211ff109bd741427ecc7bd9431c6326dd0b48f7fa24a518823a54399e0ea7`.
+
+The target used distinct database and Storage identities on loopback-only ports.
+The generated V2 evidence file was owner-only (`0600`), its complete request
+HMAC was independently recomputed successfully with the ephemeral local secret,
+and the dedicated target containers/network were removed after verification.
+No artifact was submitted, no cutover occurred, and this local rehearsal does
+not close the off-site encryption, managed-platform reconstruction, hosted
+canary, RPO/RTO, or production recovery gates.
+
 ## Remote restore
 
 Create a fresh Supabase project/branch appropriate for recovery and align its

@@ -1,21 +1,29 @@
 # StoryOps AI owner briefing — current
 
-**Generated:** 2026-07-29  
-**Source window:** current V1.1 working tree; final source-freeze verification
-pending  
+**Generated:** 2026-07-30  
+**Source window:** frozen V1.1 implementation
+`83950180d63e3455fa2047cd838ba5a2df8d9491`; subsequent report-only evidence
+commit is separate  
 **Freshness:** source-level briefing only; no live provider/customer data  
 **Mode:** read-only briefing
 
 ## YELLOW — not authorized for live operations
 
+- Real provider activation, customer contact, and money movement remain
+  **NO-GO**.
 - StoryOps AI V1.1 is an exterior-cleaning operating slice plus a reusable
   service-business kernel. It is ready for bounded synthetic rehearsal, not a
   claim of universal industry support or production authorization.
-- Final source-freeze commands, counts, hashes, screenshots, backup evidence,
-  independent audit, and local release commit have not yet been recorded.
+- The frozen local matrix passed: static/source gates including Edge 128/128,
+  Vitest 409/409, infrastructure 52/52, upgrade, production build, Playwright
+  28/28, a clean 67-migration Supabase reset with SQL/concurrency/live Edge
+  coverage, and AI evals 18/18. The independent audit ended at P0=0/P1=0.
+- Fresh V1.1 manual screenshots could not be captured because the in-app
+  browser was unavailable. The four legacy 2026-07-28 images are excluded from
+  V1.1 release evidence.
 - No hosted environment, production authentication canary, real provider
-  credential, customer workflow, funds movement, or production restore drill
-  has been exercised.
+  credential, customer workflow, funds movement, hosted worker schedule, or
+  production restore drill has been exercised.
 - Required DFW legal, tax, environmental, safety/chemical, insurance,
   privacy/retention, consent/communications, and municipal decisions remain
   unsigned. Official-source links were reviewed; their applicability was not
@@ -68,6 +76,21 @@ pending
   structured outputs, policy decisions, budgets, approvals, injection
   defenses, and redacted traces. Manual runs exist; no unattended scheduler is
   claimed as configured.
+- Provider-read failure is not delivery failure. Once a live provider receipt
+  is known, a failed reconciliation remains `submitted`, enters manual
+  `RECONCILIATION_EXHAUSTED`, preserves the provider/communication identity,
+  and cannot be automatically resent; only a verified callback or deliberate
+  reconciliation from authoritative provider evidence may settle it.
+  Transactional work is serialized by company/entity across channels.
+  Migration 66 repairs only unambiguous legacy signatures and fails closed on
+  ambiguity.
+- Four operational workers are required: `post_service`,
+  `transactional_outbound`, `scheduling_reconciliation`, and
+  `scope_photo_cleanup`. Their local credential, trigger, release/configuration,
+  heartbeat, and bounded-queue contracts passed. This does not prove that all
+  four are scheduled, current, release-matched, or alerted in a hosted
+  environment, and they are separate from the unconfigured AI Office
+  scheduler.
 
 ## Approval and exception queue
 
@@ -96,22 +119,36 @@ provider is connected.
   secrets, and provider-specific prerequisites are all present.
 - Normalized web/chat/email and Twilio voice/SMS boundaries retain consent,
   signature, duplicate, rate, and idempotency evidence.
-- Stripe/Twilio/email reconciliation uses stable provider identities; no
-  external canary evidence exists.
+- Stripe/Twilio/email reconciliation uses stable provider identities and the
+  fail-closed no-fabricated-failure/no-resend boundary; no external canary
+  evidence exists.
 - Authenticated provider-health probes are bounded and do not turn a missing
   credential into a success.
-- Final local verification is **pending**. Do not reuse earlier V1 test counts,
-  migration counts, screenshots, proof timestamps, image hashes, or backup
-  fingerprints as V1.1 evidence.
-- Recovery tooling includes current quote-acceptance, audit, checkout-
-  retirement, and payment-allocation objects. A fresh exact-source backup and
-  restore dry-run remain pending.
+- The frozen implementation SHA is
+  `83950180d63e3455fa2047cd838ba5a2df8d9491`. Documentation/evidence prepared
+  afterward belongs to a report-only commit and is not the implementation SHA
+  against which the functional matrix ran.
+- Demo proof
+  `artifacts/demo-proof-v1.1-20260731T0300Z.json` has SHA-256
+  `8439838e3a59fab7a4a7b5fdacb193292d63924661a2b57a7b516ba3afbaf213`.
+- The isolated restore used detached manifest SHA-256
+  `b51e0b03891e5e66cb8a31db7dfcb53b47752d48701c0fbc9fdaabcfcfae2490`
+  and verified migration 66, all 3 private Storage objects/204 bytes, and the
+  signed HMAC proof before cleanup of the disposable target.
+- Hardened local application and VROOM images were healthy at
+  `sha256:2d413155a3eba850edf1968516521e0bb622f9b9987f8c4f9ea2d672628ee6b5`
+  and
+  `sha256:dc13226d56361ffe7a895806910076a4be999746aeefd0d2e9f7dca692ca29b4`,
+  respectively. These local image identities are not hosted deployments,
+  registry attestations, or final OS/container CVE and SBOM evidence.
 
 ## Owner decisions required
 
-1. Keep this candidate synthetic/sandbox until
-   [`docs/STATUS.md`](../STATUS.md) and
-   [`BUILD_REPORT.md`](../../BUILD_REPORT.md) record the frozen-source proof.
+1. Keep this candidate synthetic/sandbox despite the passing local matrix until
+   every hosted, provider, operational, security, recovery, and professional
+   launch gate is closed. Preserve the implementation/report-commit
+   distinction in [`docs/STATUS.md`](../STATUS.md) and
+   [`BUILD_REPORT.md`](../../BUILD_REPORT.md).
 2. Select the hosted environment and approve authentication, redirects,
    private Storage, device/offline controls, secrets, monitoring, backups,
    retention, rollback, support, and on-call ownership.
@@ -124,7 +161,11 @@ provider is connected.
    insurance, environmental, privacy/retention, communications, wastewater/
    backflow/permit, and safety/SDS/SOP decisions.
 6. Select and record the StoryOps AI root-project distribution license.
-7. After this exterior pack is proven, validate the reusable kernel with the
+7. Complete production TLS/secrets/network restrictions, alerting/on-call,
+   capacity/rate/spend controls, rollback proof, encrypted off-site recovery
+   with accepted RPO/RTO, and immutable-base/container CVE plus SBOM/provenance
+   evidence.
+8. After this exterior pack is proven, validate the reusable kernel with the
    planned recurring residential-cleaning pack rather than claiming
    unsupported “any company” coverage.
 
@@ -135,6 +176,17 @@ provider is connected.
   language, provider accounts, deployment environment, root-project license,
   retention schedule, support/on-call, RPO/RTO, customer migration, and
   production alert thresholds.
-- Final source-freeze results, fresh screenshots, backup hashes, proof
-  timestamps, independent audit disposition, and local release commit.
+- Hosted authentication/isolation/Storage/offline/worker readiness, real
+  provider callback behavior, staging-money reconciliation, rollback,
+  encrypted off-site recovery, and production security/observability evidence.
+- Fresh V1.1 manual screenshots remain unavailable; the legacy V1 images are
+  excluded. This briefing belongs to an evidence-only commit boundary after the
+  tested implementation SHA and must not be treated as a retested source
+  revision.
+- Final OS/container CVE results, SBOM/provenance attestation, and immutable
+  package-source evidence remain open; current Ubuntu package repositories are
+  not immutable snapshots.
+- Migration 66's repair/fail-closed behavior passed clean-reset and SQL
+  regressions, but no separate disposable pre-66 data upgrade rehearsal was
+  executed.
 - No briefing item resolves an unknown or constitutes approval.
