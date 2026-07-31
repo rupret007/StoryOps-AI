@@ -6,9 +6,17 @@ import {
   asPercentageString,
   money,
   type PriceBook,
+  type ServicePackageDefinition,
 } from '@/domain';
-import { calculateEstimate, type PricingResult } from '@/core/pricing';
+import { calculatePackageEstimate, type PricingResult } from '@/core/pricing';
+import type { CompanyConfiguration } from '@/domain/companyConfiguration';
 import type { DemoEstimate } from '@/state/model';
+import {
+  createExteriorStarterPriceBook,
+  getExteriorServicePackage,
+} from './exteriorServiceTemplates.ts';
+
+const DEMO_ENABLED_SERVICE_CODES = ['pressure-wash-flatwork', 'gutter-cleaning'] as const;
 
 const COMPANY_ID = asDomainId('a94b8d4e-33ad-46f3-ae42-72f70c9391bd');
 const PRICE_BOOK_ID = asDomainId('fbe7afc4-d259-4690-814c-889fcb3d72a7');
@@ -16,148 +24,143 @@ const PROPERTY_ID = asDomainId('74b93545-9fa4-4561-a0e5-cc37130e38e6');
 const DRIVEWAY_MEASUREMENT_ID = asDomainId('7394dd55-189e-48cf-bf03-8d12afc5d5df');
 const GUTTER_MEASUREMENT_ID = asDomainId('d428b1bf-df8a-44e8-ad50-0cd13283a199');
 
-export const demoPriceBook: PriceBook = {
+export const demoPriceBook = createExteriorStarterPriceBook({
   id: PRICE_BOOK_ID,
   companyId: COMPANY_ID,
   createdAt: asISODateTime('2026-07-01T14:00:00.000Z'),
   updatedAt: asISODateTime('2026-07-01T14:00:00.000Z'),
   version: 3,
-  name: 'DFW Residential',
-  versionLabel: '2026.07-v3',
   status: 'active',
   effectiveFrom: asISODateTime('2026-07-01T00:00:00.000Z'),
-  currency: 'USD',
-  companyMinimum: money('225.00'),
-  travelZones: [
-    {
-      zoneCode: 'DFW-A',
-      name: 'Core service zone',
-      fee: money('0.00'),
-      taxable: false,
-      maximumOneWayMiles: asDecimalString('20'),
-    },
-    {
-      zoneCode: 'DFW-B',
-      name: 'Extended service zone',
-      fee: money('35.00'),
-      taxable: false,
-      maximumOneWayMiles: asDecimalString('35'),
-    },
-    {
-      zoneCode: 'DFW-C',
-      name: 'Outer service zone',
-      fee: money('75.00'),
-      taxable: false,
-      maximumOneWayMiles: asDecimalString('50'),
-    },
-  ],
-  defaultTaxRate: asPercentageString('8.25'),
-  marginFloor: asPercentageString('42'),
-  automaticDiscountLimit: asPercentageString('10'),
-  depositRule: {
-    kind: 'percent',
-    value: asPercentageString('25'),
-  },
-  serviceRules: [
-    {
-      serviceCode: 'DRIVEWAY_WASH',
-      pricingUnit: 'sq_ft',
-      basePrice: money('110.00'),
-      unitPrice: asDecimalString('0.14'),
-      includedQuantity: asDecimalString('500'),
-      serviceMinimum: money('185.00'),
-      estimatedBaseCost: money('45.00'),
-      estimatedUnitCost: asDecimalString('0.05'),
-      durationBaseMinutes: 45,
-      durationMinutesPerUnit: asDecimalString('0.055'),
-      taxable: true,
-      allowedAttributeValues: {
-        surface: ['concrete', 'pavers', 'aggregate'],
-        soil: ['light', 'moderate', 'heavy'],
-        access: ['clear', 'limited'],
-        risk: ['standard', 'elevated'],
-      },
-      attributeMultipliers: [
-        { attribute: 'surface', value: 'concrete', multiplier: asDecimalString('1') },
-        { attribute: 'surface', value: 'pavers', multiplier: asDecimalString('1.2') },
-        { attribute: 'surface', value: 'aggregate', multiplier: asDecimalString('1.15') },
-        { attribute: 'soil', value: 'light', multiplier: asDecimalString('0.92') },
-        { attribute: 'soil', value: 'moderate', multiplier: asDecimalString('1') },
-        { attribute: 'soil', value: 'heavy', multiplier: asDecimalString('1.28') },
-        { attribute: 'access', value: 'clear', multiplier: asDecimalString('1') },
-        { attribute: 'access', value: 'limited', multiplier: asDecimalString('1.18') },
-        { attribute: 'risk', value: 'standard', multiplier: asDecimalString('1') },
-        { attribute: 'risk', value: 'elevated', multiplier: asDecimalString('1.25') },
-      ],
-      addOns: [
-        {
-          code: 'OIL_SPOT_TREAT',
-          name: 'Oil spot pretreatment',
-          unit: 'each',
-          unitPrice: asDecimalString('22.00'),
-          taxable: true,
-          estimatedUnitCost: asDecimalString('5.50'),
-          durationMinutesPerUnit: asDecimalString('8'),
-        },
-      ],
-    },
-    {
-      serviceCode: 'GUTTER_CLEAN',
-      pricingUnit: 'linear_ft',
-      basePrice: money('155.00'),
-      unitPrice: asDecimalString('0.85'),
-      includedQuantity: asDecimalString('100'),
-      serviceMinimum: money('180.00'),
-      estimatedBaseCost: money('60.00'),
-      estimatedUnitCost: asDecimalString('0.24'),
-      durationBaseMinutes: 70,
-      durationMinutesPerUnit: asDecimalString('0.32'),
-      taxable: true,
-      allowedAttributeValues: {
-        stories: ['1', '2', '3'],
-        soil: ['light', 'moderate', 'heavy'],
-        access: ['clear', 'limited'],
-        risk: ['standard', 'elevated'],
-      },
-      attributeMultipliers: [
-        { attribute: 'stories', value: '1', multiplier: asDecimalString('1') },
-        { attribute: 'stories', value: '2', multiplier: asDecimalString('1.22') },
-        { attribute: 'stories', value: '3', multiplier: asDecimalString('1.55') },
-        { attribute: 'soil', value: 'light', multiplier: asDecimalString('0.95') },
-        { attribute: 'soil', value: 'moderate', multiplier: asDecimalString('1') },
-        { attribute: 'soil', value: 'heavy', multiplier: asDecimalString('1.25') },
-        { attribute: 'access', value: 'clear', multiplier: asDecimalString('1') },
-        { attribute: 'access', value: 'limited', multiplier: asDecimalString('1.2') },
-        { attribute: 'risk', value: 'standard', multiplier: asDecimalString('1') },
-        { attribute: 'risk', value: 'elevated', multiplier: asDecimalString('1.3') },
-      ],
-      addOns: [
-        {
-          code: 'DOWNSPOUT_FLUSH',
-          name: 'Downspout flow test and flush',
-          unit: 'each',
-          unitPrice: asDecimalString('18.00'),
-          taxable: true,
-          estimatedUnitCost: asDecimalString('4.00'),
-          durationMinutesPerUnit: asDecimalString('7'),
-        },
-      ],
-    },
-  ],
   publishedBy: asDomainId('cd77c73c-30f1-48fa-9887-3846516a77b4'),
   publishedAt: asISODateTime('2026-07-01T14:00:00.000Z'),
-};
+});
 
-export function calculateDemoPrice(estimate: DemoEstimate): PricingResult {
+function priceBookFromPublishedSandboxConfiguration(
+  configuration: CompanyConfiguration,
+): PriceBook {
+  return {
+    id: PRICE_BOOK_ID,
+    companyId: COMPANY_ID,
+    createdAt: asISODateTime('2026-07-01T14:00:00.000Z'),
+    updatedAt: asISODateTime('2026-07-01T14:00:00.000Z'),
+    version: 1,
+    name: 'Published sandbox company configuration',
+    versionLabel: configuration.pricing.priceBookTemplateVersion,
+    status: 'active',
+    effectiveFrom: asISODateTime('2026-07-01T00:00:00.000Z'),
+    currency: 'USD',
+    companyMinimum: money(configuration.pricing.companyMinimum),
+    travelZones: configuration.territory.travelZones.map((zone) => ({
+      zoneCode: zone.code,
+      name: zone.name,
+      fee: money(zone.fee),
+      taxable: false,
+      ...(zone.maximumMiles ? { maximumOneWayMiles: asDecimalString(zone.maximumMiles) } : {}),
+      postalCodes: [...zone.postalCodes],
+    })),
+    defaultTaxRate: asPercentageString(
+      configuration.pricing.taxEnabled ? configuration.pricing.defaultTaxRatePercent : '0',
+    ),
+    marginFloor: asPercentageString(configuration.pricing.marginFloorPercent),
+    automaticDiscountLimit: asPercentageString(configuration.pricing.automaticDiscountLimitPercent),
+    depositRule: {
+      kind:
+        configuration.payments.depositKind === 'fixed'
+          ? 'flat'
+          : configuration.payments.depositKind,
+      value:
+        configuration.payments.depositKind === 'percent'
+          ? asPercentageString(configuration.payments.depositValue)
+          : money(configuration.payments.depositValue),
+    },
+    serviceRules: configuration.pricing.serviceRules.map((rule) => ({
+      serviceCode: rule.serviceCode,
+      requiredMeasurementKinds: [...rule.requiredMeasurementKinds],
+      pricingUnit: rule.pricingUnit,
+      basePrice: money(rule.basePrice),
+      unitPrice: asDecimalString(rule.unitPrice),
+      includedQuantity: asDecimalString(rule.includedQuantity),
+      serviceMinimum: money(rule.serviceMinimum),
+      estimatedBaseCost: money(rule.estimatedBaseCost),
+      estimatedUnitCost: asDecimalString(rule.estimatedUnitCost),
+      durationBaseMinutes: rule.durationBaseMinutes,
+      durationMinutesPerUnit: asDecimalString(rule.durationMinutesPerUnit),
+      taxable: rule.taxable,
+      allowedAttributeValues: Object.fromEntries(
+        Object.entries(rule.allowedAttributeValues).map(([attribute, values]) => [
+          attribute,
+          [...values],
+        ]),
+      ),
+      attributeMultipliers: rule.attributeMultipliers.map((multiplier) => ({
+        attribute: multiplier.attribute,
+        value: multiplier.value,
+        multiplier: asDecimalString(multiplier.multiplier),
+        ...(multiplier.approval ? { approval: { ...multiplier.approval } } : {}),
+      })),
+      addOns: rule.addOns.map((addOn) => ({
+        code: addOn.code,
+        name: addOn.name,
+        unit: addOn.pricingUnit,
+        unitPrice: asDecimalString(addOn.unitPrice),
+        taxable: addOn.taxable,
+        estimatedUnitCost: asDecimalString(addOn.estimatedUnitCost),
+        durationMinutesPerUnit: asDecimalString(addOn.durationMinutesPerUnit),
+        ...(addOn.approval ? { approval: { ...addOn.approval } } : {}),
+      })),
+    })),
+    publishedBy: asDomainId('cd77c73c-30f1-48fa-9887-3846516a77b4'),
+    publishedAt: asISODateTime('2026-07-01T14:00:00.000Z'),
+  };
+}
+
+function packageFromPublishedSandboxConfiguration(
+  configuration: CompanyConfiguration,
+): ServicePackageDefinition {
+  const selected = configuration.pricing.packages.find(
+    (servicePackage) => servicePackage.code === 'WHOLE_PROPERTY_CARE',
+  );
+  if (!selected) {
+    throw new Error('The published sandbox configuration has no Whole-property care package.');
+  }
+  return {
+    ...selected,
+    components: selected.components.map((component) => ({
+      ...component,
+      requiredAddOnCodes: [...component.requiredAddOnCodes],
+      optionalAddOnCodes: [...component.optionalAddOnCodes],
+    })),
+  };
+}
+
+export function calculateDemoPrice(
+  estimate: DemoEstimate,
+  publishedConfiguration?: CompanyConfiguration,
+): PricingResult {
   const discountValue = asDecimalString(estimate.discountPercent || '0');
-  return calculateEstimate({
-    requestId: `estimate:${estimate.id}:${estimate.drivewaySqFt}:${estimate.gutterLinearFt}:${estimate.discountPercent}`,
+  const enabledServiceCodes =
+    publishedConfiguration?.pricing.enabledServiceCodes ?? DEMO_ENABLED_SERVICE_CODES;
+  for (const requiredServiceCode of DEMO_ENABLED_SERVICE_CODES) {
+    if (!enabledServiceCodes.includes(requiredServiceCode)) {
+      throw new Error(
+        `The published sandbox configuration does not authorize ${requiredServiceCode}.`,
+      );
+    }
+  }
+  return calculatePackageEstimate({
+    requestId: `estimate:${estimate.id}:${estimate.drivewaySqFt}:${estimate.gutterLinearFt}:${estimate.downspoutCount}:${estimate.discountPercent}`,
     companyId: COMPANY_ID,
     propertyId: PROPERTY_ID,
-    priceBook: demoPriceBook,
-    services: [
+    priceBook: publishedConfiguration
+      ? priceBookFromPublishedSandboxConfiguration(publishedConfiguration)
+      : demoPriceBook,
+    packageDefinition: publishedConfiguration
+      ? packageFromPublishedSandboxConfiguration(publishedConfiguration)
+      : getExteriorServicePackage('WHOLE_PROPERTY_CARE', DEMO_ENABLED_SERVICE_CODES),
+    measuredServices: [
       {
-        serviceCode: 'DRIVEWAY_WASH',
+        serviceCode: 'pressure-wash-flatwork',
         quantity: asDecimalString(estimate.drivewaySqFt),
         attributes: {
           surface: estimate.surface,
@@ -169,23 +172,26 @@ export function calculateDemoPrice(estimate: DemoEstimate): PricingResult {
         sourceMeasurementIds: [DRIVEWAY_MEASUREMENT_ID],
       },
       {
-        serviceCode: 'GUTTER_CLEAN',
+        serviceCode: 'gutter-cleaning',
         quantity: asDecimalString(estimate.gutterLinearFt),
         attributes: {
           stories: estimate.stories,
-          soil: estimate.soil,
-          access: estimate.access,
+          gutter_guards: 'none',
+          roof_access: estimate.access,
+          debris: estimate.soil,
           risk: estimate.risk,
         },
         addOns: [
           {
             code: 'DOWNSPOUT_FLUSH',
-            quantity: asDecimalString('4'),
+            quantity: asDecimalString(estimate.downspoutCount),
           },
         ],
         sourceMeasurementIds: [GUTTER_MEASUREMENT_ID],
       },
     ],
+    selectedOptionalServiceCodes: [],
+    selectedOptionalAddOns: [],
     travelZoneCode: estimate.travelZone,
     discount:
       discountValue === '0'
@@ -217,13 +223,16 @@ export function summarizeDemoServiceTotals(result: PricingResult): DemoServiceTo
       .toFixed(2);
 
   return {
-    driveway: sumService('DRIVEWAY_WASH'),
-    gutters: sumService('GUTTER_CLEAN'),
+    driveway: sumService('pressure-wash-flatwork'),
+    gutters: sumService('gutter-cleaning'),
   };
 }
 
-export function mergeDemoPrice(estimate: DemoEstimate): DemoEstimate {
-  const result = calculateDemoPrice(estimate);
+export function mergeDemoPrice(
+  estimate: DemoEstimate,
+  publishedConfiguration?: CompanyConfiguration,
+): DemoEstimate {
+  const result = calculateDemoPrice(estimate, publishedConfiguration);
   return {
     ...estimate,
     serviceSubtotal: result.serviceSubtotal.amount,

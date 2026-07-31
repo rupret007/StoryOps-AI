@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const goldenPathRequestSchema = z
   .object({
     companyId: z.string().uuid(),
-    action: z.literal('deposit.checkout'),
+    action: z.enum(['deposit.checkout', 'invoice.checkout']),
     commandId: z.string().uuid(),
     entityId: z.string().uuid(),
     expectedVersion: z.number().int().positive(),
@@ -32,6 +32,7 @@ export const depositCheckoutClaimSchema = z.discriminatedUnion('claimStatus', [
       currency: z.literal('USD'),
       description: z.string().min(1).max(255),
       providerIdempotencyKey: z.string().min(1).max(255),
+      checkoutAttempt: z.number().int().positive(),
     })
     .strict(),
 ]);
@@ -109,6 +110,70 @@ export const depositCheckoutResponseSchema = z
   });
 
 export type DepositCheckoutResponse = z.infer<typeof depositCheckoutResponseSchema>;
+
+export const invoiceCheckoutClaimSchema = z.discriminatedUnion('claimStatus', [
+  z
+    .object({
+      claimStatus: z.literal('completed'),
+      storedResponse: z.record(z.string(), z.unknown()),
+    })
+    .strict(),
+  z
+    .object({
+      claimStatus: z.literal('reserved'),
+      requestHash: z.string().regex(/^[a-f0-9]{64}$/u),
+      quoteId: z.string().uuid(),
+      customerId: z.string().uuid(),
+      jobId: z.string().uuid(),
+      invoiceId: z.string().uuid(),
+      invoiceVersion: z.number().int().positive(),
+      paymentId: z.string().uuid(),
+      amount: z.string().regex(/^\d+\.\d{2}$/u),
+      currency: z.literal('USD'),
+      description: z.string().min(1).max(255),
+      providerIdempotencyKey: z.string().min(1).max(255),
+      checkoutAttempt: z.number().int().positive(),
+    })
+    .strict(),
+]);
+
+export const invoiceCheckoutResponseSchema = z
+  .object({
+    action: z.literal('invoice.checkout'),
+    status: z.literal('checkout_open'),
+    mode: z.enum(['live', 'sandbox']),
+    quoteId: z.string().uuid(),
+    jobId: z.string().uuid(),
+    invoiceId: z.string().uuid(),
+    invoiceVersion: z.number().int().positive(),
+    amount: z.string().regex(/^\d+\.\d{2}$/u),
+    currency: z.literal('USD'),
+    paymentVerified: z.literal(false),
+    invoicePaid: z.literal(false),
+    replayed: z.boolean(),
+    checkoutId: z.string().startsWith('cs_'),
+    checkoutUrl: z.string().url().optional(),
+    sandboxReceipt: z.string().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.mode === 'live' && !value.checkoutUrl) {
+      context.addIssue({
+        code: 'custom',
+        path: ['checkoutUrl'],
+        message: 'Live invoice checkout requires a hosted checkout URL.',
+      });
+    }
+    if (value.mode === 'sandbox' && !value.sandboxReceipt) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sandboxReceipt'],
+        message: 'Sandbox invoice checkout requires a no-funds receipt.',
+      });
+    }
+  });
+
+export type InvoiceCheckoutResponse = z.infer<typeof invoiceCheckoutResponseSchema>;
 
 export function safeCheckoutErrorCode(error: unknown): string {
   const source =

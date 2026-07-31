@@ -1,7 +1,10 @@
 import { Agent, OpenAIProvider, Runner } from '@openai/agents';
 import process from 'node:process';
 import type { StructuredGenerationRequest, StructuredModel } from '../src/core/ai/contracts.ts';
-import { officeAgentOutputSchema } from '../src/core/ai/contracts.ts';
+import {
+  decodeOpenAiOfficeAgentOutput,
+  openAiOfficeAgentOutputSchema,
+} from '../src/core/ai/contracts.ts';
 import type {
   HealthCheckedIntegration,
   IntegrationHealth,
@@ -55,7 +58,7 @@ export class OpenAiAgentsServerModel implements StructuredModel, HealthCheckedIn
         maxTokens: this.config.maxOutputTokens ?? 2_000,
         store: false,
       },
-      outputType: officeAgentOutputSchema,
+      outputType: openAiOfficeAgentOutputSchema,
       tools: [],
       handoffs: [],
     });
@@ -65,7 +68,7 @@ export class OpenAiAgentsServerModel implements StructuredModel, HealthCheckedIn
     if (!result.finalOutput) {
       throw new Error('OpenAI Agents SDK returned no structured final output.');
     }
-    return result.finalOutput;
+    return decodeOpenAiOfficeAgentOutput(result.finalOutput);
   }
 
   async health(signal?: AbortSignal): Promise<IntegrationHealth> {

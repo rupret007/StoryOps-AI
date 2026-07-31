@@ -254,7 +254,8 @@ begin
           'service_catalog', jsonb_build_object(
             'company_id', catalog.company_id,
             'active', catalog.active,
-            'safety_sop_reference', catalog.safety_sop_reference
+            'safety_sop_reference', catalog.safety_sop_reference,
+            'required_measurement_kinds', catalog.required_measurement_kinds
           )
         )
         order by rule.service_code
@@ -650,7 +651,8 @@ begin
           'code', catalog.code,
           'version', catalog.version,
           'active', catalog.active,
-          'safety_sop_reference', catalog.safety_sop_reference
+          'safety_sop_reference', catalog.safety_sop_reference,
+          'required_measurement_kinds', catalog.required_measurement_kinds
         )
         order by catalog.code
       )
@@ -932,6 +934,7 @@ declare
   measurement_id_value uuid;
   catalog_code_value text;
   expected_measurement_id uuid;
+  expected_service_measurement_ids jsonb;
   line_index integer := 0;
   approval_reason_value text;
   approval_summary_value text;
@@ -1115,6 +1118,11 @@ begin
   ) then
     raise exception 'ESTIMATE_AUTHORITATIVE_CUSTOMER_PROPERTY_CHANGED';
   end if;
+  if p_authoritative_snapshot -> 'scopeEvidenceBundle'
+    is distinct from p_calculation_input -> 'scopeEvidenceBundle'
+  then
+    raise exception 'ESTIMATE_SCOPE_EVIDENCE_SNAPSHOT_MISMATCH';
+  end if;
   if p_authoritative_snapshot -> 'photoEvidence' = 'null'::jsonb then
     if exists (
       select 1
@@ -1201,10 +1209,6 @@ begin
   from (
     select distinct service ->> 'serviceCode' as reference_code
     from jsonb_array_elements(p_calculation_input -> 'services') service
-    union
-    select distinct add_on ->> 'code'
-    from jsonb_array_elements(p_calculation_input -> 'services') service,
-      jsonb_array_elements(coalesce(service -> 'addOns', '[]'::jsonb)) add_on
   ) referenced
   where nullif(btrim(reference_code), '') is not null;
   if coalesce(cardinality(referenced_catalog_codes), 0) = 0
@@ -1262,6 +1266,34 @@ begin
     from jsonb_array_elements(p_calculation_input -> 'services') service
     where (service ->> 'measurementId') !~*
       '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      or jsonb_typeof(coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb))
+        <> 'array'
+      or jsonb_array_length(
+        coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb)
+      ) > 12
+      or exists (
+        select 1
+        from jsonb_array_elements_text(
+          coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb)
+        ) supporting(measurement_id)
+        where supporting.measurement_id !~*
+          '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      )
+      or exists (
+        select 1
+        from jsonb_array_elements_text(
+          coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb)
+        ) supporting(measurement_id)
+        group by supporting.measurement_id
+        having count(*) > 1
+      )
+      or exists (
+        select 1
+        from jsonb_array_elements_text(
+          coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb)
+        ) supporting(measurement_id)
+        where supporting.measurement_id = service ->> 'measurementId'
+      )
       or exists (
         select 1
         from jsonb_array_elements(coalesce(service -> 'addOns', '[]'::jsonb)) add_on
@@ -1276,6 +1308,12 @@ begin
   from (
     select distinct (service ->> 'measurementId')::uuid as reference_id
     from jsonb_array_elements(p_calculation_input -> 'services') service
+    union
+    select distinct supporting.measurement_id::uuid
+    from jsonb_array_elements(p_calculation_input -> 'services') service,
+      jsonb_array_elements_text(
+        coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb)
+      ) supporting(measurement_id)
     union
     select distinct (add_on ->> 'measurementId')::uuid
     from jsonb_array_elements(p_calculation_input -> 'services') service,
@@ -1368,7 +1406,9 @@ begin
       or (service_value ->> 'measurementId') !~*
         '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
       or (service_value ->> 'quantity') !~ '^(?:0|[1-9][0-9]{0,9})(?:[.][0-9]{1,4})?$'
-      or service_value ->> 'pricingUnit' not in ('sq_ft', 'linear_ft', 'each')
+      or service_value ->> 'pricingUnit' not in (
+        'flat', 'sq_ft', 'linear_ft', 'each', 'hour'
+      )
       or coalesce(jsonb_typeof(service_value -> 'sourceMeasurementIds'), '') <> 'array'
       or service_value #>> '{classificationEvidence,source}' <> 'operator_assertion'
       or service_value #>> '{classificationEvidence,assertedBy}' <> p_actor_user_id::text
@@ -1420,6 +1460,13 @@ begin
             or (service_value ->> 'pricingUnit' = 'each'
               and measurement.kind = 'count'
               and measurement.unit = 'each')
+            or (service_value ->> 'pricingUnit' = 'flat'
+              and measurement.kind = 'count'
+              and measurement.unit = 'each'
+              and measurement.value = 1)
+            or (service_value ->> 'pricingUnit' = 'hour'
+              and measurement.kind = 'duration_hours'
+              and measurement.unit = 'hour')
           )
           and exists (
             select 1
@@ -1440,6 +1487,85 @@ begin
     then
       raise exception 'ESTIMATE_SERVICE_EVIDENCE_MISMATCH';
     end if;
+    for measurement_id_value in
+      select supporting.measurement_id::uuid
+      from jsonb_array_elements_text(
+        coalesce(service_value -> 'supportingMeasurementIds', '[]'::jsonb)
+      ) supporting(measurement_id)
+    loop
+      select value
+      into snapshot_measurement_value
+      from jsonb_array_elements(p_authoritative_snapshot -> 'measurements')
+      where value ->> 'id' = measurement_id_value::text
+      limit 1;
+      if snapshot_measurement_value is null
+        or not exists (
+          select 1
+          from public.property_measurements measurement
+          join public.service_catalog catalog
+            on catalog.company_id = measurement.company_id
+            and catalog.code = service_value ->> 'serviceCode'
+            and catalog.active
+          where measurement.id = measurement_id_value
+            and measurement.company_id = p_company_id
+            and measurement.property_id = p_property_id
+            and measurement.verified_by_human
+            and measurement.kind = any(catalog.required_measurement_kinds)
+            and service_value ->> 'serviceCode' = any(measurement.service_codes)
+            and measurement.value =
+              (snapshot_measurement_value ->> 'value')::numeric
+            and measurement.kind = snapshot_measurement_value ->> 'kind'
+            and measurement.unit = snapshot_measurement_value ->> 'unit'
+            and (
+              select coalesce(jsonb_agg(code order by code), '[]'::jsonb)
+              from unnest(measurement.service_codes) code
+            ) = snapshot_measurement_value -> 'serviceCodes'
+            and (
+              select coalesce(jsonb_agg(code order by code), '[]'::jsonb)
+              from unnest(measurement.add_on_codes) code
+            ) = snapshot_measurement_value -> 'addOnCodes'
+            and measurement.version =
+              (snapshot_measurement_value ->> 'version')::integer
+            and measurement.updated_at =
+              (snapshot_measurement_value ->> 'updatedAt')::timestamptz
+            and not exists (
+              select 1
+              from public.property_measurements replacement
+              where replacement.company_id = measurement.company_id
+                and replacement.property_id = measurement.property_id
+                and replacement.supersedes_measurement_id = measurement.id
+            )
+        )
+      then
+        raise exception 'ESTIMATE_SUPPORTING_MEASUREMENT_EVIDENCE_MISMATCH';
+      end if;
+    end loop;
+    if exists (
+      select 1
+      from public.service_catalog catalog,
+        unnest(catalog.required_measurement_kinds) required(kind)
+      where catalog.company_id = p_company_id
+        and catalog.code = service_value ->> 'serviceCode'
+        and catalog.active
+        and not exists (
+          select 1
+          from public.property_measurements measurement
+          where measurement.company_id = p_company_id
+            and measurement.property_id = p_property_id
+            and measurement.kind = required.kind
+            and service_value ->> 'serviceCode' = any(measurement.service_codes)
+            and measurement.id in (
+              select (service_value ->> 'measurementId')::uuid
+              union
+              select supporting.measurement_id::uuid
+              from jsonb_array_elements_text(
+                coalesce(service_value -> 'supportingMeasurementIds', '[]'::jsonb)
+              ) supporting(measurement_id)
+            )
+        )
+    ) then
+      raise exception 'ESTIMATE_REQUIRED_MEASUREMENT_EVIDENCE_MISSING';
+    end if;
     if jsonb_typeof(coalesce(service_value -> 'addOns', '[]'::jsonb)) <> 'array' then
       raise exception 'ESTIMATE_ADD_ON_INPUT_INVALID';
     end if;
@@ -1458,7 +1584,9 @@ begin
         or (add_on_value ->> 'measurementId') !~*
           '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
         or (add_on_value ->> 'quantity') !~ '^(?:0|[1-9][0-9]{0,9})(?:[.][0-9]{1,4})?$'
-        or add_on_value ->> 'pricingUnit' not in ('sq_ft', 'linear_ft', 'each')
+        or add_on_value ->> 'pricingUnit' not in (
+          'flat', 'sq_ft', 'linear_ft', 'each', 'hour'
+        )
       then
         raise exception 'ESTIMATE_ADD_ON_INPUT_INVALID';
       end if;
@@ -1506,6 +1634,13 @@ begin
               or (add_on_value ->> 'pricingUnit' = 'each'
                 and measurement.kind = 'count'
                 and measurement.unit = 'each')
+              or (add_on_value ->> 'pricingUnit' = 'flat'
+                and measurement.kind = 'count'
+                and measurement.unit = 'each'
+                and measurement.value = 1)
+              or (add_on_value ->> 'pricingUnit' = 'hour'
+                and measurement.kind = 'duration_hours'
+                and measurement.unit = 'hour')
             )
             and exists (
               select 1
@@ -1550,15 +1685,17 @@ begin
       raise exception 'ESTIMATE_LINE_INVALID';
     end if;
     if line_value ->> 'kind' = 'service' then
-      select (service ->> 'measurementId')::uuid
-      into expected_measurement_id
+      select
+        jsonb_build_array(service ->> 'measurementId')
+          || coalesce(service -> 'supportingMeasurementIds', '[]'::jsonb)
+      into expected_service_measurement_ids
       from jsonb_array_elements(p_calculation_input -> 'services') service
       where service ->> 'serviceCode' = line_value ->> 'serviceCode'
         and (service ->> 'quantity')::numeric = (line_value ->> 'quantity')::numeric
       limit 1;
-      if expected_measurement_id is null
+      if expected_service_measurement_ids is null
         or line_value -> 'sourceMeasurementIds'
-          <> jsonb_build_array(expected_measurement_id::text)
+          is distinct from expected_service_measurement_ids
       then
         raise exception 'ESTIMATE_SERVICE_LINE_EVIDENCE_MISMATCH';
       end if;
@@ -1959,6 +2096,10 @@ begin
     where id = quote_id_value
       and company_id = new.company_id
       and status = 'pending_approval';
+    perform private.authorize_storyops_approval_consumption(
+      new.company_id,
+      new.id
+    );
     update public.approval_requests
     set
       consumed_at = now(),
@@ -2010,7 +2151,12 @@ as $$
 declare
   affected integer;
 begin
-  if auth.role() <> 'service_role' and current_user <> 'postgres' then
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
+  then
     raise exception 'Estimate approval expiry is service-role controlled';
   end if;
   update public.approval_requests

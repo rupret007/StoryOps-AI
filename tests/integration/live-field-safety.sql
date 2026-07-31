@@ -227,6 +227,12 @@ end;
 $$;
 
 reset role;
+-- The Edge finalizer supplies this canonical request hash in production.
+-- Grant only the pure hash helpers inside this rolled-back SQL fixture.
+grant execute on function public.storyops_canonical_json(jsonb) to service_role;
+grant execute on function public.storyops_json_sha256(jsonb) to service_role;
+grant execute on function public.storyops_canonical_json(jsonb) to authenticated;
+grant execute on function public.storyops_json_sha256(jsonb) to authenticated;
 set local role service_role;
 select set_config(
   'request.jwt.claims',
@@ -235,63 +241,80 @@ select set_config(
 );
 
 do $$
+declare
+  media_payload jsonb;
 begin
+  media_payload := jsonb_build_object(
+    'entityId', '97000000-0000-4000-8000-000000000811',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'before',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/97000000-0000-4000-8000-000000000811-aaaaaaaaaaaaaaaa-safety-before.png',
+    'contentType', 'image/png',
+    'byteSize', 1024,
+    'checksumSha256', repeat('a', 64),
+    'capturedAt', now(),
+    'customerVisible', false
+  );
   perform public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '97000000-0000-4000-8000-000000000911',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '97000000-0000-4000-8000-000000000811',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'before',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/97000000-0000-4000-8000-000000000811-aaaaaaaaaaaaaaaa-safety-before.png',
-      'contentType', 'image/png',
-      'byteSize', 1024,
-      'checksumSha256', repeat('a', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('3', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
+  );
+  media_payload := jsonb_build_object(
+    'entityId', '97000000-0000-4000-8000-000000000812',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'after',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/97000000-0000-4000-8000-000000000812-bbbbbbbbbbbbbbbb-safety-after.png',
+    'contentType', 'image/png',
+    'byteSize', 1024,
+    'checksumSha256', repeat('b', 64),
+    'capturedAt', now(),
+    'customerVisible', false
   );
   perform public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '97000000-0000-4000-8000-000000000912',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '97000000-0000-4000-8000-000000000812',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'after',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/97000000-0000-4000-8000-000000000812-bbbbbbbbbbbbbbbb-safety-after.png',
-      'contentType', 'image/png',
-      'byteSize', 1024,
-      'checksumSha256', repeat('b', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('4', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
+  );
+  media_payload := jsonb_build_object(
+    'entityId', '97000000-0000-4000-8000-000000000813',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'signature',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/97000000-0000-4000-8000-000000000813-cccccccccccccccc-safety-signature.png',
+    'contentType', 'image/png',
+    'byteSize', 2048,
+    'checksumSha256', repeat('c', 64),
+    'capturedAt', now(),
+    'customerVisible', false
   );
   perform public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '97000000-0000-4000-8000-000000000913',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '97000000-0000-4000-8000-000000000813',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'signature',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/97000000-0000-4000-8000-000000000813-cccccccccccccccc-safety-signature.png',
-      'contentType', 'image/png',
-      'byteSize', 2048,
-      'checksumSha256', repeat('c', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('5', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
   );
 end;
 $$;
@@ -485,37 +508,93 @@ begin
 end;
 $$;
 
-\echo '7/10 unresolved visit incident blocks completion'
+\echo '7/10 legacy visit incident insert is retired and atomic stop-work blocks completion'
 do $$
 declare
   visit_version integer;
   blocked boolean := false;
+  payload jsonb;
+  receipt jsonb;
 begin
-  perform public.execute_storyops_command(
-    '10000000-0000-4000-8000-000000000001',
-    '97000000-0000-4000-8000-000000000923',
-    'incident.report',
-    0,
-    jsonb_build_object(
-      'entityId', '97000000-0000-4000-8000-000000000824',
-      'incidentNumber', 'INC-FIELD-SAFETY-1',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'severity', 'minor',
-      'category', 'other',
-      'occurredAt', now(),
-      'summary', 'A disposal bag tore during cleanup.',
-      'immediateActions', 'Work paused and debris was contained.',
-      'requiresLegalReview', false
-    ),
-    repeat('f', 64)
-  );
   select (visit ->> 'version')::integer into visit_version
   from jsonb_array_elements(
     public.get_storyops_workspace('10000000-0000-4000-8000-000000000001') -> 'visits'
   ) visit
   where visit ->> 'id' = '10000000-0000-4000-8000-000000000641';
+
+  begin
+    perform public.execute_storyops_command(
+      '10000000-0000-4000-8000-000000000001',
+      '97000000-0000-4000-8000-000000000923',
+      'incident.report',
+      0,
+      jsonb_build_object(
+        'entityId', '97000000-0000-4000-8000-000000000824',
+        'incidentNumber', 'INC-FIELD-SAFETY-1',
+        'jobId', '10000000-0000-4000-8000-000000000631',
+        'visitId', '10000000-0000-4000-8000-000000000641',
+        'propertyId', '10000000-0000-4000-8000-000000000211',
+        'severity', 'minor',
+        'category', 'other',
+        'occurredAt', now(),
+        'summary', 'A disposal bag tore during cleanup.',
+        'immediateActions', 'Work paused and debris was contained.',
+        'requiresLegalReview', false
+      ),
+      repeat('f', 64)
+    );
+  exception
+    when others then
+      if position('INCIDENT_ATOMIC_STOP_REQUIRED' in sqlerrm) > 0 then
+        blocked := true;
+      else
+        raise;
+      end if;
+  end;
+  if not blocked then
+    raise exception 'Legacy visit-linked incident report bypassed atomic stop-work';
+  end if;
+
+  payload := jsonb_build_object(
+    'schemaVersion', 'storyops-incident-pause-v1',
+    'action', 'incident.report_pause',
+    'actorUserId', '10000000-0000-4000-8000-000000000103',
+    'entityId', '97000000-0000-4000-8000-000000000824',
+    'incidentNumber', 'INC-FIELD-SAFETY-1',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'severity', 'minor',
+    'category', 'other',
+    'occurredAt', now(),
+    'requestedAt', now(),
+    'summary', 'A disposal bag tore during cleanup.',
+    'immediateActions', 'Work paused and debris was contained.',
+    'requiresLegalReview', false
+  );
+  receipt := public.report_storyops_incident_and_pause(
+    '10000000-0000-4000-8000-000000000001',
+    '97000000-0000-4000-8000-000000000933',
+    visit_version,
+    payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'incident.report_pause',
+      'expectedVersion', visit_version,
+      'payload', payload
+    ))
+  );
+  if receipt #>> '{visit,currentStatus}' <> 'paused'
+    or receipt #>> '{incident,status}' <> 'open'
+  then
+    raise exception 'Atomic incident stop-work receipt was not durable';
+  end if;
+
+  select (visit ->> 'version')::integer into visit_version
+  from jsonb_array_elements(
+    public.get_storyops_workspace('10000000-0000-4000-8000-000000000001') -> 'visits'
+  ) visit
+  where visit ->> 'id' = '10000000-0000-4000-8000-000000000641';
+  blocked := false;
   begin
     perform public.execute_storyops_command(
       '10000000-0000-4000-8000-000000000001',
@@ -549,7 +628,7 @@ begin
     );
   exception
     when others then
-      if position('Only an owner' in sqlerrm) > 0 then blocked := true; else raise; end if;
+      if sqlerrm = 'INCIDENT_CLOSE_OWNER_REQUIRED' then blocked := true; else raise; end if;
   end;
   if not blocked then raise exception 'Technician closed an incident'; end if;
 end;
@@ -581,7 +660,7 @@ begin
     );
   exception
     when others then
-      if position('Only an owner' in sqlerrm) > 0 then blocked := true; else raise; end if;
+      if sqlerrm = 'INCIDENT_CLOSE_OWNER_REQUIRED' then blocked := true; else raise; end if;
   end;
   if not blocked then raise exception 'Dispatcher closed an incident'; end if;
 end;
@@ -614,7 +693,7 @@ begin
     );
   exception
     when others then
-      if position('Only an owner' in sqlerrm) > 0 then close_blocked := true; else raise; end if;
+      if sqlerrm = 'INCIDENT_CLOSE_OWNER_REQUIRED' then close_blocked := true; else raise; end if;
   end;
   begin
     perform public.get_storyops_field_reference(
@@ -622,7 +701,7 @@ begin
     );
   exception
     when others then
-      if position('Role cannot read field safety references' in sqlerrm) > 0 then
+      if sqlerrm = 'FIELD_PACKET_ROLE_DENIED' then
         projection_blocked := true;
       else
         raise;
@@ -663,7 +742,7 @@ begin
     );
   exception
     when others then
-      if position('5 through 2000' in sqlerrm) > 0 then blocked := true; else raise; end if;
+      if sqlerrm = 'INCIDENT_CLOSE_NOTE_INVALID' then blocked := true; else raise; end if;
   end;
   if not blocked then raise exception 'Short incident closure note was accepted'; end if;
 
@@ -679,7 +758,7 @@ begin
     );
   exception
     when others then
-      if position('unsupported fields' in sqlerrm) > 0 then blocked := true; else raise; end if;
+      if sqlerrm = 'INCIDENT_CLOSE_EXACT_PAYLOAD_REQUIRED' then blocked := true; else raise; end if;
   end;
   if not blocked then raise exception 'Expanded incident closure payload was accepted'; end if;
 
@@ -689,7 +768,11 @@ begin
     'incident.close',
     1,
     '{"entityId":"97000000-0000-4000-8000-000000000824","closureNote":"Owner verified debris containment and completed cleanup."}'::jsonb,
-    repeat('6', 64)
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'incident.close',
+      'expectedVersion', 1,
+      'payload', '{"entityId":"97000000-0000-4000-8000-000000000824","closureNote":"Owner verified debris containment and completed cleanup."}'::jsonb
+    ))
   );
   replay_result := public.execute_storyops_command(
     '10000000-0000-4000-8000-000000000001',
@@ -697,7 +780,11 @@ begin
     'incident.close',
     1,
     '{"entityId":"97000000-0000-4000-8000-000000000824","closureNote":"Owner verified debris containment and completed cleanup."}'::jsonb,
-    repeat('6', 64)
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'incident.close',
+      'expectedVersion', 1,
+      'payload', '{"entityId":"97000000-0000-4000-8000-000000000824","closureNote":"Owner verified debris containment and completed cleanup."}'::jsonb
+    ))
   );
   if (first_result ->> 'version')::integer <> 2
     or coalesce((first_result ->> 'replayed')::boolean, true)
@@ -713,11 +800,15 @@ begin
       'incident.close',
       1,
       '{"entityId":"97000000-0000-4000-8000-000000000824","closureNote":"A stale closure cannot overwrite the record."}'::jsonb,
-      repeat('7', 64)
+      public.storyops_json_sha256(jsonb_build_object(
+        'commandType', 'incident.close',
+        'expectedVersion', 1,
+        'payload', '{"entityId":"97000000-0000-4000-8000-000000000824","closureNote":"A stale closure cannot overwrite the record."}'::jsonb
+      ))
     );
   exception
     when others then
-      if position('version or closure state conflict' in sqlerrm) > 0 then
+      if sqlerrm = 'INCIDENT_CLOSE_SCOPE_OR_VERSION_CONFLICT' then
         blocked := true;
       else
         raise;

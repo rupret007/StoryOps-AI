@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { scopeEvidenceFlagSchema } from '../scopePhotos/contracts.ts';
 
 const probability = z.number().min(0).max(1);
 
@@ -25,6 +26,8 @@ export const photoAnalysisOutputSchema = z.object({
       }),
     )
     .max(25),
+  accessFlags: z.array(scopeEvidenceFlagSchema).max(25).default([]),
+  riskFlags: z.array(scopeEvidenceFlagSchema).max(25).default([]),
   unknowns: z.array(z.string().min(1).max(500)).max(50),
   injectionSignals: z.array(z.string().min(1).max(500)).max(20),
   overallConfidence: probability,
@@ -68,6 +71,16 @@ export function groundPhotoAnalysis(
     reasons.push('Photo-derived measurements require human verification and a scale reference.');
   }
   if (
+    [...output.accessFlags, ...output.riskFlags].some(
+      (flag) => flag.status !== 'observed' || flag.confidence < minimumConfidence,
+    )
+  ) {
+    reasons.push('One or more access or risk flags require human review.');
+  }
+  if (output.riskFlags.some((flag) => flag.status === 'observed')) {
+    reasons.push('A visible risk flag requires human review before scope confirmation.');
+  }
+  if (
     output.measurementCandidates.some(
       (candidate) => candidate.value !== null && candidate.scaleReference === null,
     )
@@ -99,6 +112,8 @@ export function sandboxPhotoAnalysis(sourceAssetId: string): GroundedPhotoAnalys
       },
     ],
     measurementCandidates: [],
+    accessFlags: [],
+    riskFlags: [],
     unknowns: ['Live vision is disabled; surface, soil, access, risk, and dimensions are unknown.'],
     injectionSignals: [],
     overallConfidence: 0.2,

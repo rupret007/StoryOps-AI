@@ -8,6 +8,7 @@ import type {
   WeatherProvider,
 } from './contracts.ts';
 import { IntegrationError } from './contracts.ts';
+import { createIntegrationProbeEvidence } from './probeEvidence.ts';
 
 const DEFAULT_PUBLIC_PROVIDER_TIMEOUT_MS = 15_000;
 
@@ -99,6 +100,34 @@ async function fetchJson(
   }
 }
 
+async function readBoundedResponseText(response: Response, maximumBytes: number): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (received < maximumBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const remaining = maximumBytes - received;
+      const chunk = value.byteLength > remaining ? value.slice(0, remaining) : value;
+      chunks.push(chunk);
+      received += chunk.byteLength;
+      if (value.byteLength > remaining) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 function parseWindMph(value: unknown): number | null {
   if (typeof value !== 'string') return null;
   const values = [...value.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
@@ -142,7 +171,7 @@ export class NwsWeatherProvider implements WeatherProvider {
   async health(signal?: AbortSignal): Promise<IntegrationHealth> {
     const started = performance.now();
     try {
-      await fetchJson(this.provider, `${this.baseUrl}/points/32.7767,-96.797`, {
+      const response = await fetchJson(this.provider, `${this.baseUrl}/points/32.7767,-96.797`, {
         headers: this.headers(),
         signal,
       });
@@ -155,6 +184,11 @@ export class NwsWeatherProvider implements WeatherProvider {
         latencyMs: Math.round(performance.now() - started),
         message: 'NWS points API is reachable.',
         requiredEnvironment: ['NWS_USER_AGENT'],
+        probeEvidence: await createIntegrationProbeEvidence(
+          'external_read',
+          'nws.points.retrieve',
+          response,
+        ),
       };
     } catch (error) {
       return {
@@ -201,6 +235,15 @@ export class NwsWeatherProvider implements WeatherProvider {
       ),
     ]);
     const forecastProperties = record(record(forecastResponse)?.properties);
+    const issuedAt = stringOrNull(forecastProperties?.updated);
+    if (!issuedAt || !Number.isFinite(Date.parse(issuedAt))) {
+      throw new IntegrationError(
+        'NWS forecast response omitted its authoritative update timestamp.',
+        this.provider,
+        'INVALID_RESPONSE',
+        false,
+      );
+    }
     const rawPeriods = Array.isArray(forecastProperties?.periods) ? forecastProperties.periods : [];
     const periods = rawPeriods
       .map((rawPeriod) => {
@@ -254,6 +297,7 @@ export class NwsWeatherProvider implements WeatherProvider {
       office: stringOrNull(pointProperties?.gridId),
       periods,
       alerts,
+      issuedAt: new Date(issuedAt).toISOString(),
       observedAt: new Date().toISOString(),
       unknowns:
         periods.length === 0
@@ -329,6 +373,7 @@ export class VroomRoutingProvider implements RoutingProvider {
       if (!response.ok) {
         throw new Error(`VROOM health endpoint returned HTTP ${response.status}.`);
       }
+      const responseBody = await readBoundedResponseText(response, 4_096);
       return {
         provider: this.provider,
         capability: this.capability,
@@ -338,6 +383,11 @@ export class VroomRoutingProvider implements RoutingProvider {
         latencyMs: Math.round(performance.now() - started),
         message: 'VROOM health endpoint is reachable.',
         requiredEnvironment: ['VROOM_URL', 'VROOM_HEALTH_URL'],
+        probeEvidence: await createIntegrationProbeEvidence(
+          'external_read',
+          'vroom.health.retrieve',
+          { status: response.status, body: responseBody },
+        ),
       };
     } catch (error) {
       return {

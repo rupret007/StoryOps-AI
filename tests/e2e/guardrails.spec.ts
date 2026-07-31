@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { completeFirstRunSetup } from './helpers';
+import {
+  completeFirstRunSetup,
+  publishSandboxCompanyConfiguration,
+  restartSandboxRehearsal,
+  setSandboxPreviewRole,
+} from './helpers';
 
 async function navigateInApp(page: import('@playwright/test').Page, path: string) {
   await page.evaluate((nextPath) => {
@@ -10,6 +15,7 @@ async function navigateInApp(page: import('@playwright/test').Page, path: string
 
 test('large discounts require one exact-payload owner approval', async ({ page }) => {
   await completeFirstRunSetup(page);
+  await publishSandboxCompanyConfiguration(page);
   await navigateInApp(page, '/estimates/estimate-1048');
   await page.getByLabel('Discount').fill('15');
   await page.getByRole('button', { name: 'Calculate & check policy' }).click();
@@ -27,15 +33,17 @@ test('large discounts require one exact-payload owner approval', async ({ page }
   await expect(page.getByText('Approval granted', { exact: true })).toBeVisible();
 
   await navigateInApp(page, '/estimates/estimate-1048');
-  await page.getByRole('button', { name: 'Send quote & deposit link' }).click();
-  await expect(page.getByText('Sandbox quote recorded', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish quote to portal' }).click();
+  await expect(
+    page.getByText('Sandbox portal publication recorded', { exact: true }),
+  ).toBeVisible();
 });
 
 test('role permissions block technician access to approvals and invoice writes', async ({
   page,
 }) => {
   await completeFirstRunSetup(page);
-  await page.getByLabel('Preview role').selectOption('technician');
+  await setSandboxPreviewRole(page, 'technician');
   await navigateInApp(page, '/approvals');
   await expect(
     page.getByRole('heading', { name: 'This role has read-only or no access' }),
@@ -51,6 +59,7 @@ test('role permissions block technician access to approvals and invoice writes',
 
 test('booking cannot bypass quote acceptance and deposit truth', async ({ page }) => {
   await completeFirstRunSetup(page);
+  await publishSandboxCompanyConfiguration(page);
   await navigateInApp(page, '/dispatch');
   await page.getByRole('button', { name: 'Book Fri 9:00 AM' }).click();
   await expect(page.getByText('Booking blocked', { exact: true })).toBeVisible();
@@ -90,6 +99,21 @@ test('sandbox operational state is labeled synthetic and never presented as prov
   await expect(page.getByText(/No approved quote is available/)).toBeVisible();
 });
 
+test('pilot rehearsal shows the next local checkpoint and restart requires confirmation', async ({
+  page,
+}) => {
+  await completeFirstRunSetup(page);
+  await expect(page.getByRole('heading', { name: 'Pilot rehearsal' })).toBeVisible();
+  await expect(page.getByText('Local-only golden-path checkpoints.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open company setup' })).toBeVisible();
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await restartSandboxRehearsal(page);
+  await expect(
+    page.getByRole('heading', { name: 'Tell StoryOps who it works for.' }),
+  ).toBeVisible();
+});
+
 test('offline field changes recover through an idempotent outbox', async ({
   page,
   context,
@@ -101,17 +125,18 @@ test('offline field changes recover through an idempotent outbox', async ({
     await navigator.serviceWorker.ready;
   });
   await page.getByRole('button', { name: 'Start demo job' }).first().click();
+  await page.getByRole('button', { name: 'Arrived' }).click();
 
   await context.setOffline(true);
   await expect(
-    page.locator('#main-content').getByText('Offline · 0 queued', { exact: true }),
+    page.locator('#main-content').getByText('Browser offline · 0 queued', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Complete Arrival walkaround' }).click();
   await expect(page.getByText(/1 changes queued on this device/)).toBeVisible();
   if (browserName !== 'webkit') {
     await page.waitForTimeout(150);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Today’s active visit' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Selected field visit' })).toBeVisible();
     await expect(page.getByText(/1 changes queued on this device/)).toBeVisible();
   }
 
@@ -162,10 +187,15 @@ test('setup persists the exact local profile across reload', async ({ page }) =>
 
 test('setup service exclusions fail closed at deterministic pricing', async ({ page }) => {
   await completeFirstRunSetup(page, {
-    services: ['gutter-cleaning'],
+    services: ['soft-wash-house', 'gutter-cleaning', 'window-cleaning'],
   });
   await navigateInApp(page, '/estimates/estimate-1048');
   await page.getByRole('button', { name: 'Calculate & check policy' }).click();
-  await expect(page.getByText('Service not enabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('Company configuration required', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Publish the exact sandbox company configuration/iu)).toBeVisible();
+  await publishSandboxCompanyConfiguration(page);
+  await navigateInApp(page, '/estimates/estimate-1048');
+  await page.getByRole('button', { name: 'Calculate & check policy' }).click();
+  await expect(page.getByText('Company configuration required', { exact: true })).toBeVisible();
   await expect(page.getByText(/pressure-wash-flatwork/u)).toBeVisible();
 });

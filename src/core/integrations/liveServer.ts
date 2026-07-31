@@ -5,8 +5,10 @@ import type {
   AccountingProvider,
   CalendarAvailability,
   CalendarAvailabilityRequest,
+  CalendarBookingState,
   CalendarEntry,
   CalendarProvider,
+  CancelCalendarEntryRequest,
   CreateCalendarEntryRequest,
   CreateCheckoutRequest,
   CreateInvoiceRequest,
@@ -15,12 +17,14 @@ import type {
   GeocodeResult,
   HealthCheckedIntegration,
   IntegrationHealth,
+  IntegrationProbeEvidence,
   IntegrationSuite,
   MapsProvider,
   PaymentDocument,
   PaymentsProvider,
   ProviderReceipt,
   QuickBooksInvoiceExportRequest,
+  ReadCalendarBookingRequest,
   RefundRequest,
   SendEmailRequest,
   SendSmsRequest,
@@ -51,6 +55,7 @@ import {
 } from './stripeBillingValidator.ts';
 import { resolveLiveProviderActivation } from './configuration.ts';
 import { createDisabledIntegrationSuite } from './disabled.ts';
+import { createIntegrationProbeEvidence } from './probeEvidence.ts';
 
 export type ServerEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -165,6 +170,7 @@ function healthResult(
   status: IntegrationHealth['status'],
   message: string,
   requiredEnvironment: string[],
+  probeEvidence?: IntegrationProbeEvidence,
 ): IntegrationHealth {
   return {
     provider,
@@ -175,6 +181,7 @@ function healthResult(
     latencyMs: Math.round(performance.now() - started),
     message,
     requiredEnvironment,
+    ...(probeEvidence ? { probeEvidence } : {}),
   };
 }
 
@@ -191,7 +198,7 @@ class OpenAiHealthProvider implements HealthCheckedIntegration {
   async health(signal?: AbortSignal): Promise<IntegrationHealth> {
     const started = performance.now();
     try {
-      await jsonResponse(
+      const response = await jsonResponse(
         this.provider,
         `https://api.openai.com/v1/models/${encodeURIComponent(this.model)}`,
         {
@@ -206,6 +213,7 @@ class OpenAiHealthProvider implements HealthCheckedIntegration {
         'healthy',
         `OpenAI model ${this.model} is reachable.`,
         ['OPENAI_API_KEY', 'OPENAI_MODEL'],
+        await createIntegrationProbeEvidence('external_read', 'openai.model.retrieve', response),
       );
     } catch (error) {
       return healthResult(
@@ -303,7 +311,7 @@ abstract class TwilioProvider {
   protected async check(capability: string, signal?: AbortSignal): Promise<IntegrationHealth> {
     const started = performance.now();
     try {
-      await jsonResponse('twilio', `${this.baseUrl}.json`, {
+      const response = await jsonResponse('twilio', `${this.baseUrl}.json`, {
         headers: this.headers(),
         signal,
       });
@@ -314,6 +322,7 @@ abstract class TwilioProvider {
         'healthy',
         'Twilio account API is reachable.',
         ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'],
+        await createIntegrationProbeEvidence('external_read', 'twilio.account.retrieve', response),
       );
     } catch (error) {
       return healthResult(
@@ -450,6 +459,9 @@ export class HttpEmailProvider implements EmailProvider {
         'healthy',
         'Email provider health endpoint is reachable.',
         ['EMAIL_PROVIDER_ENDPOINT', 'EMAIL_PROVIDER_TOKEN', 'EMAIL_FROM'],
+        await createIntegrationProbeEvidence('external_read', 'email.health.retrieve', {
+          status: response.status,
+        }),
       );
     } catch (error) {
       return healthResult(
@@ -645,7 +657,7 @@ export class StripePaymentsProvider implements PaymentsProvider {
   async health(signal?: AbortSignal): Promise<IntegrationHealth> {
     const started = performance.now();
     try {
-      await this.request('/balance', undefined, signal);
+      const response = await this.request('/balance', undefined, signal);
       return healthResult(
         this.provider,
         this.capability,
@@ -653,6 +665,7 @@ export class StripePaymentsProvider implements PaymentsProvider {
         'healthy',
         'Stripe balance endpoint is reachable.',
         ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+        await createIntegrationProbeEvidence('external_read', 'stripe.balance.retrieve', response),
       );
     } catch (error) {
       return healthResult(
@@ -672,6 +685,8 @@ export class StripePaymentsProvider implements PaymentsProvider {
   ): Promise<PaymentDocument> {
     await this.config.billingValidator.validateCheckout(request);
     const stripeCustomerId = await this.resolveStripeCustomer(request, signal);
+    const checkoutPurpose =
+      request.checkoutPurpose === 'invoice_balance' ? 'invoice_balance' : 'quote_deposit';
     const params = new URLSearchParams({
       mode: 'payment',
       success_url: this.config.checkoutSuccessUrl,
@@ -680,9 +695,24 @@ export class StripePaymentsProvider implements PaymentsProvider {
       customer: stripeCustomerId,
       'metadata[company_id]': request.companyId,
       'metadata[quote_id]': request.quoteId,
+      'metadata[checkout_purpose]': checkoutPurpose,
       'payment_intent_data[metadata][company_id]': request.companyId,
       'payment_intent_data[metadata][quote_id]': request.quoteId,
+      'payment_intent_data[metadata][checkout_purpose]': checkoutPurpose,
     });
+    if (request.checkoutAttempt !== undefined) {
+      params.set('metadata[checkout_attempt]', String(request.checkoutAttempt));
+      params.set(
+        'payment_intent_data[metadata][checkout_attempt]',
+        String(request.checkoutAttempt),
+      );
+    }
+    if (request.checkoutPurpose === 'invoice_balance') {
+      params.set('metadata[invoice_id]', request.invoiceId);
+      params.set('metadata[invoice_version]', String(request.invoiceVersion));
+      params.set('payment_intent_data[metadata][invoice_id]', request.invoiceId);
+      params.set('payment_intent_data[metadata][invoice_version]', String(request.invoiceVersion));
+    }
     request.lines.forEach((line, index) => {
       params.set(`line_items[${index}][quantity]`, String(line.quantity));
       params.set(`line_items[${index}][price_data][currency]`, 'usd');
@@ -1019,7 +1049,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
   async health(signal?: AbortSignal): Promise<IntegrationHealth> {
     const started = performance.now();
     try {
-      await this.request(`${this.baseUrl}/users/me/calendarList?maxResults=1`, {
+      const response = await this.request(`${this.baseUrl}/users/me/calendarList?maxResults=1`, {
         signal,
       });
       return healthResult(
@@ -1029,6 +1059,11 @@ export class GoogleCalendarProvider implements CalendarProvider {
         'healthy',
         'Google Calendar API is reachable.',
         this.requiredEnvironment(),
+        await createIntegrationProbeEvidence(
+          'external_read',
+          'google_calendar.list.retrieve',
+          response,
+        ),
       );
     } catch (error) {
       return healthResult(
@@ -1137,6 +1172,143 @@ export class GoogleCalendarProvider implements CalendarProvider {
     return this.createEvent(request, 'booking', signal);
   }
 
+  async readBooking(
+    request: ReadCalendarBookingRequest,
+    signal?: AbortSignal,
+  ): Promise<CalendarBookingState> {
+    if (!this.allowedCalendarIds.includes(request.calendarId)) {
+      throw new IntegrationError(
+        'Calendar reads are restricted to the configured StoryOps calendar.',
+        this.provider,
+        'CALENDAR_NOT_ALLOWED',
+        false,
+      );
+    }
+    const expectedEventId = `storyops${(await sha256(request.idempotencyKey)).slice(0, 40)}`;
+    if (request.providerId !== expectedEventId) {
+      throw new IntegrationError(
+        'Calendar reconciliation requires the exact deterministic event identity.',
+        this.provider,
+        'INVALID_REQUEST',
+        false,
+      );
+    }
+    const url = `${this.baseUrl}/calendars/${encodeURIComponent(request.calendarId)}/events/${encodeURIComponent(request.providerId)}`;
+    let existing: JsonRecord;
+    try {
+      existing = await this.request(url, { signal });
+    } catch (error) {
+      if (
+        error instanceof IntegrationError &&
+        (error.code === 'HTTP_404' || error.code === 'HTTP_410')
+      ) {
+        return {
+          provider: this.provider,
+          providerId: request.providerId,
+          mode: this.mode,
+          status: 'absent',
+          idempotencyKey: request.idempotencyKey,
+          observedAt: new Date().toISOString(),
+          readBackConfirmed: true,
+        };
+      }
+      throw error;
+    }
+    const privateProperties = asRecordOrEmpty(asRecordOrEmpty(existing.extendedProperties).private);
+    const start = stringValue(asRecordOrEmpty(existing.start), 'dateTime');
+    const end = stringValue(asRecordOrEmpty(existing.end), 'dateTime');
+    const status = stringValue(existing, 'status');
+    const etag = stringValue(existing, 'etag');
+    if (
+      stringValue(existing, 'id') !== request.providerId ||
+      stringValue(privateProperties, 'storyops_idempotency_key') !== request.idempotencyKey ||
+      stringValue(privateProperties, 'storyops_job_id') !== request.jobId ||
+      stringValue(privateProperties, 'storyops_kind') !== 'booking' ||
+      !start ||
+      !end ||
+      Date.parse(start) !== Date.parse(request.window.start) ||
+      Date.parse(end) !== Date.parse(request.window.end) ||
+      !etag ||
+      (status !== 'confirmed' && status !== 'cancelled')
+    ) {
+      throw new IntegrationError(
+        'Google Calendar booking read-back no longer matches the exact StoryOps event.',
+        this.provider,
+        'RECONCILIATION_CONFLICT',
+        false,
+      );
+    }
+    return {
+      provider: this.provider,
+      providerId: request.providerId,
+      mode: this.mode,
+      status,
+      idempotencyKey: request.idempotencyKey,
+      etag,
+      observedAt: new Date().toISOString(),
+      readBackConfirmed: true,
+    };
+  }
+
+  async cancelBooking(request: CancelCalendarEntryRequest, signal?: AbortSignal): Promise<void> {
+    if (!this.allowedCalendarIds.includes(request.calendarId)) {
+      throw new IntegrationError(
+        'Calendar writes are restricted to the configured StoryOps calendar.',
+        this.provider,
+        'CALENDAR_NOT_ALLOWED',
+        false,
+      );
+    }
+    const expectedEventId = `storyops${(await sha256(request.idempotencyKey)).slice(0, 40)}`;
+    if (request.providerId !== expectedEventId || !request.etag.trim()) {
+      throw new IntegrationError(
+        'Calendar cancellation requires the exact deterministic event identity and etag.',
+        this.provider,
+        'INVALID_REQUEST',
+        false,
+      );
+    }
+    const url = `${this.baseUrl}/calendars/${encodeURIComponent(request.calendarId)}/events/${encodeURIComponent(request.providerId)}`;
+    let existing: JsonRecord;
+    try {
+      existing = await this.request(url, { signal });
+    } catch (error) {
+      if (
+        error instanceof IntegrationError &&
+        (error.code === 'HTTP_404' || error.code === 'HTTP_410')
+      ) {
+        return;
+      }
+      throw error;
+    }
+    const privateProperties = asRecordOrEmpty(asRecordOrEmpty(existing.extendedProperties).private);
+    if (
+      stringValue(existing, 'id') !== request.providerId ||
+      stringValue(privateProperties, 'storyops_idempotency_key') !== request.idempotencyKey
+    ) {
+      throw new IntegrationError(
+        'Google Calendar cancellation read-back no longer matches the StoryOps event.',
+        this.provider,
+        'RECONCILIATION_CONFLICT',
+        false,
+      );
+    }
+    if (stringValue(existing, 'status') === 'cancelled') return;
+    if (stringValue(existing, 'etag') !== request.etag) {
+      throw new IntegrationError(
+        'Google Calendar cancellation etag changed and requires reconciliation.',
+        this.provider,
+        'RECONCILIATION_CONFLICT',
+        false,
+      );
+    }
+    await this.request(url, {
+      method: 'DELETE',
+      headers: { 'if-match': request.etag },
+      signal,
+    });
+  }
+
   private async createEvent(
     request: CreateCalendarEntryRequest & { expiresAt?: string },
     kind: CalendarEntry['kind'],
@@ -1152,9 +1324,8 @@ export class GoogleCalendarProvider implements CalendarProvider {
     }
     const eventId = `storyops${(await sha256(request.idempotencyKey)).slice(0, 40)}`;
     const url = `${this.baseUrl}/calendars/${encodeURIComponent(request.calendarId)}/events`;
-    let result: JsonRecord;
     try {
-      result = await this.request(url, {
+      await this.request(url, {
         method: 'POST',
         body: JSON.stringify({
           id: eventId,
@@ -1177,14 +1348,31 @@ export class GoogleCalendarProvider implements CalendarProvider {
       });
     } catch (error) {
       if (!(error instanceof IntegrationError) || error.code !== 'HTTP_409') throw error;
-      result = await this.request(`${url}/${encodeURIComponent(eventId)}`, {
-        signal,
-      });
     }
+    const result = await this.request(`${url}/${encodeURIComponent(eventId)}`, { signal });
     const returnedEventId = stringValue(result, 'id');
-    if (!returnedEventId || returnedEventId !== eventId) {
+    const etag = stringValue(result, 'etag');
+    const status = stringValue(result, 'status');
+    const start = stringValue(asRecordOrEmpty(result.start), 'dateTime');
+    const end = stringValue(asRecordOrEmpty(result.end), 'dateTime');
+    const privateProperties = asRecordOrEmpty(asRecordOrEmpty(result.extendedProperties).private);
+    const exactWindow =
+      start !== undefined &&
+      end !== undefined &&
+      Date.parse(start) === Date.parse(request.window.start) &&
+      Date.parse(end) === Date.parse(request.window.end);
+    if (
+      !returnedEventId ||
+      returnedEventId !== eventId ||
+      !etag ||
+      status !== 'confirmed' ||
+      !exactWindow ||
+      stringValue(privateProperties, 'storyops_job_id') !== request.jobId ||
+      stringValue(privateProperties, 'storyops_idempotency_key') !== request.idempotencyKey ||
+      stringValue(privateProperties, 'storyops_kind') !== kind
+    ) {
       throw new IntegrationError(
-        'Google Calendar response omitted or changed the deterministic event ID.',
+        'Google Calendar read-back did not reconcile the exact StoryOps event.',
         this.provider,
         'INVALID_RESPONSE',
         false,
@@ -1199,6 +1387,9 @@ export class GoogleCalendarProvider implements CalendarProvider {
       window: request.window,
       expiresAt: request.expiresAt,
       idempotencyKey: request.idempotencyKey,
+      etag,
+      reconciledAt: new Date().toISOString(),
+      readBackConfirmed: true,
     };
   }
 }
@@ -1213,7 +1404,7 @@ export class GoogleMapsProvider implements MapsProvider {
   async health(signal?: AbortSignal): Promise<IntegrationHealth> {
     const started = performance.now();
     try {
-      await this.geocode('Dallas, TX', signal);
+      const response = await this.geocode('Dallas, TX', signal);
       return healthResult(
         this.provider,
         this.capability,
@@ -1221,6 +1412,11 @@ export class GoogleMapsProvider implements MapsProvider {
         'healthy',
         'Google Geocoding API is reachable.',
         ['GOOGLE_MAPS_API_KEY'],
+        await createIntegrationProbeEvidence(
+          'external_read',
+          'google_maps.geocode.retrieve',
+          response,
+        ),
       );
     } catch (error) {
       return healthResult(
@@ -1334,7 +1530,7 @@ export class SupabaseStorageProvider implements StorageProvider {
 
   async health(): Promise<IntegrationHealth> {
     const started = performance.now();
-    const { error } = await this.client.storage.getBucket(this.bucket);
+    const { data, error } = await this.client.storage.getBucket(this.bucket);
     return healthResult(
       this.provider,
       this.capability,
@@ -1344,6 +1540,13 @@ export class SupabaseStorageProvider implements StorageProvider {
         ? `Optional signed-target bucket check failed: ${error.message}`
         : `Optional signed-target bucket ${this.bucket} is reachable.`,
       ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'STORAGE_BUCKET_JOB_PHOTOS'],
+      error
+        ? undefined
+        : await createIntegrationProbeEvidence(
+            'external_read',
+            'supabase_storage.bucket.retrieve',
+            data,
+          ),
     );
   }
 
@@ -1421,6 +1624,11 @@ export class QuickBooksCsvProvider implements AccountingProvider {
       'healthy',
       'QuickBooks CSV export is local, deterministic, and ready.',
       [],
+      await createIntegrationProbeEvidence(
+        'deterministic_local',
+        'quickbooks_export.adapter.validate',
+        { adapterVersion: 'storyops-quickbooks-csv-v1' },
+      ),
     );
   }
 

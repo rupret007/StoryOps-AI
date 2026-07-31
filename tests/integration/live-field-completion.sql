@@ -3,6 +3,16 @@
 begin;
 
 \echo '1/9 visit notes require active assigned work'
+-- Test-only bootstrap after the separately proven scheduling-evidence boundary.
+-- Migration 45 separately proves that normal paths cannot enter en_route
+-- without consuming dispatch clearance. This field-completion contract needs
+-- an already-cleared visit, so temporarily disable only that promotion guard;
+-- the enclosing transaction restores the trigger even on rollback.
+alter table public.visits disable trigger visits_dispatch_clearance_guard;
+update public.visits
+set status = 'en_route'
+where id = '10000000-0000-4000-8000-000000000641';
+alter table public.visits enable trigger visits_dispatch_clearance_guard;
 update public.visit_checklist_items
 set
   status = 'complete',
@@ -60,26 +70,11 @@ begin
 end;
 $$;
 
-\echo '2/9 assigned technician reaches on-site state through versioned transitions'
+\echo '2/9 assigned technician reaches on-site state through a versioned transition'
 do $$
 declare
   visit_version integer;
 begin
-  select (visit ->> 'version')::integer into visit_version
-  from jsonb_array_elements(
-    public.get_storyops_workspace('10000000-0000-4000-8000-000000000001') -> 'visits'
-  ) visit
-  where visit ->> 'id' = '10000000-0000-4000-8000-000000000641';
-
-  perform public.execute_storyops_command(
-    '10000000-0000-4000-8000-000000000001',
-    '96000000-0000-4000-8000-000000000902',
-    'visit.transition',
-    visit_version,
-    '{"entityId":"10000000-0000-4000-8000-000000000641","status":"en_route"}'::jsonb,
-    repeat('b', 64)
-  );
-
   select (visit ->> 'version')::integer into visit_version
   from jsonb_array_elements(
     public.get_storyops_workspace('10000000-0000-4000-8000-000000000001') -> 'visits'
@@ -300,6 +295,11 @@ end;
 $$;
 
 reset role;
+-- The Edge boundary supplies this canonical hash in production. Grant the
+-- rolled-back SQL fixture only the pure canonicalization helpers so it can
+-- construct the same request without widening tenant-table privileges.
+grant execute on function public.storyops_canonical_json(jsonb) to service_role;
+grant execute on function public.storyops_json_sha256(jsonb) to service_role;
 set local role service_role;
 select set_config(
   'request.jwt.claims',
@@ -311,26 +311,31 @@ select set_config(
 do $$
 declare
   blocked boolean := false;
+  media_payload jsonb := jsonb_build_object(
+    'entityId', '96000000-0000-4000-8000-000000000809',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'before',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000809-eeeeeeeeeeeeeeee-missing.png',
+    'contentType', 'image/png',
+    'byteSize', 1024,
+    'checksumSha256', repeat('e', 64),
+    'capturedAt', now(),
+    'customerVisible', false
+  );
 begin
   begin
     perform public.finalize_storyops_media_upload(
       '10000000-0000-4000-8000-000000000001',
       '96000000-0000-4000-8000-000000000909',
       '10000000-0000-4000-8000-000000000103',
-      jsonb_build_object(
-        'entityId', '96000000-0000-4000-8000-000000000809',
-        'visitId', '10000000-0000-4000-8000-000000000641',
-        'jobId', '10000000-0000-4000-8000-000000000631',
-        'propertyId', '10000000-0000-4000-8000-000000000211',
-        'purpose', 'before',
-        'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000809-eeeeeeeeeeeeeeee-missing.png',
-        'contentType', 'image/png',
-        'byteSize', 1024,
-        'checksumSha256', repeat('e', 64),
-        'capturedAt', now(),
-        'customerVisible', false
-      ),
-      repeat('e', 64)
+      media_payload,
+      public.storyops_json_sha256(jsonb_build_object(
+        'commandType', 'media.register',
+        'expectedVersion', 0,
+        'payload', media_payload
+      ))
     );
   exception
     when others then
@@ -376,44 +381,42 @@ do $$
 declare
   first_result jsonb;
   replay_result jsonb;
+  media_payload jsonb;
 begin
+  media_payload := jsonb_build_object(
+    'entityId', '96000000-0000-4000-8000-000000000811',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'before',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000811-aaaaaaaaaaaaaaaa-before.png',
+    'contentType', 'image/png',
+    'byteSize', 1024,
+    'checksumSha256', repeat('a', 64),
+    'capturedAt', now(),
+    'customerVisible', false
+  );
   first_result := public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '96000000-0000-4000-8000-000000000911',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '96000000-0000-4000-8000-000000000811',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'before',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000811-aaaaaaaaaaaaaaaa-before.png',
-      'contentType', 'image/png',
-      'byteSize', 1024,
-      'checksumSha256', repeat('a', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('3', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
   );
   replay_result := public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '96000000-0000-4000-8000-000000000911',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '96000000-0000-4000-8000-000000000811',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'before',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000811-aaaaaaaaaaaaaaaa-before.png',
-      'contentType', 'image/png',
-      'byteSize', 1024,
-      'checksumSha256', repeat('a', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('3', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
   );
   if coalesce((first_result ->> 'replayed')::boolean, true)
     or not coalesce((replay_result ->> 'replayed')::boolean, false)
@@ -421,43 +424,53 @@ begin
     raise exception 'Media finalizer replay receipt is invalid';
   end if;
 
+  media_payload := jsonb_build_object(
+    'entityId', '96000000-0000-4000-8000-000000000812',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'after',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000812-bbbbbbbbbbbbbbbb-after.png',
+    'contentType', 'image/png',
+    'byteSize', 1024,
+    'checksumSha256', repeat('b', 64),
+    'capturedAt', now(),
+    'customerVisible', false
+  );
   perform public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '96000000-0000-4000-8000-000000000912',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '96000000-0000-4000-8000-000000000812',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'after',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000812-bbbbbbbbbbbbbbbb-after.png',
-      'contentType', 'image/png',
-      'byteSize', 1024,
-      'checksumSha256', repeat('b', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('4', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
+  );
+  media_payload := jsonb_build_object(
+    'entityId', '96000000-0000-4000-8000-000000000813',
+    'visitId', '10000000-0000-4000-8000-000000000641',
+    'jobId', '10000000-0000-4000-8000-000000000631',
+    'propertyId', '10000000-0000-4000-8000-000000000211',
+    'purpose', 'signature',
+    'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000813-cccccccccccccccc-signature.png',
+    'contentType', 'image/png',
+    'byteSize', 2048,
+    'checksumSha256', repeat('c', 64),
+    'capturedAt', now(),
+    'customerVisible', false
   );
   perform public.finalize_storyops_media_upload(
     '10000000-0000-4000-8000-000000000001',
     '96000000-0000-4000-8000-000000000913',
     '10000000-0000-4000-8000-000000000103',
-    jsonb_build_object(
-      'entityId', '96000000-0000-4000-8000-000000000813',
-      'visitId', '10000000-0000-4000-8000-000000000641',
-      'jobId', '10000000-0000-4000-8000-000000000631',
-      'propertyId', '10000000-0000-4000-8000-000000000211',
-      'purpose', 'signature',
-      'objectPath', '10000000-0000-4000-8000-000000000001/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000813-cccccccccccccccc-signature.png',
-      'contentType', 'image/png',
-      'byteSize', 2048,
-      'checksumSha256', repeat('c', 64),
-      'capturedAt', now(),
-      'customerVisible', false
-    ),
-    repeat('5', 64)
+    media_payload,
+    public.storyops_json_sha256(jsonb_build_object(
+      'commandType', 'media.register',
+      'expectedVersion', 0,
+      'payload', media_payload
+    ))
   );
 end;
 $$;

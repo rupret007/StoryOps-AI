@@ -38,6 +38,8 @@ export type OutboundClaim = z.infer<typeof outboundClaimSchema>;
 
 export const workerRequestSchema = z
   .object({
+    companyId: z.string().uuid(),
+    trigger: z.enum(['manual', 'scheduled']),
     workerId: z.string().uuid().optional(),
     batchSize: z.number().int().min(1).max(25).default(10),
     leaseSeconds: z.number().int().min(30).max(300).default(90),
@@ -71,7 +73,9 @@ export const workerResultSchema = z
       ])
       .optional(),
     errorCode: z.string().max(120).optional(),
+    providerReadErrorCode: z.string().max(120).nullish(),
     retryScheduled: z.boolean().optional(),
+    manualReconciliationRequired: z.boolean().optional(),
     externalDeliveryClaimed: z.boolean(),
   })
   .strict();
@@ -79,11 +83,15 @@ export type WorkerResult = z.infer<typeof workerResultSchema>;
 
 export const workerResponseSchema = z
   .object({
-    schemaVersion: z.literal('storyops-post-service-worker-run-v1'),
+    schemaVersion: z.literal('storyops-post-service-worker-run-v2'),
+    activationMode: z.enum(['manual', 'scheduled']),
+    trigger: z.enum(['manual', 'scheduled']),
+    status: z.literal('processed'),
     workerId: z.string().uuid(),
     claimed: z.number().int().nonnegative(),
     empty: z.boolean(),
     counts: z.record(z.string(), z.number().int().nonnegative()),
-    results: z.array(workerResultSchema),
+    results: z.array(workerResultSchema).max(25),
+    checkedAt: z.string().datetime({ offset: true }),
   })
   .strict();

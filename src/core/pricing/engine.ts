@@ -3,6 +3,7 @@ import type {
   AddOnPriceRule,
   AttributeMultiplier,
   Money,
+  PricingApprovalRequirement,
   ServicePriceRule,
   TravelZoneRule,
 } from '@/domain';
@@ -12,6 +13,8 @@ import type {
   PricingApprovalFlag,
   PricingIssue,
   PricingLine,
+  PackagePricingRequest,
+  PackagePricingResult,
   PricingRequest,
   PricingResult,
   RequestedService,
@@ -39,23 +42,47 @@ const findMultiplier = (
   multipliers: readonly AttributeMultiplier[],
   attribute: AttributeMultiplier['attribute'],
   value: string,
-): Decimal | null => {
-  const match = multipliers.find(
-    (candidate) => candidate.attribute === attribute && candidate.value === value,
-  );
-  return match ? new Decimal(match.multiplier) : null;
+): AttributeMultiplier | undefined =>
+  multipliers.find((candidate) => candidate.attribute === attribute && candidate.value === value);
+
+const addApprovalRequirement = (
+  approvalFlags: PricingApprovalFlag[],
+  requirement: PricingApprovalRequirement | undefined,
+): void => {
+  if (
+    requirement &&
+    !approvalFlags.some(
+      (flag) => flag.reason === requirement.reason && flag.summary === requirement.summary,
+    )
+  ) {
+    approvalFlags.push({
+      reason: requirement.reason,
+      summary: requirement.summary,
+      blocking: true,
+    });
+  }
 };
 
 const validateAttributes = (
   requested: RequestedService,
   rule: ServicePriceRule,
   issues: PricingIssue[],
+  approvalFlags: PricingApprovalFlag[],
 ): Decimal | null => {
   let combined = new Decimal(1);
   const entries = Object.entries(rule.allowedAttributeValues);
 
   for (const [attributeName, allowedValues] of entries) {
     const attribute = attributeName as AttributeMultiplier['attribute'];
+    if (!allowedValues) {
+      issues.push({
+        severity: 'error',
+        code: 'MISSING_MULTIPLIER',
+        message: `Service "${requested.serviceCode}" has no allowed values for "${attribute}".`,
+        serviceCode: requested.serviceCode,
+      });
+      continue;
+    }
     const selected = requested.attributes[attribute];
     if (selected === undefined) {
       issues.push({
@@ -75,8 +102,8 @@ const validateAttributes = (
       });
       continue;
     }
-    const factor = findMultiplier(rule.attributeMultipliers, attribute, selected);
-    if (factor === null) {
+    const multiplier = findMultiplier(rule.attributeMultipliers, attribute, selected);
+    if (!multiplier) {
       issues.push({
         severity: 'error',
         code: 'MISSING_MULTIPLIER',
@@ -85,7 +112,8 @@ const validateAttributes = (
       });
       continue;
     }
-    combined = combined.times(factor);
+    combined = combined.times(multiplier.multiplier);
+    addApprovalRequirement(approvalFlags, multiplier.approval);
   }
 
   const hasAttributeErrors = issues.some(
@@ -98,7 +126,9 @@ const calculateAddOn = (
   requested: RequestedService,
   rule: AddOnPriceRule,
   quantity: Decimal,
+  approvalFlags: PricingApprovalFlag[],
 ): CalculatedScopeLine => {
+  addApprovalRequirement(approvalFlags, rule.approval);
   const subtotal = roundMoney(new Decimal(rule.unitPrice).times(quantity));
   const cost = roundMoney(new Decimal(rule.estimatedUnitCost ?? '0').times(quantity));
   const duration = new Decimal(rule.durationMinutesPerUnit).times(quantity);
@@ -130,6 +160,7 @@ const calculateService = (
   requested: RequestedService,
   rule: ServicePriceRule,
   issues: PricingIssue[],
+  approvalFlags: PricingApprovalFlag[],
 ): CalculatedScopeLine => {
   const quantity = new Decimal(requested.quantity);
   if (!quantity.isFinite() || quantity.lessThanOrEqualTo(0)) {
@@ -142,7 +173,7 @@ const calculateService = (
     return emptyScopeLine();
   }
 
-  const multiplier = validateAttributes(requested, rule, issues);
+  const multiplier = validateAttributes(requested, rule, issues, approvalFlags);
   if (multiplier === null) {
     return emptyScopeLine();
   }
@@ -207,7 +238,7 @@ const calculateService = (
       });
       continue;
     }
-    const addOn = calculateAddOn(requested, addOnRule, addOnQuantity);
+    const addOn = calculateAddOn(requested, addOnRule, addOnQuantity, approvalFlags);
     result.lines.push(...addOn.lines);
     result.subtotal = result.subtotal.plus(addOn.subtotal);
     result.taxableSubtotal = result.taxableSubtotal.plus(addOn.taxableSubtotal);
@@ -331,7 +362,9 @@ export const calculateEstimate = (request: PricingRequest): PricingResult => {
 
   for (const requested of request.services) {
     const rule = request.priceBook.serviceRules.find(
-      (candidate) => candidate.serviceCode === requested.serviceCode,
+      (candidate) =>
+        candidate.serviceCode === requested.serviceCode ||
+        candidate.requestAliases?.includes(requested.serviceCode),
     );
     if (!rule) {
       issues.push({
@@ -342,7 +375,7 @@ export const calculateEstimate = (request: PricingRequest): PricingResult => {
       });
       continue;
     }
-    const calculated = calculateService(requested, rule, issues);
+    const calculated = calculateService(requested, rule, issues, approvalFlags);
     lines.push(...calculated.lines);
     serviceSubtotal = serviceSubtotal.plus(calculated.subtotal);
     taxableSubtotal = taxableSubtotal.plus(calculated.taxableSubtotal);
@@ -506,5 +539,224 @@ export const calculateEstimate = (request: PricingRequest): PricingResult => {
     priceBookId: request.priceBook.id,
     priceBookVersion: request.priceBook.versionLabel,
     calculatedAt: request.calculatedAt,
+  };
+};
+
+interface ResolvedPackageScope {
+  services: RequestedService[];
+  issues: PricingIssue[];
+}
+
+const duplicateValues = (values: readonly string[]): Set<string> => {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) {
+      duplicates.add(value);
+    }
+    seen.add(value);
+  }
+  return duplicates;
+};
+
+const resolvePackageScope = (request: PackagePricingRequest): ResolvedPackageScope => {
+  const issues: PricingIssue[] = [];
+  const components = request.packageDefinition.components;
+  const componentCodes = components.map((component) => component.serviceCode);
+  const duplicateComponentCodes = duplicateValues(componentCodes);
+  for (const serviceCode of duplicateComponentCodes) {
+    issues.push({
+      severity: 'error',
+      code: 'PACKAGE_SCOPE_INVALID',
+      message: `Package "${request.packageDefinition.code}" defines service "${serviceCode}" more than once.`,
+      serviceCode,
+    });
+  }
+
+  const selectedOptionalServiceCodes = new Set(request.selectedOptionalServiceCodes);
+  for (const serviceCode of duplicateValues(request.selectedOptionalServiceCodes)) {
+    issues.push({
+      severity: 'error',
+      code: 'PACKAGE_SCOPE_INVALID',
+      message: `Optional package service "${serviceCode}" was selected more than once.`,
+      serviceCode,
+    });
+  }
+
+  for (const serviceCode of selectedOptionalServiceCodes) {
+    const component = components.find((candidate) => candidate.serviceCode === serviceCode);
+    if (!component || component.required) {
+      issues.push({
+        severity: 'error',
+        code: 'PACKAGE_SCOPE_INVALID',
+        message: `Service "${serviceCode}" is not an optional service in package "${request.packageDefinition.code}".`,
+        serviceCode,
+      });
+    }
+  }
+
+  const measuredServiceCodes = request.measuredServices.map((service) => service.serviceCode);
+  for (const serviceCode of duplicateValues(measuredServiceCodes)) {
+    issues.push({
+      severity: 'error',
+      code: 'PACKAGE_SCOPE_INVALID',
+      message: `Measured package scope contains service "${serviceCode}" more than once.`,
+      serviceCode,
+    });
+  }
+
+  const selectedAddOnKeys = request.selectedOptionalAddOns.map(
+    (selection) => `${selection.serviceCode}\u0000${selection.addOnCode}`,
+  );
+  for (const duplicateKey of duplicateValues(selectedAddOnKeys)) {
+    const [serviceCode, addOnCode] = duplicateKey.split('\u0000');
+    issues.push({
+      severity: 'error',
+      code: 'PACKAGE_SCOPE_INVALID',
+      message: `Optional add-on "${addOnCode ?? ''}" for service "${serviceCode ?? ''}" was selected more than once.`,
+      serviceCode,
+    });
+  }
+
+  const services: RequestedService[] = [];
+  for (const component of components) {
+    const selected = component.required || selectedOptionalServiceCodes.has(component.serviceCode);
+    const measured = request.measuredServices.find(
+      (service) => service.serviceCode === component.serviceCode,
+    );
+
+    if (!selected) {
+      if (measured) {
+        issues.push({
+          severity: 'error',
+          code: 'PACKAGE_SCOPE_INVALID',
+          message: `Measured service "${component.serviceCode}" must be explicitly selected as a package option.`,
+          serviceCode: component.serviceCode,
+        });
+      }
+      continue;
+    }
+
+    if (!measured) {
+      issues.push({
+        severity: 'error',
+        code: 'PACKAGE_SCOPE_INVALID',
+        message: `Package "${request.packageDefinition.code}" requires an explicit measured scope for service "${component.serviceCode}".`,
+        serviceCode: component.serviceCode,
+      });
+      continue;
+    }
+
+    const selectedOptionalAddOnCodes = request.selectedOptionalAddOns
+      .filter((selection) => selection.serviceCode === component.serviceCode)
+      .map((selection) => selection.addOnCode);
+    for (const addOnCode of selectedOptionalAddOnCodes) {
+      if (!component.optionalAddOnCodes.includes(addOnCode)) {
+        issues.push({
+          severity: 'error',
+          code: 'PACKAGE_SCOPE_INVALID',
+          message: `Add-on "${addOnCode}" is not an optional add-on for service "${component.serviceCode}" in this package.`,
+          serviceCode: component.serviceCode,
+        });
+      }
+    }
+
+    const pricedAddOnCodes = new Set([
+      ...component.requiredAddOnCodes,
+      ...selectedOptionalAddOnCodes.filter((addOnCode) =>
+        component.optionalAddOnCodes.includes(addOnCode),
+      ),
+    ]);
+    const measuredAddOnCodes = measured.addOns.map((addOn) => addOn.code);
+    for (const addOnCode of duplicateValues(measuredAddOnCodes)) {
+      issues.push({
+        severity: 'error',
+        code: 'PACKAGE_SCOPE_INVALID',
+        message: `Measured add-on "${addOnCode}" appears more than once for service "${component.serviceCode}".`,
+        serviceCode: component.serviceCode,
+      });
+    }
+    for (const addOnCode of pricedAddOnCodes) {
+      if (!measuredAddOnCodes.includes(addOnCode)) {
+        issues.push({
+          severity: 'error',
+          code: 'PACKAGE_SCOPE_INVALID',
+          message: `Package add-on "${addOnCode}" requires an explicit measured quantity for service "${component.serviceCode}".`,
+          serviceCode: component.serviceCode,
+        });
+      }
+    }
+    for (const addOn of measured.addOns) {
+      if (!pricedAddOnCodes.has(addOn.code)) {
+        issues.push({
+          severity: 'error',
+          code: 'PACKAGE_SCOPE_INVALID',
+          message: `Measured add-on "${addOn.code}" is not selected in package "${request.packageDefinition.code}".`,
+          serviceCode: component.serviceCode,
+        });
+      }
+    }
+
+    services.push({
+      ...measured,
+      addOns: measured.addOns.filter((addOn) => pricedAddOnCodes.has(addOn.code)),
+    });
+  }
+
+  for (const measured of request.measuredServices) {
+    if (!componentCodes.includes(measured.serviceCode)) {
+      issues.push({
+        severity: 'error',
+        code: 'PACKAGE_SCOPE_INVALID',
+        message: `Service "${measured.serviceCode}" is not available in package "${request.packageDefinition.code}".`,
+        serviceCode: measured.serviceCode,
+      });
+    }
+  }
+
+  for (const selection of request.selectedOptionalAddOns) {
+    const component = components.find(
+      (candidate) => candidate.serviceCode === selection.serviceCode,
+    );
+    const serviceSelected =
+      component?.required === true || selectedOptionalServiceCodes.has(selection.serviceCode);
+    if (!component || !serviceSelected) {
+      issues.push({
+        severity: 'error',
+        code: 'PACKAGE_SCOPE_INVALID',
+        message: `Optional add-on "${selection.addOnCode}" belongs to an unselected package service "${selection.serviceCode}".`,
+        serviceCode: selection.serviceCode,
+      });
+    }
+  }
+
+  return { services, issues };
+};
+
+export const calculatePackageEstimate = (request: PackagePricingRequest): PackagePricingResult => {
+  const packageScope = resolvePackageScope(request);
+  const result = calculateEstimate({
+    requestId: request.requestId,
+    companyId: request.companyId,
+    propertyId: request.propertyId,
+    priceBook: request.priceBook,
+    services: packageScope.services,
+    travelZoneCode: request.travelZoneCode,
+    discount: request.discount,
+    customerTaxExempt: request.customerTaxExempt,
+    manualPriceAdjustment: request.manualPriceAdjustment,
+    scopeEvidenceDisposition: request.scopeEvidenceDisposition,
+    calculatedAt: request.calculatedAt,
+  });
+
+  return {
+    ...result,
+    quoteable: result.quoteable && packageScope.issues.length === 0,
+    issues: [...packageScope.issues, ...result.issues],
+    packageCode: request.packageDefinition.code,
+    packageTier: request.packageDefinition.tier,
+    pricedServiceCodes: packageScope.services.map((service) => service.serviceCode),
+    selectedOptionalServiceCodes: [...request.selectedOptionalServiceCodes],
+    selectedOptionalAddOns: request.selectedOptionalAddOns.map((selection) => ({ ...selection })),
   };
 };

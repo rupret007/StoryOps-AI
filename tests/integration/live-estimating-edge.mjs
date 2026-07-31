@@ -23,6 +23,45 @@ function localSupabaseEnvironment() {
   return { url, anonKey };
 }
 
+function runSql(sql) {
+  execFileSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      'supabase_db_storyops-ai',
+      'psql',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+    ],
+    { input: sql, stdio: ['pipe', 'ignore', 'pipe'] },
+  );
+}
+
+function querySql(sql) {
+  return execFileSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      'supabase_db_storyops-ai',
+      'psql',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+      '-At',
+    ],
+    { input: sql, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+  ).trim();
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value !== null && typeof value === 'object') {
@@ -82,6 +121,30 @@ try {
   });
   assert.equal(authError, null, authError?.message);
 
+  runSql(`
+    update public.properties
+    set service_address = jsonb_set(service_address, '{postalCode}', '"79999"'::jsonb)
+    where id = '${propertyId}'::uuid;
+  `);
+  try {
+    const unmapped = await client.functions.invoke('estimate-workflow', {
+      body: { operation: 'context', companyId, propertyId },
+    });
+    assert.ok(unmapped.error, 'An unmapped property ZIP must fail closed.');
+    const unmappedPayload = await unmapped.error.context?.clone().json();
+    assert.equal(
+      unmappedPayload?.code,
+      'TRAVEL_ZONE_UNRESOLVED',
+      `Unexpected unmapped-zone response: ${JSON.stringify(unmappedPayload)}`,
+    );
+  } finally {
+    runSql(`
+      update public.properties
+      set service_address = jsonb_set(service_address, '{postalCode}', '"75219"'::jsonb)
+      where id = '${propertyId}'::uuid;
+    `);
+  }
+
   const { data: context, error: contextError } = await client.functions.invoke(
     'estimate-workflow',
     { body: { operation: 'context', companyId, propertyId } },
@@ -90,6 +153,11 @@ try {
   assert.equal(context.operation, 'context');
   assert.equal(context.serviceTerms.versionLabel, 'terms-v1');
   assert.equal(context.derivedTravelZone.code, 'DFW-CORE');
+  assert.equal(context.derivedTravelZone.source, 'reviewed_postal_code');
+  assert.equal(
+    context.derivedTravelZone.mappingReviewReference,
+    'demo-seed-reviewed-zip-mappings-v1',
+  );
 
   const driveway = context.measurements.find((item) => item.label === 'Driveway');
   const gutter = context.measurements.find((item) => item.label === 'Gutter run');
@@ -101,6 +169,7 @@ try {
   );
   assert.deepEqual(driveway.serviceCodes, ['pressure-wash-flatwork']);
   assert.deepEqual(gutter.serviceCodes, ['gutter-cleaning']);
+  assert.deepEqual(downspouts.serviceCodes, ['gutter-cleaning']);
   assert.deepEqual(downspouts.addOnCodes, ['downspout-flush']);
   assert.deepEqual(houseSiding.serviceCodes, ['soft-wash-house']);
   assert.deepEqual(houseSiding.addOnCodes, []);
@@ -132,6 +201,32 @@ try {
     'A same-kind measurement tagged for another service must fail closed.',
   );
 
+  const { error: missingRequiredEvidenceError } = await client.functions.invoke(
+    'estimate-workflow',
+    {
+      body: {
+        operation: 'calculate',
+        companyId,
+        customerId,
+        propertyId,
+        idempotencyKey: `estimate:${randomUUID()}`,
+        services: [
+          {
+            serviceCode: 'gutter-cleaning',
+            measurementId: gutter.id,
+            attributes: { soil: 'medium', access: 'standard', risk: 'standard' },
+          },
+        ],
+        travelZoneCode: context.derivedTravelZone.code,
+        discount: { kind: 'none' },
+      },
+    },
+  );
+  assert.ok(
+    missingRequiredEvidenceError,
+    'A service missing one catalog-required measurement kind must fail closed.',
+  );
+
   const idempotencyKey = `estimate:${randomUUID()}`;
   const request = {
     operation: 'calculate',
@@ -154,6 +249,7 @@ try {
       {
         serviceCode: 'gutter-cleaning',
         measurementId: gutter.id,
+        supportingMeasurementIds: [downspouts.id],
         attributes: {
           soil: 'medium',
           access: 'standard',
@@ -163,7 +259,7 @@ try {
       },
     ],
     travelZoneCode: context.derivedTravelZone.code,
-    discount: { kind: 'percent', value: '5', reason: 'Recorded launch offer' },
+    discount: { kind: 'percent', value: '20', reason: 'Recorded launch offer' },
   };
   const { data: receipt, error: calculateError } = await client.functions.invoke(
     'estimate-workflow',
@@ -173,6 +269,36 @@ try {
   assert.equal(receipt.estimateStatus, 'pending_approval');
   assert.equal(receipt.quoteStatus, 'pending_approval');
   assert.ok(receipt.approvalId);
+
+  const storedEvidence = JSON.parse(
+    querySql(`
+      select jsonb_build_object(
+        'calculationInput', estimate.calculation_input,
+        'multiplier', line.multiplier::text,
+        'sourceMeasurementIds', line.source_measurement_ids
+      )::text
+      from public.estimates estimate
+      join public.estimate_lines line
+        on line.company_id = estimate.company_id
+        and line.estimate_id = estimate.id
+        and line.line_kind = 'service'
+        and line.service_code = 'gutter-cleaning'
+      where estimate.id = '${receipt.estimateId}'::uuid;
+    `),
+  );
+  const storedGutterInput = storedEvidence.calculationInput.services.find(
+    (service) => service.serviceCode === 'gutter-cleaning',
+  );
+  assert.equal(storedGutterInput.attributes.stories, '2');
+  assert.equal(
+    storedEvidence.multiplier,
+    '1.5525',
+    'The published numeric two-story multiplier must be applied deterministically.',
+  );
+  assert.deepEqual(
+    [...storedEvidence.sourceMeasurementIds].sort(),
+    [gutter.id, downspouts.id].sort(),
+  );
 
   const { data: replay, error: replayError } = await client.functions.invoke('estimate-workflow', {
     body: request,
@@ -238,7 +364,7 @@ try {
   assert.equal(sent.status, 'applied');
 
   console.log(
-    'live estimating integration passed: RPC-only context, scoped evidence, converted lead, pricing, replay/conflict, exact approval, and quote send',
+    'live estimating integration passed: exact reviewed ZIP mapping, unmapped ZIP fail-closed, RPC-only context, scoped evidence, pricing, replay/conflict, approval, and portal publication',
   );
 } finally {
   await client.auth.signOut();

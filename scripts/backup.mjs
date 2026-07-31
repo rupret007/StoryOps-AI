@@ -5,6 +5,8 @@ import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/pro
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
+  commandExists,
+  databaseEnvironment,
   REPO_ROOT,
   fileRecord,
   hasFlag,
@@ -21,8 +23,15 @@ import {
   storyOpsSourceEvidence,
   validateStoryOpsSchemaDump,
 } from '../infra/scripts/recovery-hardening.mjs';
+import {
+  REQUIRED_STORYOPS_DATA_DUMP_SCHEMAS,
+  REQUIRED_STORYOPS_DATA_DUMP_EXCLUSIONS,
+  extractStoryOpsStoragePolicyDump,
+  validateStoryOpsExcludedDataDump,
+  validateStoryOpsStoragePolicyDump,
+} from '../infra/scripts/storage-recovery.mjs';
 
-const BACKUP_FORMAT = 'storyops-supabase-logical-v1';
+const BACKUP_FORMAT = 'storyops-supabase-logical-v2';
 const LOCAL_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 const argv = process.argv.slice(2);
 
@@ -44,7 +53,9 @@ Options:
   --help                    Show this help
 
 The command never overwrites a backup. Output contains sensitive customer data
-and is created with owner-only permissions.
+and is created with owner-only permissions. Executable backups require psql.
+The completion output includes a manifest SHA-256. Store that digest separately
+from the backup; executable restore requires the independently retained value.
 `);
 }
 
@@ -160,15 +171,18 @@ async function runDump({ cli, database, targetDirectory, dryRun }) {
   const dumpPlans = [
     { file: 'roles.sql', flags: ['--role-only'] },
     { file: 'schema.sql', flags: [] },
+    { file: 'storage-schema-source.sql', flags: ['--schema', 'storage'] },
     {
       file: 'data.sql',
       flags: [
         '--use-copy',
         '--data-only',
-        '--exclude',
-        'storage.buckets_vectors',
-        '--exclude',
-        'storage.vector_indexes',
+        '--schema',
+        REQUIRED_STORYOPS_DATA_DUMP_SCHEMAS.join(','),
+        ...REQUIRED_STORYOPS_DATA_DUMP_EXCLUSIONS.flatMap((tablePattern) => [
+          '--exclude',
+          tablePattern,
+        ]),
       ],
     },
   ];
@@ -205,8 +219,69 @@ async function runDump({ cli, database, targetDirectory, dryRun }) {
   }
 }
 
+async function buildStoragePolicyDump(targetDirectory) {
+  const sourcePath = resolve(targetDirectory, 'storage-schema-source.sql');
+  const outputPath = resolve(targetDirectory, 'storage-policies.sql');
+  const extracted = extractStoryOpsStoragePolicyDump(await readFile(sourcePath, 'utf8'));
+  await writeFile(outputPath, extracted.sql, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  await rm(sourcePath);
+  return extracted.policyNames;
+}
+
 async function inspectStoryOpsSource({ cli, database }) {
+  if (!commandExists('psql')) {
+    throw new Error(
+      'psql is required for an executable recovery-grade backup and source isolation evidence.',
+    );
+  }
   const secrets = [database.raw];
+  const systemResult = await runCommand({
+    command: 'psql',
+    args: [
+      '--tuples-only',
+      '--no-align',
+      '--variable',
+      'ON_ERROR_STOP=1',
+      '--command',
+      `SELECT json_build_object(
+        'systemIdentifier', (SELECT system_identifier::text FROM pg_control_system()),
+        'serverObservedAt', clock_timestamp(),
+        'serviceRolePublicBaseTablePrivilegeCount', (
+          SELECT count(*)::integer
+          FROM pg_catalog.pg_class relation
+          JOIN pg_catalog.pg_namespace namespace
+            ON namespace.oid = relation.relnamespace
+          WHERE namespace.nspname = 'public'
+            AND relation.relkind IN ('r', 'p')
+            AND has_table_privilege(
+              'service_role',
+              relation.oid,
+              'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+            )
+        )
+      )::text;`,
+      '--dbname',
+      database.database,
+    ],
+    env: databaseEnvironment(database),
+    capture: true,
+    secrets,
+  });
+  let system;
+  try {
+    system = JSON.parse(systemResult.stdout.trim());
+  } catch {
+    throw new Error('Source database did not return valid system identity evidence.');
+  }
+  if (
+    !/^[1-9][0-9]{0,19}$/u.test(system?.systemIdentifier || '') ||
+    !Number.isFinite(Date.parse(system?.serverObservedAt)) ||
+    system?.serviceRolePublicBaseTablePrivilegeCount !== 0
+  ) {
+    throw new Error(
+      'Source database returned invalid system identity or service-role base-table isolation evidence.',
+    );
+  }
   const migrationArgs = [
     ...cli.prefix,
     'migration',
@@ -244,11 +319,16 @@ async function inspectStoryOpsSource({ cli, database }) {
     capture: true,
     secrets,
   });
-  return storyOpsSourceEvidence({
-    migrationOutput: migrationResult.stdout,
-    tableStatsOutput: tableStatsResult.stdout,
-    observedAt: new Date().toISOString(),
-  });
+  return {
+    ...storyOpsSourceEvidence({
+      migrationOutput: migrationResult.stdout,
+      tableStatsOutput: tableStatsResult.stdout,
+      observedAt: new Date().toISOString(),
+    }),
+    systemIdentifier: system.systemIdentifier,
+    serverObservedAt: new Date(Date.parse(system.serverObservedAt)).toISOString(),
+    serviceRolePublicBaseTablePrivilegeCount: system.serviceRolePublicBaseTablePrivilegeCount,
+  };
 }
 
 async function main() {
@@ -300,6 +380,11 @@ async function main() {
     `Database target: ${database.target} (${database.isLocal ? 'local' : 'remote'})\n`,
   );
   process.stdout.write(`Storage objects: ${includeStorage ? 'included' : 'not included'}\n`);
+  if (includeStorage) {
+    process.stdout.write(
+      'Consistency: database and Storage exports are not atomic; use a maintenance window or reconcile immutable object paths before accepting this recovery point.\n',
+    );
+  }
   process.stdout.write(
     'Security: output is owner-only but unencrypted; encrypt it with the approved backup system before off-site transfer.\n',
   );
@@ -322,12 +407,15 @@ async function main() {
   await mkdir(targetParent, { recursive: true, mode: 0o700 });
   await mkdir(temporaryDirectory, { mode: 0o700 });
   try {
+    const databaseDumpStartedAt = new Date().toISOString();
     await runDump({ cli, database, targetDirectory: temporaryDirectory, dryRun: false });
+    const databaseDumpCompletedAt = new Date().toISOString();
+    const storagePolicyNames = await buildStoragePolicyDump(temporaryDirectory);
     const sourceEvidence = await inspectStoryOpsSource({ cli, database });
     const schemaPath = resolve(temporaryDirectory, 'schema.sql');
     const schemaSentinels = validateStoryOpsSchemaDump(await readFile(schemaPath, 'utf8'));
     const databaseFiles = [];
-    for (const fileName of ['roles.sql', 'schema.sql', 'data.sql']) {
+    for (const fileName of ['roles.sql', 'schema.sql', 'storage-policies.sql', 'data.sql']) {
       const filePath = resolve(temporaryDirectory, fileName);
       const metadata = await stat(filePath);
       if (!metadata.isFile() || metadata.size === 0) {
@@ -338,14 +426,24 @@ async function main() {
     }
     const schemaFile = databaseFiles.find((record) => record.path === 'schema.sql');
     if (!schemaFile) throw new Error('Validated StoryOps schema dump record is missing.');
+    validateStoryOpsStoragePolicyDump(
+      await readFile(resolve(temporaryDirectory, 'storage-policies.sql'), 'utf8'),
+    );
+    validateStoryOpsExcludedDataDump(
+      await readFile(resolve(temporaryDirectory, 'data.sql'), 'utf8'),
+    );
 
     let storage = { buckets: [], objects: [] };
+    let storageExportStartedAt = null;
+    let storageExportCompletedAt = null;
     if (includeStorage) {
+      storageExportStartedAt = new Date().toISOString();
       storage = await exportStorage({
         targetDirectory: temporaryDirectory,
         storageUrl,
         storageKey,
       });
+      storageExportCompletedAt = new Date().toISOString();
     }
 
     const versionResult = await runCommand({
@@ -365,8 +463,14 @@ async function main() {
           database: database.database,
           user: database.user,
           local: database.isLocal,
+          systemIdentifier: sourceEvidence.systemIdentifier,
+          serverObservedAt: sourceEvidence.serverObservedAt,
         },
         supabaseCliVersion: versionResult.stdout.trim(),
+        dumpStartedAt: databaseDumpStartedAt,
+        dumpCompletedAt: databaseDumpCompletedAt,
+        dataExclusions: REQUIRED_STORYOPS_DATA_DUMP_EXCLUSIONS,
+        dataSchemas: REQUIRED_STORYOPS_DATA_DUMP_SCHEMAS,
         recoveryEvidence: {
           requiredMigration: sourceEvidence.requiredMigration,
           requiredMigrationCount: sourceEvidence.requiredMigrationCount,
@@ -374,11 +478,14 @@ async function main() {
           appliedMigrationCount: sourceEvidence.appliedMigrationCount,
           latestAppliedMigration: sourceEvidence.latestAppliedMigration,
           migrationSetFingerprint: sourceEvidence.migrationSetFingerprint,
+          serviceRolePublicBaseTablePrivilegeCount:
+            sourceEvidence.serviceRolePublicBaseTablePrivilegeCount,
           schemaFingerprint: {
             algorithm: 'sha256',
             value: schemaFile.sha256,
             sentinels: schemaSentinels,
           },
+          storagePolicyNames,
           estimatedTableCounts: sourceEvidence.estimatedTableCounts,
         },
         files: databaseFiles,
@@ -386,18 +493,29 @@ async function main() {
       storage: {
         included: includeStorage,
         sourceHost: includeStorage ? new URL(storageUrl).host : null,
+        exportStartedAt: storageExportStartedAt,
+        exportCompletedAt: storageExportCompletedAt,
+        crossServiceAtomicWithDatabase: false,
+        bucketCount: storage.buckets.length,
+        objectCount: storage.objects.length,
+        objectBytes: storage.objects.reduce((total, object) => total + object.bytes, 0),
         buckets: storage.buckets,
         objects: storage.objects,
       },
     };
-    await writeFile(
-      resolve(temporaryDirectory, 'manifest.json'),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-      { encoding: 'utf8', mode: 0o600, flag: 'wx' },
-    );
+    const manifestBytes = `${JSON.stringify(manifest, null, 2)}\n`;
+    const manifestSha256 = sha256Text(manifestBytes);
+    await writeFile(resolve(temporaryDirectory, 'manifest.json'), manifestBytes, {
+      encoding: 'utf8',
+      mode: 0o600,
+      flag: 'wx',
+    });
     await rename(temporaryDirectory, targetDirectory);
     process.stdout.write(
       `Backup complete: ${targetDirectory} (${databaseFiles.length} database files, ${storage.objects.length} Storage objects)\n`,
+    );
+    process.stdout.write(
+      `Manifest SHA-256 (retain in an independent trusted location): ${manifestSha256}\n`,
     );
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22.22.3-alpine3.22 AS build
+FROM node:22.22.3-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8 AS build
 
 WORKDIR /app
 
@@ -45,7 +45,7 @@ RUN case "${VITE_STORYOPS_DATA_MODE}" in \
     && npm run build \
     && node -e 'const fs = require("node:fs"); const mode = process.env.VITE_STORYOPS_DATA_MODE; const revision = process.env.STORYOPS_BUILD_REVISION; if (!/^[A-Za-z0-9][A-Za-z0-9._+:/-]{0,127}$/.test(revision)) throw new Error("STORYOPS_BUILD_REVISION is invalid."); fs.writeFileSync("dist/storyops-build.json", JSON.stringify({ dataMode: mode, revision }), { flag: "wx" });'
 
-FROM node:22.22.3-alpine3.22 AS runtime
+FROM node:22.22.3-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8 AS runtime
 
 LABEL org.opencontainers.image.title="StoryOps AI" \
       org.opencontainers.image.description="AI-first operations system for an owner-operated exterior-services company"

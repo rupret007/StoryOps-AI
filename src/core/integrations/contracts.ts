@@ -1,6 +1,13 @@
 export type IntegrationMode = 'sandbox' | 'live' | 'disabled';
 export type IntegrationStatus = 'healthy' | 'degraded' | 'down' | 'not_configured';
 
+export type IntegrationProbeEvidence = {
+  schemaVersion: 'storyops-integration-probe-evidence-v1';
+  basis: 'external_read' | 'deterministic_local';
+  operation: string;
+  responseDigest: string;
+};
+
 export type IntegrationHealth = {
   provider: string;
   capability: string;
@@ -10,6 +17,7 @@ export type IntegrationHealth = {
   latencyMs: number;
   message: string;
   requiredEnvironment: string[];
+  probeEvidence?: IntegrationProbeEvidence;
 };
 
 export interface HealthCheckedIntegration {
@@ -86,15 +94,31 @@ export type CheckoutLine = {
   unitAmount: ProviderMoney;
 };
 
-export type CreateCheckoutRequest = {
+type CheckoutRequestBase = {
   companyId: string;
   customerId: string;
-  quoteId: string;
+  checkoutAttempt?: number;
   lines: CheckoutLine[];
   successUrl?: string;
   cancelUrl?: string;
   idempotencyKey: string;
 };
+
+export type CreateCheckoutRequest = CheckoutRequestBase &
+  (
+    | {
+        checkoutPurpose?: 'quote_deposit';
+        quoteId: string;
+        invoiceId?: never;
+        invoiceVersion?: never;
+      }
+    | {
+        checkoutPurpose: 'invoice_balance';
+        quoteId: string;
+        invoiceId: string;
+        invoiceVersion: number;
+      }
+  );
 
 export type CreateInvoiceRequest = {
   companyId: string;
@@ -172,6 +196,35 @@ export type CalendarEntry = {
   window: TimeWindow;
   expiresAt?: string;
   idempotencyKey: string;
+  etag: string;
+  reconciledAt: string;
+  readBackConfirmed: boolean;
+};
+
+export type CancelCalendarEntryRequest = {
+  calendarId: string;
+  providerId: string;
+  etag: string;
+  idempotencyKey: string;
+};
+
+export type ReadCalendarBookingRequest = {
+  calendarId: string;
+  providerId: string;
+  idempotencyKey: string;
+  jobId: string;
+  window: TimeWindow;
+};
+
+export type CalendarBookingState = {
+  provider: string;
+  providerId: string;
+  mode: IntegrationMode;
+  status: 'confirmed' | 'cancelled' | 'absent';
+  idempotencyKey: string;
+  etag?: string;
+  observedAt: string;
+  readBackConfirmed: true;
 };
 
 export interface CalendarProvider extends HealthCheckedIntegration {
@@ -185,6 +238,11 @@ export interface CalendarProvider extends HealthCheckedIntegration {
     signal?: AbortSignal,
   ): Promise<CalendarEntry>;
   createBooking(request: CreateCalendarEntryRequest, signal?: AbortSignal): Promise<CalendarEntry>;
+  readBooking(
+    request: ReadCalendarBookingRequest,
+    signal?: AbortSignal,
+  ): Promise<CalendarBookingState>;
+  cancelBooking(request: CancelCalendarEntryRequest, signal?: AbortSignal): Promise<void>;
 }
 
 export type Coordinates = {
@@ -227,6 +285,7 @@ export type WeatherForecast = {
   office: string | null;
   periods: WeatherPeriod[];
   alerts: Array<{ severity: string; event: string; headline: string }>;
+  issuedAt: string;
   observedAt: string;
   unknowns: string[];
 };

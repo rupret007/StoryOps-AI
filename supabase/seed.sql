@@ -538,7 +538,7 @@ values
     true,
     array['soft-washing'],
     array['soft-wash-system'],
-    array['area_sq_ft', 'stories'],
+    array['area_sq_ft'],
     'SOP-SW-001',
     '10000000-0000-4000-8000-000000000301'
   ),
@@ -553,7 +553,7 @@ values
     true,
     array['ladder-safety', 'gutter-cleaning'],
     array['ladder'],
-    array['length_linear_ft', 'stories'],
+    array['length_linear_ft', 'count'],
     'SOP-GC-001',
     '10000000-0000-4000-8000-000000000301'
   ),
@@ -657,7 +657,7 @@ values
     60,
     0.0450,
     true,
-    '{"stories":["one","two","three"],"surface":["vinyl","brick","stucco"],"soil":["light","medium","heavy"],"access":["standard","difficult"],"risk":["standard","elevated"]}'
+    '{"stories":["1","2","3"],"surface":["vinyl","brick","stucco"],"soil":["light","medium","heavy"],"access":["standard","difficult"],"risk":["standard","elevated"]}'
   ),
   (
     '10000000-0000-4000-8000-000000000413',
@@ -675,7 +675,7 @@ values
     45,
     0.2500,
     true,
-    '{"stories":["one","two","three"],"soil":["light","medium","heavy"],"access":["standard","difficult"],"risk":["standard","elevated"]}'
+    '{"stories":["1","2","3"],"soil":["light","medium","heavy"],"access":["standard","difficult"],"risk":["standard","elevated"]}'
   );
 
 insert into public.price_book_attribute_multipliers (
@@ -695,9 +695,9 @@ values
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000411', 'access', 'difficult', 1.2500),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000411', 'risk', 'standard', 1.0000),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000411', 'risk', 'elevated', 1.3000),
-  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'stories', 'one', 1.0000),
-  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'stories', 'two', 1.3500),
-  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'stories', 'three', 1.7000),
+  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'stories', '1', 1.0000),
+  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'stories', '2', 1.3500),
+  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'stories', '3', 1.7000),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'surface', 'vinyl', 1.0000),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'surface', 'brick', 1.1500),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'surface', 'stucco', 1.3000),
@@ -708,9 +708,9 @@ values
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'access', 'difficult', 1.2500),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'risk', 'standard', 1.0000),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000412', 'risk', 'elevated', 1.3000),
-  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'stories', 'one', 1.0000),
-  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'stories', 'two', 1.3500),
-  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'stories', 'three', 1.7000),
+  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'stories', '1', 1.0000),
+  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'stories', '2', 1.3500),
+  ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'stories', '3', 1.7000),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'soil', 'light', 1.0000),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'soil', 'medium', 1.1500),
   ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000413', 'soil', 'heavy', 1.3500),
@@ -766,31 +766,27 @@ insert into public.price_book_travel_zones (
   fee,
   taxable,
   maximum_one_way_miles,
-  postal_codes
+  postal_codes,
+  mapping_evidence_source,
+  mapping_reviewed_by,
+  mapping_reviewed_at,
+  mapping_review_reference
 )
-values
-  (
-    '10000000-0000-4000-8000-000000000431',
-    '10000000-0000-4000-8000-000000000001',
-    '10000000-0000-4000-8000-000000000401',
-    'DFW-CORE',
-    'DFW core service area',
-    0,
-    false,
-    20,
-    array['75001', '75201', '75204', '75205', '75219']
-  ),
-  (
-    '10000000-0000-4000-8000-000000000432',
-    '10000000-0000-4000-8000-000000000001',
-    '10000000-0000-4000-8000-000000000401',
-    'DFW-OUTER',
-    'DFW outer service area',
-    35,
-    false,
-    40,
-    '{}'
-  );
+values (
+  '10000000-0000-4000-8000-000000000431',
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000401',
+  'DFW-CORE',
+  'Reviewed DFW demo ZIPs',
+  0,
+  false,
+  null,
+  array['75001', '75201', '75204', '75205', '75219'],
+  'reviewed_postal_codes',
+  'Demo fixture owner',
+  '2026-07-28T12:00:00.000Z'::timestamptz,
+  'demo-seed-reviewed-zip-mappings-v1'
+);
 
 update public.price_books
 set
@@ -865,7 +861,7 @@ values
     '{}',
     1,
     true,
-    '{}',
+    array['gutter-cleaning'],
     array['downspout-flush']
   ),
   (
@@ -885,6 +881,211 @@ values
     array['soft-wash-house'],
     '{}'
   );
+
+insert into public.photo_analyses (
+  id,
+  company_id,
+  property_id,
+  model,
+  model_version,
+  prompt_version,
+  purpose,
+  overall_confidence,
+  observations,
+  measurement_candidates,
+  unknowns,
+  injection_signals,
+  disposition,
+  analyzed_at
+)
+values (
+  '10000000-0000-4000-8000-000000000451',
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000211',
+  'sandbox-photo-review',
+  '1.0.0',
+  'storyops-scope-v1',
+  'scope',
+  1,
+  '[{"observation":"Demo scope evidence was reviewed for the seeded estimate."}]',
+  '[]',
+  '{}',
+  '{}',
+  'usable_for_scope',
+  now() - interval '5 days'
+);
+
+-- The demo estimate is authorized by one complete exterior-scope-v2 request,
+-- not by the globally latest photo analysis alone.
+insert into public.scope_photo_requests(
+  id, company_id, customer_id, property_id, status, checklist_version,
+  checklist, note, maximum_photos, requested_by, expires_at, created_at,
+  updated_at, version
+)
+values (
+  '10000000-0000-4000-8000-000000000461',
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000201',
+  '10000000-0000-4000-8000-000000000211',
+  'reviewed',
+  'exterior-scope-v2',
+  public.exterior_scope_checklist_v2(),
+  'Complete reviewed demo scope for the seeded exterior-services estimate.',
+  12,
+  '10000000-0000-4000-8000-000000000101',
+  now() + interval '8 days',
+  now() - interval '6 days',
+  now() - interval '4 days',
+  1
+);
+
+insert into public.scope_photo_upload_reservations(
+  id, company_id, request_id, command_id, request_hash,
+  checklist_item_code, asset_id, object_path, content_type, byte_size,
+  checksum_sha256, captured_at, prepared_by, status, expires_at,
+  finalized_at, created_at, updated_at
+)
+select
+  (
+    '10000000-0000-4000-8000-'
+    || lpad((600 + item.ordinality)::text, 12, '0')
+  )::uuid,
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000461',
+  (
+    '10000000-0000-4000-8000-'
+    || lpad((620 + item.ordinality)::text, 12, '0')
+  )::uuid,
+  md5(item.code) || md5(item.code),
+  item.code,
+  (
+    '10000000-0000-4000-8000-'
+    || lpad((700 + item.ordinality)::text, 12, '0')
+  )::uuid,
+  format(
+    '10000000-0000-4000-8000-000000000001/customers/10000000-0000-4000-8000-000000000201/demo-scope-v2-%s.jpg',
+    item.code
+  ),
+  'image/jpeg',
+  1024,
+  md5(item.code) || md5(item.code),
+  now() - interval '5 days 12 hours',
+  '10000000-0000-4000-8000-000000000104',
+  'finalized',
+  now() + interval '1 day',
+  now() - interval '5 days',
+  now() - interval '5 days 12 hours',
+  now() - interval '5 days'
+from (
+  select checklist_item ->> 'code' as code, ordinality
+  from jsonb_array_elements(public.exterior_scope_checklist_v2())
+    with ordinality as checklist(checklist_item, ordinality)
+) item;
+
+insert into public.media_assets(
+  id, company_id, property_id, purpose, object_path, content_type, byte_size,
+  checksum_sha256, captured_at, captured_by, customer_visible, sync_state,
+  created_at, updated_at
+)
+select
+  reservation.asset_id,
+  reservation.company_id,
+  '10000000-0000-4000-8000-000000000211',
+  'scope',
+  reservation.object_path,
+  reservation.content_type,
+  reservation.byte_size,
+  reservation.checksum_sha256,
+  reservation.captured_at,
+  reservation.prepared_by,
+  true,
+  'pending',
+  reservation.created_at,
+  reservation.updated_at
+from public.scope_photo_upload_reservations reservation
+where reservation.request_id = '10000000-0000-4000-8000-000000000461';
+
+insert into public.scope_photo_submissions(
+  id, company_id, request_id, reservation_id, checklist_item_code, asset_id,
+  analysis_id, uploaded_by, created_at
+)
+select
+  (
+    '10000000-0000-4000-8000-'
+    || lpad((800 + item.ordinality)::text, 12, '0')
+  )::uuid,
+  reservation.company_id,
+  reservation.request_id,
+  reservation.id,
+  reservation.checklist_item_code,
+  reservation.asset_id,
+  '10000000-0000-4000-8000-000000000451',
+  '10000000-0000-4000-8000-000000000104',
+  now() - interval '5 days'
+from (
+  select checklist_item ->> 'code' as code, ordinality
+  from jsonb_array_elements(public.exterior_scope_checklist_v2())
+    with ordinality as checklist(checklist_item, ordinality)
+) item
+join public.scope_photo_upload_reservations reservation
+  on reservation.request_id = '10000000-0000-4000-8000-000000000461'
+  and reservation.checklist_item_code = item.code;
+
+insert into public.scope_confirmed_measurements(
+  id, company_id, request_id, analysis_id, measurement_id,
+  confirmation_note, confirmed_by, confirmed_at, created_at
+)
+values
+  (
+    '10000000-0000-4000-8000-000000000901',
+    '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000461',
+    '10000000-0000-4000-8000-000000000451',
+    '10000000-0000-4000-8000-000000000441',
+    'Owner confirmed the measured flatwork boundary against the submitted views.',
+    '10000000-0000-4000-8000-000000000101',
+    now() - interval '4 days 18 hours',
+    now() - interval '4 days 18 hours'
+  ),
+  (
+    '10000000-0000-4000-8000-000000000902',
+    '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000461',
+    '10000000-0000-4000-8000-000000000451',
+    '10000000-0000-4000-8000-000000000442',
+    'Owner confirmed the gutter length against the complete submitted views.',
+    '10000000-0000-4000-8000-000000000101',
+    now() - interval '4 days 18 hours',
+    now() - interval '4 days 18 hours'
+  ),
+  (
+    '10000000-0000-4000-8000-000000000903',
+    '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000461',
+    '10000000-0000-4000-8000-000000000451',
+    '10000000-0000-4000-8000-000000000443',
+    'Owner confirmed the downspout count against the complete submitted views.',
+    '10000000-0000-4000-8000-000000000101',
+    now() - interval '4 days 18 hours',
+    now() - interval '4 days 18 hours'
+  );
+
+insert into public.scope_photo_reviews(
+  id, company_id, request_id, disposition, access_decision, risk_decision,
+  unresolved_unknowns, reviewed_by, reviewed_at, created_at
+)
+values (
+  '10000000-0000-4000-8000-000000000462',
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000461',
+  'confirmed_for_estimate',
+  'Owner reviewed access, gates, ladder footing, and drainage from all required views.',
+  'Owner reviewed surface, roofline, utility, vegetation, and fragile-item risks.',
+  '{}',
+  '10000000-0000-4000-8000-000000000101',
+  now() - interval '4 days 12 hours',
+  now() - interval '4 days 12 hours'
+);
 
 insert into public.estimates (
   id,
@@ -910,6 +1111,7 @@ insert into public.estimates (
   calculation_version,
   calculation_input,
   calculation_issues,
+  evidence_analysis_ids,
   calculated_at
 )
 values (
@@ -938,20 +1140,53 @@ values (
     "services":[
       {
         "serviceCode":"pressure-wash-flatwork",
+        "measurementId":"10000000-0000-4000-8000-000000000441",
+        "supportingMeasurementIds":[],
         "quantity":"850",
         "attributes":{"surface":"concrete","soil":"medium","access":"standard","risk":"standard"}
       },
       {
         "serviceCode":"gutter-cleaning",
+        "measurementId":"10000000-0000-4000-8000-000000000442",
+        "supportingMeasurementIds":[],
         "quantity":"180",
-        "attributes":{"stories":"two","soil":"medium","access":"standard","risk":"standard"},
-        "addOns":[{"code":"downspout-flush","quantity":"4"}]
+        "attributes":{"stories":"2","soil":"medium","access":"standard","risk":"standard"},
+        "addOns":[{
+          "code":"downspout-flush",
+          "measurementId":"10000000-0000-4000-8000-000000000443",
+          "quantity":"4"
+        }]
       }
     ],
     "travelZoneCode":"DFW-CORE",
-    "discount":{"kind":"percent","value":"5","reason":"Approved launch offer"}
-  }',
+    "travelZoneEvidence":{
+      "source":"reviewed_postal_code",
+      "postalCode":"75219",
+      "mappingReviewedBy":"Demo fixture owner",
+      "mappingReviewedAt":"2026-07-28T12:00:00+00:00",
+      "mappingReviewReference":"demo-seed-reviewed-zip-mappings-v1"
+    },
+    "discount":{"kind":"percent","value":"5","reason":"Approved launch offer"},
+    "scopeEvidenceDisposition":"usable_for_scope",
+    "scopeEvidencePolicies":[
+      {"serviceCode":"gutter-cleaning","policy":"photo_required"},
+      {"serviceCode":"pressure-wash-flatwork","policy":"photo_required"}
+    ]
+  }'::jsonb || jsonb_build_object(
+    'scopeEvidenceBundle',
+    public.build_estimate_scope_evidence_bundle(
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000201',
+      '10000000-0000-4000-8000-000000000211',
+      array[
+        '10000000-0000-4000-8000-000000000441',
+        '10000000-0000-4000-8000-000000000442',
+        '10000000-0000-4000-8000-000000000443'
+      ]::uuid[]
+    )
+  ),
   '[]',
+  array['10000000-0000-4000-8000-000000000451']::uuid[],
   now() - interval '4 days'
 );
 
@@ -1263,7 +1498,7 @@ values (
   '10000000-0000-4000-8000-000000000521',
   '10000000-0000-4000-8000-000000000201',
   '10000000-0000-4000-8000-000000000211',
-  'scheduled',
+  'ready_to_schedule',
   'routine',
   array['pressure-wash-flatwork', 'gutter-cleaning'],
   254,
@@ -1290,7 +1525,7 @@ values (
   '10000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000631',
   1,
-  'confirmed',
+  'planned',
   date_trunc('day', now() + interval '2 days') + interval '9 hours',
   date_trunc('day', now() + interval '2 days') + interval '13 hours 30 minutes',
   '10000000-0000-4000-8000-000000000601',
@@ -1319,7 +1554,7 @@ values (
   date_trunc('day', now() + interval '2 days') + interval '9 hours',
   date_trunc('day', now() + interval '2 days') + interval '13 hours 30 minutes',
   1,
-  'confirmed'
+  'proposed'
 );
 
 insert into public.visit_checklist_items (
@@ -1625,7 +1860,10 @@ insert into public.payments (
   invoice_id,
   customer_id,
   provider,
+  provider_checkout_id,
   provider_payment_id,
+  provider_amount_received,
+  allocation_status,
   payment_type,
   status,
   amount,
@@ -1638,7 +1876,10 @@ values (
   '10000000-0000-4000-8000-000000000651',
   '10000000-0000-4000-8000-000000000201',
   'stripe',
+  'cs_storyops_local_deposit_1',
   'pi_storyops_local_deposit_1',
+  132.00,
+  'applied',
   'deposit',
   'succeeded',
   132.00,
@@ -1659,6 +1900,8 @@ with fixture(receipt) as (
       'companyId', '10000000-0000-4000-8000-000000000001',
       'occurredAt', (now() - interval '2 days')::text,
       'quoteId', '10000000-0000-4000-8000-000000000521',
+      'checkoutPurpose', 'quote_deposit',
+      'checkoutAttempt', 1,
       'paymentIntentId', 'pi_storyops_local_deposit_1',
       'amountCents', 13200,
       'currency', 'usd'

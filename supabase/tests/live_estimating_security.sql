@@ -42,7 +42,10 @@ begin
     'public.load_active_price_book_snapshot(uuid,uuid)',
     'public.load_estimate_context_snapshot(uuid,uuid,uuid)',
     'public.load_estimate_calculation_snapshot(uuid,uuid,uuid,uuid,uuid,uuid[],text[])',
-    'public.load_stored_estimate_pricing_snapshot(uuid,uuid)'
+    'public.load_service_scope_evidence_policies(uuid,uuid,text[])',
+    'public.load_estimate_scope_evidence_bundle(uuid,uuid,uuid,uuid,uuid[])',
+    'public.load_stored_estimate_pricing_snapshot(uuid,uuid)',
+    'public.resolve_reviewed_travel_zone(uuid,uuid,text)'
   ]::text[]
   loop
     if not has_function_privilege('service_role', function_signature, 'EXECUTE')
@@ -62,6 +65,7 @@ declare
   context_snapshot jsonb;
   price_snapshot jsonb;
   calculation_snapshot jsonb;
+  policy_snapshot jsonb;
 begin
   context_snapshot := public.load_estimate_context_snapshot(
     '10000000-0000-4000-8000-000000000001',
@@ -79,7 +83,7 @@ begin
     select 1
     from jsonb_array_elements(context_snapshot -> 'measurements') measurement
     where measurement ->> 'label' = 'Downspouts'
-      and measurement -> 'service_codes' = '[]'::jsonb
+      and measurement -> 'service_codes' = '["gutter-cleaning"]'::jsonb
       and measurement -> 'add_on_codes' = '["downspout-flush"]'::jsonb
   ) then
     raise exception 'Context snapshot omitted authoritative measurement applicability';
@@ -122,6 +126,18 @@ begin
     ) is null
   then
     raise exception 'Exact lead or service-catalog snapshot was rejected or relabeled';
+  end if;
+
+  policy_snapshot := public.load_service_scope_evidence_policies(
+    '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000101',
+    array['pressure-wash-flatwork']::text[]
+  );
+  if jsonb_array_length(policy_snapshot) <> 1
+    or policy_snapshot #>> '{0,code}' <> 'pressure-wash-flatwork'
+    or policy_snapshot #>> '{0,scope_evidence_policy}' <> 'photo_required'
+  then
+    raise exception 'Exact actor-bound scope-evidence policy snapshot was invalid';
   end if;
 end;
 $$;
@@ -167,6 +183,7 @@ declare
   property_row public.properties%rowtype;
   measurement_row public.property_measurements%rowtype;
   catalog_row public.service_catalog%rowtype;
+  photo_row public.photo_analyses%rowtype;
   terms_row public.service_terms%rowtype;
   calculated_at_value timestamptz := now();
   calculation_input jsonb;
@@ -189,6 +206,13 @@ begin
   from public.service_catalog
   where company_id = '10000000-0000-4000-8000-000000000001'
     and code = 'pressure-wash-flatwork';
+  select * into photo_row
+  from public.photo_analyses
+  where company_id = '10000000-0000-4000-8000-000000000001'
+    and property_id = '10000000-0000-4000-8000-000000000211'
+    and purpose = 'scope'
+  order by analyzed_at desc, id
+  limit 1;
   select * into terms_row
   from public.service_terms
   where id = '10000000-0000-4000-8000-000000000152';
@@ -210,8 +234,11 @@ begin
     )),
     'travelZoneCode', 'DFW-CORE',
     'travelZoneEvidence', jsonb_build_object(
-      'source', 'postal_code',
+      'source', 'reviewed_postal_code',
       'postalCode', '75219',
+      'mappingReviewedBy', 'Demo fixture owner',
+      'mappingReviewedAt', '2026-07-28T12:00:00.000Z',
+      'mappingReviewReference', 'demo-seed-reviewed-zip-mappings-v1',
       'derivedAt', calculated_at_value
     ),
     'discount', jsonb_build_object('kind', 'none')
@@ -250,10 +277,17 @@ begin
     )),
     'travelZone', jsonb_build_object(
       'code', 'DFW-CORE',
-      'source', 'postal_code',
-      'postalCode', '75219'
+      'source', 'reviewed_postal_code',
+      'postalCode', '75219',
+      'mappingReviewedBy', 'Demo fixture owner',
+      'mappingReviewedAt', '2026-07-28T12:00:00.000Z',
+      'mappingReviewReference', 'demo-seed-reviewed-zip-mappings-v1'
     ),
-    'photoEvidence', null,
+    'photoEvidence', jsonb_build_object(
+      'id', photo_row.id,
+      'disposition', photo_row.disposition,
+      'analyzedAt', photo_row.analyzed_at
+    ),
     'measurements', jsonb_build_array(jsonb_build_object(
       'id', measurement_row.id,
       'value', measurement_row.value::text,

@@ -20,12 +20,58 @@ export class SupabaseStripeBillingValidator implements StripeBillingValidator {
   constructor(private readonly client: SupabaseClient) {}
 
   async validateCheckout(request: CreateCheckoutRequest): Promise<void> {
-    const { data, error } = await this.client
-      .from('quotes')
-      .select('id,customer_id,status,total,deposit_required,valid_until')
-      .eq('id', request.quoteId)
-      .eq('company_id', request.companyId)
-      .maybeSingle();
+    if (request.checkoutPurpose === 'invoice_balance') {
+      const { data, error } = await this.client.rpc('load_storyops_invoice_checkout_validation', {
+        p_company_id: request.companyId,
+        p_invoice_id: request.invoiceId,
+      });
+      if (error) {
+        throw new IntegrationError(
+          `Invoice checkout validation failed: ${error.message}`,
+          'stripe',
+          'BILLING_VALIDATION_FAILED',
+          true,
+        );
+      }
+      const invoice = data as {
+        id: string;
+        customer_id: string;
+        quote_id: string;
+        status: string;
+        balance_due: number | string;
+        version: number;
+      } | null;
+      if (
+        !invoice ||
+        invoice.customer_id !== request.customerId ||
+        invoice.quote_id !== request.quoteId ||
+        !['open', 'past_due'].includes(invoice.status) ||
+        invoice.version !== request.invoiceVersion
+      ) {
+        throw new IntegrationError(
+          'Checkout requires the exact current payable invoice for this customer.',
+          'stripe',
+          'INVOICE_NOT_PAYABLE',
+          false,
+        );
+      }
+      if (!lineTotal(request.lines).eq(new Decimal(invoice.balance_due))) {
+        throw new IntegrationError(
+          'Checkout lines do not equal the authoritative current invoice balance.',
+          'stripe',
+          'AMOUNT_MISMATCH',
+          false,
+        );
+      }
+      return;
+    }
+
+    const { data, error } = await this.client.rpc('load_storyops_billing_validation', {
+      p_company_id: request.companyId,
+      p_operation: 'checkout',
+      p_subject: request.quoteId,
+      p_approval_id: null,
+    });
     if (error) {
       throw new IntegrationError(
         `Quote validation failed: ${error.message}`,
@@ -68,15 +114,12 @@ export class SupabaseStripeBillingValidator implements StripeBillingValidator {
   }
 
   async validateInvoice(request: CreateInvoiceRequest): Promise<void> {
-    const { data, error } = await this.client
-      .from('invoices')
-      .select('id,customer_id,status,due_date,total')
-      .eq('company_id', request.companyId)
-      .eq('job_id', request.jobId)
-      .in('status', ['draft', 'open'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data, error } = await this.client.rpc('load_storyops_billing_validation', {
+      p_company_id: request.companyId,
+      p_operation: 'invoice',
+      p_subject: request.jobId,
+      p_approval_id: null,
+    });
     if (error) {
       throw new IntegrationError(
         `Invoice validation failed: ${error.message}`,
@@ -115,13 +158,12 @@ export class SupabaseStripeBillingValidator implements StripeBillingValidator {
   }
 
   async validateRefund(request: RefundRequest): Promise<void> {
-    const { data, error } = await this.client
-      .from('payments')
-      .select('id,status,amount,provider_payment_id')
-      .eq('company_id', request.companyId)
-      .eq('provider', 'stripe')
-      .eq('provider_payment_id', request.paymentProviderId)
-      .maybeSingle();
+    const { data, error } = await this.client.rpc('load_storyops_billing_validation', {
+      p_company_id: request.companyId,
+      p_operation: 'refund',
+      p_subject: request.paymentProviderId,
+      p_approval_id: request.approvalId,
+    });
     if (error) {
       throw new IntegrationError(
         `Refund validation failed: ${error.message}`,

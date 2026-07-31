@@ -1,8 +1,17 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { asDecimalString, asDomainId, asISODateTime, money } from '../../../src/domain/index.ts';
-import { calculateEstimate, type PricingResult } from '../../../src/core/pricing/index.ts';
+import {
+  calculateEstimate,
+  calculatePackageEstimate,
+  type PricingRequest,
+  type PricingResult,
+} from '../../../src/core/pricing/index.ts';
 import { sha256Hex } from '../../../src/core/ai/approval.ts';
 import { consumeOperationBudget } from '../../../src/core/integrations/operationBudget.ts';
+import {
+  estimateScopeEvidenceBundleSchema,
+  type EstimateScopeEvidenceBundle,
+} from '../../../src/domain/estimateScopeEvidence.ts';
 import {
   HttpError,
   corsHeaders,
@@ -16,7 +25,12 @@ import {
   persistedEstimateReceiptSchema,
   type EstimateCalculateRequest,
 } from './contracts.ts';
-import { measurementSupportsScope } from './evidence.ts';
+import {
+  measurementSupportsScope,
+  measurementSupportsServiceRequirement,
+  resolveScopeEvidenceDisposition,
+  type ScopeEvidencePolicy,
+} from './evidence.ts';
 
 type Row = Record<string, unknown>;
 type MembershipRole = 'owner' | 'dispatcher';
@@ -132,6 +146,76 @@ async function loadActiveBook(client: SupabaseClient, companyId: string) {
   }
 }
 
+async function loadScopeEvidencePolicies(
+  client: SupabaseClient,
+  companyId: string,
+  actorUserId: string,
+  serviceCodes: string[],
+): Promise<Row[]> {
+  const { data, error } = await client.rpc('load_service_scope_evidence_policies', {
+    p_company_id: companyId,
+    p_actor_user_id: actorUserId,
+    p_catalog_codes: serviceCodes,
+  });
+  if (error) {
+    const changed = /ESTIMATE_(?:CATALOG_CODES|SERVICE_CATALOG)_INVALID/iu.test(error.message);
+    throw new HttpError(
+      changed
+        ? 'The selected active service catalog changed before pricing.'
+        : 'Selected service scope-evidence policies could not be loaded.',
+      changed ? 409 : 503,
+      changed ? 'SERVICE_CATALOG_CHANGED' : 'SERVICE_EVIDENCE_POLICY_UNAVAILABLE',
+    );
+  }
+  const policies = rowArray(data, 'Selected service scope-evidence policies');
+  if (policies.length !== serviceCodes.length) {
+    throw new HttpError(
+      'The active service scope-evidence policies are incomplete.',
+      503,
+      'SERVICE_EVIDENCE_POLICY_UNAVAILABLE',
+    );
+  }
+  return policies;
+}
+
+async function loadEstimateScopeEvidenceBundle(
+  client: SupabaseClient,
+  companyId: string,
+  actorUserId: string,
+  customerId: string,
+  propertyId: string,
+  measurementIds: string[],
+): Promise<EstimateScopeEvidenceBundle> {
+  const { data, error } = await client.rpc('load_estimate_scope_evidence_bundle', {
+    p_company_id: companyId,
+    p_actor_user_id: actorUserId,
+    p_customer_id: customerId,
+    p_property_id: propertyId,
+    p_measurement_ids: measurementIds,
+  });
+  if (error) {
+    const scopeChanged = /CUSTOMER_PROPERTY_MISMATCH|BUNDLE_MEASUREMENTS_INVALID/iu.test(
+      error.message,
+    );
+    throw new HttpError(
+      scopeChanged
+        ? 'The selected property or measurement scope changed before photo evidence could be bound.'
+        : 'The reviewed scope-photo evidence bundle could not be loaded.',
+      scopeChanged ? 409 : 503,
+      scopeChanged ? 'SCOPE_EVIDENCE_CHANGED' : 'SCOPE_EVIDENCE_UNAVAILABLE',
+    );
+  }
+  const parsed = estimateScopeEvidenceBundleSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new HttpError(
+      'The reviewed scope-photo evidence bundle returned an invalid response.',
+      503,
+      'SCOPE_EVIDENCE_INVALID',
+    );
+  }
+  return parsed.data;
+}
+
 function postalCodeFromAddress(value: unknown): string {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new HttpError('Property service address is invalid.', 503, 'PROPERTY_ADDRESS_INVALID');
@@ -153,27 +237,50 @@ function postalCodeFromAddress(value: unknown): string {
   return postalCode.slice(0, 5);
 }
 
-function deriveTravelZone(
+async function deriveTravelZone(
+  client: SupabaseClient,
+  companyId: string,
   priceBook: Awaited<ReturnType<typeof loadActiveBook>>,
   serviceAddress: unknown,
-): { code: string; source: 'postal_code' | 'conservative_default'; postalCode: string } {
+): Promise<{
+  code: string;
+  source: 'reviewed_postal_code';
+  postalCode: string;
+  mappingReviewedBy: string;
+  mappingReviewedAt: string;
+  mappingReviewReference: string;
+}> {
   const postalCode = postalCodeFromAddress(serviceAddress);
-  const exact = priceBook.travelZones.find((zone) => zone.postalCodes?.includes(postalCode));
-  if (exact) return { code: exact.zoneCode, source: 'postal_code', postalCode };
-  const conservative = [...priceBook.travelZones]
-    .filter((zone) => (zone.postalCodes?.length ?? 0) === 0)
-    .sort((left, right) => Number(right.fee.amount) - Number(left.fee.amount))[0];
-  if (!conservative) {
+  const { data, error } = await client.rpc('resolve_reviewed_travel_zone', {
+    p_company_id: companyId,
+    p_price_book_id: priceBook.id,
+    p_postal_code: postalCode,
+  });
+  if (error) {
+    const unresolved = /TRAVEL_ZONE_UNRESOLVED/iu.test(error.message);
     throw new HttpError(
-      'The property postal code is outside configured travel-zone evidence.',
-      422,
-      'TRAVEL_ZONE_UNRESOLVED',
+      unresolved
+        ? 'The property postal code has no exact reviewed travel-zone mapping.'
+        : 'Reviewed travel-zone evidence could not be resolved unambiguously.',
+      unresolved ? 422 : 503,
+      unresolved ? 'TRAVEL_ZONE_UNRESOLVED' : 'TRAVEL_ZONE_EVIDENCE_INVALID',
+    );
+  }
+  const resolved = objectValue(data, 'Reviewed travel-zone evidence');
+  if (resolved.source !== 'reviewed_postal_code' || resolved.postalCode !== postalCode) {
+    throw new HttpError(
+      'Reviewed travel-zone evidence returned an invalid response.',
+      503,
+      'TRAVEL_ZONE_EVIDENCE_INVALID',
     );
   }
   return {
-    code: conservative.zoneCode,
-    source: 'conservative_default',
-    postalCode,
+    code: rowText(resolved, 'code'),
+    source: 'reviewed_postal_code',
+    postalCode: rowText(resolved, 'postalCode'),
+    mappingReviewedBy: rowText(resolved, 'mappingReviewedBy'),
+    mappingReviewedAt: rowText(resolved, 'mappingReviewedAt'),
+    mappingReviewReference: rowText(resolved, 'mappingReviewReference'),
   };
 }
 
@@ -221,8 +328,10 @@ async function estimateContext(
     propertyId ?? (properties[0] ? rowText(properties[0], 'id') : undefined);
   const selectedProperty = properties.find((property) => property.id === selectedPropertyId);
   const travelZone = selectedProperty
-    ? deriveTravelZone(priceBook, selectedProperty.service_address)
+    ? await deriveTravelZone(client, companyId, priceBook, selectedProperty.service_address)
     : null;
+  const serviceCodes = priceBook.serviceRules.map((rule) => rule.serviceCode);
+  const policyData = await loadScopeEvidencePolicies(client, companyId, actorUserId, serviceCodes);
   return {
     operation: 'context',
     companyId,
@@ -265,6 +374,12 @@ async function estimateContext(
           injectionSignals: photoEvidence.injection_signals,
         }
       : null,
+    scopeEvidencePolicies: policyData
+      .map((policy) => ({
+        serviceCode: rowText(policy, 'code'),
+        policy: rowText(policy, 'scope_evidence_policy'),
+      }))
+      .sort((left, right) => left.serviceCode.localeCompare(right.serviceCode)),
     priceBook,
     serviceTerms: {
       id: rowText(serviceTerms, 'id'),
@@ -277,9 +392,7 @@ async function estimateContext(
 }
 
 function requiredStoriesValue(stories: unknown): string {
-  if (stories === 1) return 'one';
-  if (stories === 2) return 'two';
-  if (stories === 3) return 'three';
+  if (stories === 1 || stories === 2 || stories === 3) return String(stories);
   throw new HttpError(
     'A one-, two-, or three-story property record is required by this price book.',
     422,
@@ -292,8 +405,17 @@ function assertMeasurementForScope(
   pricingUnit: string,
   serviceCode: string,
   addOnCode?: string,
+  requiredMeasurementKinds: readonly string[] = [],
 ): void {
-  if (!measurementSupportsScope(measurement, pricingUnit, serviceCode, addOnCode)) {
+  if (
+    !measurementSupportsScope(
+      measurement,
+      pricingUnit,
+      serviceCode,
+      addOnCode,
+      requiredMeasurementKinds,
+    )
+  ) {
     throw new HttpError(
       `Measurement ${rowText(measurement, 'id')} is not classified for ${
         addOnCode ? `add-on ${addOnCode}` : `service ${serviceCode}`
@@ -315,7 +437,9 @@ async function calculateAndPersist(
     customerId: request.customerId,
     propertyId: request.propertyId,
     leadId: request.leadId,
+    packageCode: request.packageCode,
     services: request.services,
+    travelZoneCode: request.travelZoneCode,
     discount: request.discount,
   });
   const { data: replayData, error: replayError } = await client.rpc('replay_priced_estimate', {
@@ -343,19 +467,13 @@ async function calculateAndPersist(
     ...new Set(
       request.services.flatMap((service) => [
         service.measurementId,
+        ...service.supportingMeasurementIds,
         ...service.addOns.map((addOn) => addOn.measurementId),
       ]),
     ),
   ];
-  const catalogCodes = [
-    ...new Set(
-      request.services.flatMap((service) => [
-        service.serviceCode,
-        ...service.addOns.map((addOn) => addOn.code),
-      ]),
-    ),
-  ];
-  const [snapshotResult, priceBook] = await Promise.all([
+  const serviceCatalogCodes = [...new Set(request.services.map((service) => service.serviceCode))];
+  const [snapshotResult, priceBook, catalogPolicies] = await Promise.all([
     client.rpc('load_estimate_calculation_snapshot', {
       p_company_id: request.companyId,
       p_actor_user_id: actor.userId,
@@ -363,9 +481,10 @@ async function calculateAndPersist(
       p_property_id: request.propertyId,
       p_lead_id: request.leadId ?? null,
       p_measurement_ids: measurementIds,
-      p_catalog_codes: catalogCodes,
+      p_catalog_codes: serviceCatalogCodes,
     }),
     loadActiveBook(client, request.companyId),
+    loadScopeEvidencePolicies(client, request.companyId, actor.userId, serviceCatalogCodes),
   ]);
   if (snapshotResult.error) {
     const scopeMissing = /CUSTOMER_NOT_FOUND|CUSTOMER_PROPERTY_MISMATCH/iu.test(
@@ -396,6 +515,14 @@ async function calculateAndPersist(
   const property = objectValue(snapshot.property, 'Estimate property');
   const serviceTerms = objectValue(snapshot.service_terms, 'Approved service terms');
   const serviceCatalog = rowArray(snapshot.service_catalog, 'Selected service catalog');
+  const supportedScopePolicies = new Set<ScopeEvidencePolicy>([
+    'photo_required',
+    'photo_optional',
+    'not_applicable',
+  ]);
+  const catalogPolicyByCode = new Map(
+    catalogPolicies.map((policy) => [rowText(policy, 'code'), policy]),
+  );
   const measurements = rowArray(snapshot.measurements, 'Estimate measurements');
   const photoEvidence =
     snapshot.photo_evidence === null || snapshot.photo_evidence === undefined
@@ -405,12 +532,24 @@ async function calculateAndPersist(
     measurements.map((measurement) => [rowText(measurement, 'id'), measurement]),
   );
   if (
-    serviceCatalog.length !== catalogCodes.length ||
+    serviceCatalog.length !== serviceCatalogCodes.length ||
+    catalogPolicies.length !== serviceCatalogCodes.length ||
     serviceCatalog.some(
       (catalog) =>
         catalog.active !== true ||
-        !catalogCodes.includes(rowText(catalog, 'code')) ||
-        !rowText(catalog, 'safety_sop_reference').trim(),
+        !serviceCatalogCodes.includes(rowText(catalog, 'code')) ||
+        !rowText(catalog, 'safety_sop_reference').trim() ||
+        !catalogPolicyByCode.has(rowText(catalog, 'code')) ||
+        rowText(catalogPolicyByCode.get(rowText(catalog, 'code'))!, 'id') !==
+          rowText(catalog, 'id') ||
+        rowText(catalogPolicyByCode.get(rowText(catalog, 'code'))!, 'version') !==
+          rowText(catalog, 'version') ||
+        !supportedScopePolicies.has(
+          rowText(
+            catalogPolicyByCode.get(rowText(catalog, 'code'))!,
+            'scope_evidence_policy',
+          ) as ScopeEvidencePolicy,
+        ),
     )
   ) {
     throw new HttpError(
@@ -425,6 +564,16 @@ async function calculateAndPersist(
     throw new HttpError('A service may appear only once per estimate.', 422, 'DUPLICATE_SERVICE');
   }
   const assertedAt = new Date().toISOString();
+  const selectedPackage = request.packageCode
+    ? priceBook.packages.find((candidate) => candidate.code === request.packageCode)
+    : undefined;
+  if (request.packageCode && !selectedPackage) {
+    throw new HttpError(
+      `Package ${request.packageCode} is outside the active price book.`,
+      422,
+      'OUTSIDE_PRICE_BOOK',
+    );
+  }
 
   const storedServices = request.services.map((service) => {
     const rule = priceBook.serviceRules.find(
@@ -437,12 +586,85 @@ async function calculateAndPersist(
         'OUTSIDE_PRICE_BOOK',
       );
     }
+    const catalog = serviceCatalog.find(
+      (candidate) => rowText(candidate, 'code') === service.serviceCode,
+    );
+    if (!catalog) {
+      throw new HttpError(
+        `Service ${service.serviceCode} lacks its authoritative catalog classification.`,
+        409,
+        'SERVICE_CATALOG_CHANGED',
+      );
+    }
+    const requiredMeasurementKinds = stringArray(catalog.required_measurement_kinds);
+    if (requiredMeasurementKinds.length === 0) {
+      throw new HttpError(
+        `Service ${service.serviceCode} lacks a required measurement classification.`,
+        409,
+        'SERVICE_CATALOG_CHANGED',
+      );
+    }
     const measurement = measurementById.get(service.measurementId);
     if (!measurement) {
       throw new HttpError('Service measurement evidence is missing.', 422, 'EVIDENCE_REQUIRED');
     }
-    assertMeasurementForScope(measurement, rule.pricingUnit, service.serviceCode);
+    assertMeasurementForScope(
+      measurement,
+      rule.pricingUnit,
+      service.serviceCode,
+      undefined,
+      requiredMeasurementKinds,
+    );
+    const supportingMeasurements = service.supportingMeasurementIds.map((measurementId) => {
+      const supportingMeasurement = measurementById.get(measurementId);
+      if (!supportingMeasurement) {
+        throw new HttpError(
+          'Supporting measurement evidence is missing.',
+          422,
+          'EVIDENCE_REQUIRED',
+        );
+      }
+      const supportingKind = rowText(supportingMeasurement, 'kind');
+      if (
+        !requiredMeasurementKinds.includes(supportingKind) ||
+        !measurementSupportsServiceRequirement(
+          supportingMeasurement,
+          supportingKind,
+          service.serviceCode,
+        )
+      ) {
+        throw new HttpError(
+          `Supporting measurement ${measurementId} is outside the required scope for ${service.serviceCode}.`,
+          422,
+          'MEASUREMENT_SCOPE_MISMATCH',
+        );
+      }
+      return supportingMeasurement;
+    });
+    const scopedMeasurements = [measurement, ...supportingMeasurements];
+    const missingMeasurementKinds = requiredMeasurementKinds.filter(
+      (kind) =>
+        !scopedMeasurements.some((candidate) =>
+          measurementSupportsServiceRequirement(candidate, kind, service.serviceCode),
+        ),
+    );
+    if (missingMeasurementKinds.length > 0) {
+      throw new HttpError(
+        `Service ${service.serviceCode} still requires measured evidence: ${missingMeasurementKinds.join(', ')}.`,
+        422,
+        'REQUIRED_MEASUREMENT_MISSING',
+      );
+    }
     const attributes = { ...service.attributes };
+    for (const attribute of Object.keys(attributes)) {
+      if (!Object.hasOwn(rule.allowedAttributeValues, attribute)) {
+        throw new HttpError(
+          `Classification ${attribute} is outside the active rule for ${service.serviceCode}.`,
+          422,
+          'CLASSIFICATION_OUTSIDE_PRICE_BOOK',
+        );
+      }
+    }
     if (Object.hasOwn(rule.allowedAttributeValues, 'stories')) {
       const stories = requiredStoriesValue(property.stories);
       if (attributes.stories && attributes.stories !== stories) {
@@ -493,6 +715,7 @@ async function calculateAndPersist(
     return {
       serviceCode: service.serviceCode,
       measurementId: service.measurementId,
+      supportingMeasurementIds: service.supportingMeasurementIds,
       quantity: rowText(measurement, 'value'),
       pricingUnit: rule.pricingUnit,
       attributes,
@@ -504,16 +727,59 @@ async function calculateAndPersist(
       },
       sourceMeasurementIds: [
         service.measurementId,
+        ...service.supportingMeasurementIds,
         ...service.addOns.map((addOn) => addOn.measurementId),
       ],
     };
   });
 
-  const evidenceDisposition =
-    photoEvidence?.disposition === 'usable_for_scope'
-      ? 'usable_for_scope'
-      : 'human_review_required';
-  const derivedTravelZone = deriveTravelZone(priceBook, property.service_address);
+  const selectedScopePolicies = request.services.map((service) =>
+    rowText(catalogPolicyByCode.get(service.serviceCode)!, 'scope_evidence_policy'),
+  ) as ScopeEvidencePolicy[];
+  const photoRequiredServiceCodes = new Set(
+    request.services
+      .filter(
+        (service) =>
+          rowText(catalogPolicyByCode.get(service.serviceCode)!, 'scope_evidence_policy') ===
+          'photo_required',
+      )
+      .map((service) => service.serviceCode),
+  );
+  const photoRequiredMeasurementIds = [
+    ...new Set(
+      storedServices
+        .filter((service) => photoRequiredServiceCodes.has(service.serviceCode))
+        .flatMap((service) => service.sourceMeasurementIds),
+    ),
+  ].sort();
+  const scopeEvidenceBundle =
+    photoRequiredMeasurementIds.length > 0
+      ? await loadEstimateScopeEvidenceBundle(
+          client,
+          request.companyId,
+          actor.userId,
+          request.customerId,
+          request.propertyId,
+          photoRequiredMeasurementIds,
+        )
+      : null;
+  const photoDisposition =
+    photoEvidence?.disposition === 'usable_for_scope' ||
+    photoEvidence?.disposition === 'human_review_required' ||
+    photoEvidence?.disposition === 'insufficient'
+      ? photoEvidence.disposition
+      : null;
+  const evidenceDisposition = resolveScopeEvidenceDisposition(
+    selectedScopePolicies,
+    photoDisposition,
+    scopeEvidenceBundle?.eligible ?? false,
+  );
+  const derivedTravelZone = await deriveTravelZone(
+    client,
+    request.companyId,
+    priceBook,
+    property.service_address,
+  );
   if (request.travelZoneCode && request.travelZoneCode !== derivedTravelZone.code) {
     throw new HttpError(
       'Requested travel zone conflicts with the server-derived property zone.',
@@ -522,14 +788,26 @@ async function calculateAndPersist(
     );
   }
   const normalizedInput = {
+    packageCode: selectedPackage?.code ?? null,
     services: storedServices,
     travelZoneCode: derivedTravelZone.code,
     travelZoneEvidence: {
       source: derivedTravelZone.source,
       postalCode: derivedTravelZone.postalCode,
+      mappingReviewedBy: derivedTravelZone.mappingReviewedBy,
+      mappingReviewedAt: derivedTravelZone.mappingReviewedAt,
+      mappingReviewReference: derivedTravelZone.mappingReviewReference,
       derivedAt: assertedAt,
     },
     discount: request.discount,
+    scopeEvidenceDisposition: evidenceDisposition,
+    scopeEvidencePolicies: request.services
+      .map((service) => ({
+        serviceCode: service.serviceCode,
+        policy: rowText(catalogPolicyByCode.get(service.serviceCode)!, 'scope_evidence_policy'),
+      }))
+      .sort((left, right) => left.serviceCode.localeCompare(right.serviceCode)),
+    scopeEvidenceBundle,
   };
   const authoritativeSnapshot = {
     companyId: request.companyId,
@@ -550,6 +828,19 @@ async function calculateAndPersist(
       id: priceBook.id,
       versionLabel: priceBook.versionLabel,
     },
+    package: selectedPackage
+      ? {
+          code: selectedPackage.code,
+          name: selectedPackage.name,
+          tier: selectedPackage.tier,
+          components: selectedPackage.components.map((component) => ({
+            serviceCode: component.serviceCode,
+            required: component.required,
+            requiredAddOnCodes: [...component.requiredAddOnCodes].sort(),
+            optionalAddOnCodes: [...component.optionalAddOnCodes].sort(),
+          })),
+        }
+      : null,
     serviceTerms: {
       id: rowText(serviceTerms, 'id'),
       versionLabel: rowText(serviceTerms, 'version_label'),
@@ -563,6 +854,10 @@ async function calculateAndPersist(
         version: Number(rowText(catalog, 'version')),
         active: catalog.active === true,
         safetySopReference: rowText(catalog, 'safety_sop_reference'),
+        scopeEvidencePolicy: rowText(
+          catalogPolicyByCode.get(rowText(catalog, 'code'))!,
+          'scope_evidence_policy',
+        ),
       }))
       .sort((left, right) => left.code.localeCompare(right.code)),
     travelZone: derivedTravelZone,
@@ -573,6 +868,7 @@ async function calculateAndPersist(
           analyzedAt: photoEvidence.analyzed_at,
         }
       : null,
+    scopeEvidenceBundle,
     measurements: measurements
       .map((measurement) => ({
         id: rowText(measurement, 'id'),
@@ -602,27 +898,55 @@ async function calculateAndPersist(
             value: money(request.discount.value),
             reason: request.discount.reason,
           } as const);
-  const result: PricingResult = calculateEstimate({
+  const measuredServices = storedServices.map((service) => ({
+    serviceCode: service.serviceCode,
+    quantity: asDecimalString(service.quantity),
+    attributes: service.attributes,
+    addOns: service.addOns.map((addOn) => ({
+      code: addOn.code,
+      quantity: asDecimalString(addOn.quantity),
+    })),
+    sourceMeasurementIds: service.sourceMeasurementIds.map(asDomainId),
+  }));
+  const pricingRequest: Omit<PricingRequest, 'services'> = {
     requestId: `estimate:${snapshotHash}`,
     companyId: asDomainId(request.companyId),
     propertyId: asDomainId(request.propertyId),
     priceBook,
-    services: storedServices.map((service) => ({
-      serviceCode: service.serviceCode,
-      quantity: asDecimalString(service.quantity),
-      attributes: service.attributes,
-      addOns: service.addOns.map((addOn) => ({
-        code: addOn.code,
-        quantity: asDecimalString(addOn.quantity),
-      })),
-      sourceMeasurementIds: service.sourceMeasurementIds.map(asDomainId),
-    })),
     travelZoneCode: derivedTravelZone.code,
     discount,
     customerTaxExempt: customer.tax_exempt === true,
     scopeEvidenceDisposition: evidenceDisposition,
     calculatedAt: asISODateTime(calculatedAt),
-  });
+  };
+  const result: PricingResult = selectedPackage
+    ? calculatePackageEstimate({
+        ...pricingRequest,
+        packageDefinition: selectedPackage,
+        measuredServices,
+        selectedOptionalServiceCodes: selectedPackage.components
+          .filter(
+            (component) =>
+              !component.required &&
+              measuredServices.some((service) => service.serviceCode === component.serviceCode),
+          )
+          .map((component) => component.serviceCode),
+        selectedOptionalAddOns: measuredServices.flatMap((service) => {
+          const component = selectedPackage.components.find(
+            (candidate) => candidate.serviceCode === service.serviceCode,
+          );
+          return service.addOns
+            .filter((addOn) => component?.optionalAddOnCodes.includes(addOn.code))
+            .map((addOn) => ({
+              serviceCode: service.serviceCode,
+              addOnCode: addOn.code,
+            }));
+        }),
+      })
+    : calculateEstimate({
+        ...pricingRequest,
+        services: measuredServices,
+      });
   if (result.issues.some((issue) => issue.severity === 'error')) {
     throw new HttpError(
       result.issues.map((issue) => issue.message).join(' '),
@@ -644,7 +968,10 @@ async function calculateAndPersist(
             'PRICING_PROVENANCE_INVALID',
           );
         }
-        return { ...line, sourceMeasurementIds: [service.measurementId] };
+        return {
+          ...line,
+          sourceMeasurementIds: [service.measurementId, ...service.supportingMeasurementIds],
+        };
       }
       if (line.kind === 'add_on') {
         const service = storedServices.find(
@@ -683,6 +1010,12 @@ async function calculateAndPersist(
     p_terms_snapshot: rowText(serviceTerms, 'terms_text'),
   });
   if (error) {
+    console.error('estimate-workflow persist_priced_estimate rejected', {
+      code: error.code ?? null,
+      details: error.details ?? null,
+      hint: error.hint ?? null,
+      message: error.message,
+    });
     const conflict = /IDEMPOTENCY|already in progress|different request/iu.test(error.message);
     throw new HttpError(
       conflict

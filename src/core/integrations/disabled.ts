@@ -3,8 +3,10 @@ import type {
   AccountingProvider,
   CalendarAvailability,
   CalendarAvailabilityRequest,
+  CalendarBookingState,
   CalendarEntry,
   CalendarProvider,
+  CancelCalendarEntryRequest,
   CreateCalendarEntryRequest,
   CreateCheckoutRequest,
   CreateInvoiceRequest,
@@ -18,6 +20,7 @@ import type {
   PaymentsProvider,
   ProviderReceipt,
   QuickBooksInvoiceExportRequest,
+  ReadCalendarBookingRequest,
   RefundRequest,
   RoutePlan,
   RoutingProvider,
@@ -124,6 +127,14 @@ class DisabledCalendarProvider extends DisabledProvider implements CalendarProvi
   }
 
   createBooking(_request: CreateCalendarEntryRequest): Promise<CalendarEntry> {
+    return this.unavailable();
+  }
+
+  readBooking(_request: ReadCalendarBookingRequest): Promise<CalendarBookingState> {
+    return this.unavailable();
+  }
+
+  cancelBooking(_request: CancelCalendarEntryRequest): Promise<void> {
     return this.unavailable();
   }
 }

@@ -7,6 +7,7 @@ const COMPANY_ID = '10000000-0000-4000-8000-000000000001';
 const INVOICE_ID = '10000000-0000-4000-8000-000000000651';
 const JOB_ID = '10000000-0000-4000-8000-000000000631';
 const VISIT_ID = '10000000-0000-4000-8000-000000000641';
+const POST_SERVICE_WORKER_TOKEN = 'storyops-local-post-service-worker-token-v1-6a91';
 const COMMANDS = {
   review: '99000000-0000-4000-8000-000000000001',
   reviewDuplicate: '99000000-0000-4000-8000-000000000002',
@@ -179,8 +180,8 @@ set status = 'draft',
     balance_due = total,
     paid_at = null
 where id = '${INVOICE_ID}';
-update public.visits set status = 'confirmed' where id = '${VISIT_ID}';
-update public.jobs set status = 'scheduled' where id = '${JOB_ID}';
+update public.visits set status = 'planned' where id = '${VISIT_ID}';
+update public.jobs set status = 'ready_to_schedule' where id = '${JOB_ID}';
 update public.companies set timezone = 'America/Chicago' where id = '${COMPANY_ID}';
 update public.consent_records
 set status = 'granted',
@@ -326,13 +327,31 @@ set scheduled_at = now(), next_attempt_at = now()
 where company_id = '${COMPANY_ID}'
   and action_type in ('review_request', 'referral_invite');
 `);
-  const workerResponse = await fetch(`${url}/functions/v1/post-service-worker`, {
+  const rejectedServiceRoleResponse = await fetch(`${url}/functions/v1/post-service-worker`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${serviceRoleKey}`,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
+      companyId: COMPANY_ID,
+      trigger: 'manual',
+      batchSize: 1,
+      leaseSeconds: 90,
+    }),
+  });
+  assert.equal(rejectedServiceRoleResponse.status, 401);
+  assert.equal((await rejectedServiceRoleResponse.json()).code, 'WORKER_UNAUTHENTICATED');
+
+  const workerResponse = await fetch(`${url}/functions/v1/post-service-worker`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${POST_SERVICE_WORKER_TOKEN}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      companyId: COMPANY_ID,
+      trigger: 'manual',
       workerId: '99000000-0000-4000-8000-000000000020',
       batchSize: 10,
       leaseSeconds: 90,
@@ -340,6 +359,10 @@ where company_id = '${COMPANY_ID}'
   });
   assert.equal(workerResponse.status, 200);
   const worker = await workerResponse.json();
+  assert.equal(worker.schemaVersion, 'storyops-post-service-worker-run-v2');
+  assert.equal(worker.activationMode, 'manual');
+  assert.equal(worker.trigger, 'manual');
+  assert.equal(worker.status, 'processed');
   assert.equal(worker.claimed, 2);
   assert.equal(worker.counts.sandboxed, 2);
   assert.ok(
@@ -355,10 +378,14 @@ where company_id = '${COMPANY_ID}'
   const emptyWorkerResponse = await fetch(`${url}/functions/v1/post-service-worker`, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${serviceRoleKey}`,
+      authorization: `Bearer ${POST_SERVICE_WORKER_TOKEN}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ batchSize: 10 }),
+    body: JSON.stringify({
+      companyId: COMPANY_ID,
+      trigger: 'manual',
+      batchSize: 10,
+    }),
   });
   assert.equal(emptyWorkerResponse.status, 200);
   const emptyWorker = await emptyWorkerResponse.json();

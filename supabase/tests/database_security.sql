@@ -290,6 +290,16 @@ $$;
 reset role;
 
 \echo '5/9 technician projection is assignment-scoped and hides financials'
+-- Test-only bootstrap: production planned -> confirmed promotion is covered by
+-- the scheduling-evidence contract. This transaction starts after that boundary
+-- so it can isolate technician field permissions. The dispatch-clearance
+-- contract has its own executable suite; suppress triggers only for this
+-- rollback-scoped fixture transition.
+set local session_replication_role = replica;
+update public.visits
+set status = 'en_route'
+where id = '10000000-0000-4000-8000-000000000641';
+set local session_replication_role = origin;
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
@@ -321,27 +331,6 @@ begin
   select (visit ->> 'version')::integer
   into visit_version
   from jsonb_array_elements(workspace -> 'visits') visit
-  where visit ->> 'id' = '10000000-0000-4000-8000-000000000641';
-
-  perform public.execute_storyops_command(
-    '10000000-0000-4000-8000-000000000001',
-    '91000000-0000-4000-8000-000000000604',
-    'visit.transition',
-    visit_version,
-    '{
-      "entityId":"10000000-0000-4000-8000-000000000641",
-      "status":"en_route"
-    }'::jsonb,
-    repeat('0', 64)
-  );
-
-  select (visit ->> 'version')::integer
-  into visit_version
-  from jsonb_array_elements(
-    public.get_storyops_workspace(
-      '10000000-0000-4000-8000-000000000001'
-    ) -> 'visits'
-  ) visit
   where visit ->> 'id' = '10000000-0000-4000-8000-000000000641';
 
   perform public.execute_storyops_command(

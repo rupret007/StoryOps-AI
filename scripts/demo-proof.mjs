@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import {
   REPO_ROOT,
@@ -32,6 +33,7 @@ const reportPath = resolve(
 
 const results = [];
 const startedAt = new Date().toISOString();
+let sourceEvidence;
 
 function usage() {
   process.stdout.write(`StoryOps AI executable demo proof
@@ -62,17 +64,58 @@ async function recordStep(name, action) {
       name,
       status: dryRun ? 'planned' : 'passed',
       durationMs: Math.round(performance.now() - start),
-      detail: detail || null,
+      detail: artifactSafeValue(detail || null),
     });
   } catch (error) {
     results.push({
       name,
       status: 'failed',
       durationMs: Math.round(performance.now() - start),
-      error: error instanceof Error ? error.message : String(error),
+      error: artifactSafeText(error instanceof Error ? error.message : String(error)),
     });
     throw error;
   }
+}
+
+function artifactSafeText(value) {
+  return String(value).replaceAll(REPO_ROOT, '<REPO_ROOT>').replaceAll(homedir(), '<HOME>');
+}
+
+function artifactSafeValue(value) {
+  if (typeof value === 'string') return artifactSafeText(value);
+  if (Array.isArray(value)) return value.map(artifactSafeValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, artifactSafeValue(nested)]),
+    );
+  }
+  return value;
+}
+
+async function collectSourceEvidence() {
+  if (dryRun) {
+    return {
+      productVersion: 'planned',
+      sourceRevision: 'planned',
+      sourceTreeCleanAtStart: null,
+    };
+  }
+  const packageMetadata = JSON.parse(await readFile(resolve(REPO_ROOT, 'package.json'), 'utf8'));
+  const revision = await runCommand({
+    command: 'git',
+    args: ['rev-parse', 'HEAD'],
+    capture: true,
+  });
+  const status = await runCommand({
+    command: 'git',
+    args: ['status', '--porcelain=v1', '--untracked-files=all'],
+    capture: true,
+  });
+  return {
+    productVersion: String(packageMetadata.version),
+    sourceRevision: revision.stdout.trim(),
+    sourceTreeCleanAtStart: status.stdout.trim() === '',
+  };
 }
 
 function npmCommand(args, environment = process.env) {
@@ -162,16 +205,17 @@ async function writeReport(status, error) {
   if (dryRun) return;
   await mkdir(dirname(reportPath), { recursive: true, mode: 0o700 });
   const report = {
-    format: 'storyops-demo-proof-v1',
+    format: 'storyops-demo-proof-v2',
     status,
     startedAt,
     completedAt: new Date().toISOString(),
+    sourceEvidence,
     mode: quick ? 'quick' : 'full',
     sandbox: true,
     e2eSkipped: skipE2e,
     providerCredentialsUsed: false,
     results,
-    error: error ? (error instanceof Error ? error.message : String(error)) : null,
+    error: error ? artifactSafeText(error instanceof Error ? error.message : String(error)) : null,
   };
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, {
     encoding: 'utf8',
@@ -192,6 +236,7 @@ async function main() {
     ['--base-url', '--report'],
   );
   if (unknown.length > 0) throw new Error(`Unknown option(s): ${unknown.join(', ')}`);
+  sourceEvidence = await collectSourceEvidence();
 
   const sandboxEnvironment = {
     ...process.env,

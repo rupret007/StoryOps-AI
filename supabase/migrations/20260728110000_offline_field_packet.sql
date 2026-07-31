@@ -110,7 +110,7 @@ declare
   attestation_id uuid;
   existing public.media_upload_attestations%rowtype;
 begin
-  if auth.role() <> 'service_role' then
+  if auth.role() is distinct from 'service_role' then
     raise exception 'Media attestation requires the trusted service boundary';
   end if;
   if p_checksum_sha256 !~ '^[a-f0-9]{64}$'
@@ -181,7 +181,7 @@ as $$
 declare
   consumed_attestation_id uuid;
 begin
-  if new.sync_state = 'synced' and auth.role() <> 'service_role' then
+  if new.sync_state = 'synced' and auth.role() is distinct from 'service_role' then
     raise exception
       'media.register requires the trusted field-media finalizer';
   end if;
@@ -262,7 +262,7 @@ declare
   resulting_version integer;
   result jsonb;
 begin
-  if auth.role() <> 'service_role' then
+  if auth.role() is distinct from 'service_role' then
     raise exception 'Media finalization requires the trusted service boundary';
   end if;
   if p_payload is null

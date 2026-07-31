@@ -6,6 +6,7 @@ import {
   type OfficeAgentName,
   type OfficeToolName,
 } from '../../../src/core/ai/contracts.ts';
+import { leadCreateInputSchema, leadUpdateInputSchema } from '../_shared/server-record-tools.ts';
 
 const uuidSchema = z.string().uuid();
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -79,6 +80,8 @@ const paymentDocumentSchema = z
   .strict();
 
 export type ApprovedRefundOutput = z.infer<typeof paymentDocumentSchema>;
+export type ApprovedLeadCreatePayload = z.infer<typeof leadCreateInputSchema>;
+export type ApprovedLeadUpdatePayload = z.infer<typeof leadUpdateInputSchema>;
 
 export type PersistedApprovedAction = {
   approvalId: string;
@@ -211,6 +214,8 @@ export function assertExecutableApprovalState(
 
 const supportedApprovedToolAgents = {
   'payments.refund': 'finance',
+  'records.create_lead': 'intake',
+  'records.update_lead': 'intake',
 } as const satisfies Partial<Record<OfficeToolName, OfficeAgentName>>;
 
 export function approvedToolAgent(toolName: OfficeToolName): OfficeAgentName {
@@ -229,6 +234,23 @@ export function parseApprovedRefundPayload(value: unknown): ApprovedRefundPayloa
   if (!parsed.success) {
     throw new ApprovedActionContractError(
       'The exact refund payload is malformed.',
+      'APPROVAL_MALFORMED',
+    );
+  }
+  return parsed.data;
+}
+
+export function parseApprovedLeadPayload(
+  toolName: 'records.create_lead' | 'records.update_lead',
+  value: unknown,
+): ApprovedLeadCreatePayload | ApprovedLeadUpdatePayload {
+  const parsed =
+    toolName === 'records.create_lead'
+      ? leadCreateInputSchema.safeParse(value)
+      : leadUpdateInputSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new ApprovedActionContractError(
+      'The exact approved lead payload is malformed.',
       'APPROVAL_MALFORMED',
     );
   }

@@ -12,6 +12,7 @@ export type OutboundProviders = {
 };
 
 export interface OutboundWorkerRepository {
+  authorizeLiveSend?(claim: Extract<OutboundClaim, { operation: 'send' }>): Promise<void>;
   beginSubmission(followupId: string, claimToken: string, providerName: string): Promise<void>;
   complete(followupId: string, claimToken: string, receipt: ProviderReceipt): Promise<WorkerResult>;
   fail(
@@ -137,14 +138,14 @@ export async function processOutboundClaim(options: {
   providers: OutboundProviders;
   repository: OutboundWorkerRepository;
 }): Promise<WorkerResult> {
+  const sendClaim = options.claim.operation === 'send' ? options.claim : undefined;
   const liveSmsSubmission =
-    options.claim.operation === 'send' &&
-    options.claim.channel === 'sms' &&
-    options.providers.sms.mode === 'live';
+    sendClaim !== undefined && sendClaim.channel === 'sms' && options.providers.sms.mode === 'live';
   let submissionBoundaryPersisted = false;
   let receipt: ProviderReceipt | undefined;
   try {
     if (liveSmsSubmission) {
+      await options.repository.authorizeLiveSend?.(sendClaim);
       await options.repository.beginSubmission(
         options.claim.followupId,
         options.claim.claimToken,

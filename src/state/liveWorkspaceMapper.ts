@@ -3,6 +3,10 @@ import type {
   AppRole,
   DemoApproval,
   DemoEstimate,
+  DemoFieldAccessFacts,
+  DemoFieldChangeRequest,
+  DemoFieldEvidence,
+  DemoFieldScopeLine,
   DemoIncident,
   DemoIntegration,
   DemoInvoice,
@@ -12,11 +16,17 @@ import type {
   DemoVisit,
   LiveChecklistDefinition,
   LiveChecklistReference,
+  LiveDispatchJobReference,
+  LiveFieldVisitReference,
   LiveMaterialReference,
   LiveSdsDocumentMetadata,
+  LiveTransactionalDelivery,
+  OfflineMutation,
 } from './model';
 import type { LiveWorkspace } from './liveRepository';
 import type { LiveSetupState } from './liveSetup';
+import type { CompanyControlState } from './companyControl';
+import { selectReadyDispatchJobId, selectRoleScopedVisitId } from './visitSelection';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -44,6 +54,17 @@ function number(record: UnknownRecord, ...keys: string[]): number {
   const value = text(record, ...keys);
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function optionalNumber(record: UnknownRecord, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value !== 'number' && typeof value !== 'string') continue;
+    if (typeof value === 'string' && value.trim() === '') continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 }
 
 function integer(record: UnknownRecord, ...keys: string[]): number {
@@ -95,7 +116,14 @@ function leadStage(value: string): DemoLead['stage'] {
 function estimateStatus(value: string): DemoEstimate['status'] {
   if (value === 'approved') return 'approved';
   if (value === 'pending_approval' || value === 'needs_review') return 'pending_approval';
-  if (value === 'quoted' || value === 'sent' || value === 'viewed' || value === 'accepted') {
+  if (
+    value === 'quoted' ||
+    value === 'sent' ||
+    value === 'viewed' ||
+    value === 'accepted' ||
+    value === 'declined' ||
+    value === 'change_requested'
+  ) {
     return 'quoted';
   }
   if (value === 'ready') return 'ready';
@@ -111,13 +139,25 @@ function visitStatus(value: string): DemoVisit['status'] {
   return 'ready';
 }
 
-function datePart(value: string): string {
+function datePart(value: string, timeZone: string): string {
   if (!value) return 'Not scheduled';
   const parsed = new Date(value);
-  return Number.isNaN(parsed.valueOf()) ? value : parsed.toISOString().slice(0, 10);
+  if (Number.isNaN(parsed.valueOf())) return value;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(parsed);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value;
+  const year = part('year');
+  const month = part('month');
+  const day = part('day');
+  return year && month && day ? `${year}-${month}-${day}` : value;
 }
 
-function timePart(value: string): string {
+function timePart(value: string, timeZone: string): string {
   if (!value) return '—';
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf())
@@ -125,7 +165,7 @@ function timePart(value: string): string {
     : new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: 'America/Chicago',
+        timeZone,
       }).format(parsed);
 }
 
@@ -163,6 +203,32 @@ function approvalReason(value: string): DemoApproval['reason'] {
     : 'other';
 }
 
+function approvalRisk(value: string): DemoApproval['risk'] {
+  if (value === 'low' || value === 'high' || value === 'critical') return value;
+  return 'medium';
+}
+
+function approvalBlockingFlags(
+  approval: UnknownRecord,
+): NonNullable<DemoApproval['blockingFlags']> {
+  const exactPayload = asRecord(approval.exactPayload);
+  const flags = exactPayload.blockingFlags;
+  if (!Array.isArray(flags)) return [];
+  return flags.flatMap((value) => {
+    const flag = asRecord(value);
+    const reason = text(flag, 'reason');
+    const summary = text(flag, 'summary');
+    if (!reason || !summary || flag.blocking !== true) return [];
+    return [
+      {
+        reason,
+        riskLevel: approvalRisk(text(flag, 'riskLevel', 'risk_level')),
+        summary,
+      },
+    ];
+  });
+}
+
 function incidentKind(value: string): DemoIncident['kind'] {
   if (value === 'near_miss' || value === 'property_damage' || value === 'injury_or_exposure') {
     return value;
@@ -175,6 +241,53 @@ function safeWorkspaceHref(value: string): string {
 }
 
 function mapIntegrations(workspace: LiveWorkspace): DemoIntegration[] {
+  if (workspace.providerLaunch) {
+    const connections = workspace.providerLaunch.connections.map((connection) => ({
+      id: connection.provider,
+      name: connection.provider.replaceAll('_', ' '),
+      provider: connection.provider,
+      mode:
+        connection.mode === 'live'
+          ? ('Live' as const)
+          : connection.mode === 'sandbox'
+            ? ('Sandbox' as const)
+            : ('Disabled' as const),
+      status:
+        connection.environmentStatus === 'healthy'
+          ? ('Healthy' as const)
+          : connection.environmentStatus === 'degraded' || connection.environmentStatus === 'down'
+            ? ('Degraded' as const)
+            : ('Needs setup' as const),
+      capabilities: connection.capabilities,
+      lastCheck: connection.environmentCheckedAt ?? 'Not checked',
+      version: connection.version,
+    }));
+    const schedulingGate = workspace.providerLaunch.schedulingGate;
+    return schedulingGate
+      ? [
+          ...connections,
+          {
+            id: `${schedulingGate.provider}:${schedulingGate.capability}`,
+            name: 'scheduling evidence gate',
+            provider: schedulingGate.provider,
+            mode:
+              schedulingGate.mode === 'live'
+                ? ('Live' as const)
+                : schedulingGate.mode === 'sandbox'
+                  ? ('Sandbox' as const)
+                  : ('Disabled' as const),
+            status:
+              schedulingGate.status === 'healthy'
+                ? ('Healthy' as const)
+                : schedulingGate.status === 'degraded' || schedulingGate.status === 'down'
+                  ? ('Degraded' as const)
+                  : ('Needs setup' as const),
+            capabilities: [schedulingGate.capability],
+            lastCheck: schedulingGate.checkedAt,
+          },
+        ]
+      : connections;
+  }
   return records(workspace, 'integrationHealth').map((item) => {
     const provider = text(item, 'provider') || 'provider';
     const rawMode = text(item, 'mode');
@@ -197,28 +310,185 @@ function mapIntegrations(workspace: LiveWorkspace): DemoIntegration[] {
             : ('Needs setup' as const),
       capabilities: stringList(item, 'capabilities'),
       lastCheck: text(item, 'lastCheckedAt', 'last_checked_at') || 'Not checked',
+      version: integer(item, 'version') || undefined,
     };
   });
 }
 
-export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
+function mapTransactionalDelivery(
+  record: UnknownRecord | undefined,
+): LiveTransactionalDelivery | undefined {
+  if (!record) return undefined;
+  const action = text(record, 'action');
+  const channel = text(record, 'channel');
+  const status = text(record, 'status');
+  if (
+    !['quote.delivery', 'visit.on_my_way'].includes(action) ||
+    !['sms', 'email'].includes(channel) ||
+    ![
+      'queued',
+      'submitting',
+      'submitted',
+      'submitted_unknown',
+      'delivered',
+      'sandboxed',
+      'failed',
+      'cancelled',
+    ].includes(status)
+  ) {
+    return undefined;
+  }
+  const providerMode = text(record, 'providerMode', 'provider_mode');
+  const providerStatus = text(record, 'providerStatus', 'provider_status');
+  return {
+    id: text(record, 'id'),
+    action: action as LiveTransactionalDelivery['action'],
+    entityId: text(record, 'entityId', 'entity_id'),
+    entityVersion: integer(record, 'entityVersion', 'entity_version'),
+    channel: channel as LiveTransactionalDelivery['channel'],
+    status: status as LiveTransactionalDelivery['status'],
+    providerMode: providerMode === 'sandbox' || providerMode === 'live' ? providerMode : undefined,
+    providerStatus: [
+      'accepted',
+      'queued',
+      'sent',
+      'delivered',
+      'failed',
+      'submission_unknown',
+      'sandbox_recorded',
+    ].includes(providerStatus)
+      ? (providerStatus as LiveTransactionalDelivery['providerStatus'])
+      : undefined,
+    lastErrorCode: text(record, 'lastErrorCode', 'last_error_code') || undefined,
+    manualReconciliationRequired:
+      record.manualReconciliationRequired === true ||
+      record.manual_reconciliation_required === true,
+    providerSubmissionAsserted:
+      record.providerSubmissionAsserted === true || record.provider_submission_asserted === true,
+    externalDeliveryClaimed:
+      record.externalDeliveryClaimed === true || record.external_delivery_claimed === true,
+    requestedAt: text(record, 'requestedAt', 'requested_at'),
+    completedAt: text(record, 'completedAt', 'completed_at') || undefined,
+    version: integer(record, 'version'),
+  };
+}
+
+export interface LiveWorkspaceSelection {
+  portalCustomerId?: string;
+  selectedVisitId?: string;
+  selectedDispatchJobId?: string;
+}
+
+export function mapLiveWorkspace(
+  workspace: LiveWorkspace,
+  selection: LiveWorkspaceSelection = {},
+): DemoState {
   const role = workspace.session.role as AppRole;
   const leadRows = records(workspace, 'leads');
-  const customerRows = records(workspace, 'customers');
-  const propertyRows = records(workspace, 'properties');
+  const allCustomerRows = records(workspace, 'customers');
+  const allPropertyRows = records(workspace, 'properties');
   const estimateRows = records(workspace, 'estimates');
-  const quoteRows = records(workspace, 'quotes');
-  const jobRows = records(workspace, 'jobs');
-  const visitRows = records(workspace, 'visits');
-  const checklistRows = records(workspace, 'checklistItems');
+  const allQuoteRows = records(workspace, 'quotes');
+  const allJobRows = records(workspace, 'jobs');
+  const allVisitRows = records(workspace, 'visits');
+  const allInvoiceRows = records(workspace, 'invoices');
+
+  const projectedPortalCustomerIds = new Set(
+    workspace.customerPortal?.customers.map((customer) => customer.customerId) ?? [],
+  );
+  const portalAccounts =
+    role === 'customer'
+      ? allCustomerRows
+          .map((customer) => ({
+            customerId: text(customer, 'id'),
+            displayName:
+              text(customer, 'display_name', 'displayName') || 'Unnamed customer account',
+          }))
+          .filter(
+            (account) =>
+              account.customerId.length > 0 && projectedPortalCustomerIds.has(account.customerId),
+          )
+          .sort(
+            (left, right) =>
+              left.displayName.localeCompare(right.displayName) ||
+              left.customerId.localeCompare(right.customerId),
+          )
+      : [];
+  const selectedPortalCustomerId =
+    role === 'customer'
+      ? portalAccounts.some((account) => account.customerId === selection.portalCustomerId)
+        ? selection.portalCustomerId
+        : portalAccounts[0]?.customerId
+      : undefined;
+  const customerRows =
+    role === 'customer'
+      ? allCustomerRows.filter((customer) => text(customer, 'id') === selectedPortalCustomerId)
+      : allCustomerRows;
+  const propertyRows =
+    role === 'customer'
+      ? allPropertyRows.filter(
+          (property) => text(property, 'customer_id', 'customerId') === selectedPortalCustomerId,
+        )
+      : allPropertyRows;
+  const selectedPropertyIds = new Set(propertyRows.map((property) => text(property, 'id')));
+  const quoteRows =
+    role === 'customer'
+      ? allQuoteRows.filter((quote) =>
+          selectedPropertyIds.has(text(quote, 'property_id', 'propertyId')),
+        )
+      : allQuoteRows;
+  const jobRows =
+    role === 'customer'
+      ? allJobRows.filter((job) => selectedPropertyIds.has(text(job, 'property_id', 'propertyId')))
+      : allJobRows;
+  const selectedJobIds = new Set(jobRows.map((job) => text(job, 'id')));
+  const visitRows =
+    role === 'customer'
+      ? allVisitRows.filter((visit) => selectedJobIds.has(text(visit, 'job_id', 'jobId')))
+      : allVisitRows;
+  const selectedVisitIds = new Set(visitRows.map((visit) => text(visit, 'id')));
+  const selectedVisitId = selectRoleScopedVisitId(
+    visitRows.map((visit) => ({
+      id: text(visit, 'id'),
+      status: text(visit, 'status'),
+      startsAt: text(visit, 'starts_at', 'startsAt') || undefined,
+      endsAt: text(visit, 'ends_at', 'endsAt') || undefined,
+    })),
+    {
+      preferredVisitId: selection.selectedVisitId,
+      serverTime: workspace.serverTime,
+      timeZone: workspace.company.timezone || 'UTC',
+    },
+  );
+  const invoiceRows =
+    role === 'customer'
+      ? allInvoiceRows.filter((invoice) => selectedJobIds.has(text(invoice, 'job_id', 'jobId')))
+      : allInvoiceRows;
+  const selectedInvoiceIds = new Set(invoiceRows.map((invoice) => text(invoice, 'id')));
+  const fieldPacketRows = records(workspace, 'fieldPackets').filter(
+    (packet) => role !== 'customer' || selectedVisitIds.has(text(packet, 'visitId', 'visit_id')),
+  );
+  const checklistRows = records(workspace, 'checklistItems').filter(
+    (item) => role !== 'customer' || selectedVisitIds.has(text(item, 'visitId', 'visit_id')),
+  );
   const checklistDefinitionRows = records(workspace, 'checklistDefinitions');
   const materialRows = records(workspace, 'materials');
-  const usageRows = records(workspace, 'materialUsage');
-  const mediaRows = records(workspace, 'media');
-  const signatureRows = records(workspace, 'completionSignatures');
-  const timeRows = records(workspace, 'timeEntries');
+  const usageRows = records(workspace, 'materialUsage').filter(
+    (usage) => role !== 'customer' || selectedVisitIds.has(text(usage, 'visitId', 'visit_id')),
+  );
+  const mediaRows = records(workspace, 'media').filter(
+    (media) =>
+      role !== 'customer' || selectedPropertyIds.has(text(media, 'propertyId', 'property_id')),
+  );
+  const signatureRows = records(workspace, 'completionSignatures').filter(
+    (signature) =>
+      role !== 'customer' || selectedVisitIds.has(text(signature, 'visitId', 'visit_id')),
+  );
+  const timeRows = records(workspace, 'timeEntries').filter(
+    (entry) => role !== 'customer' || selectedVisitIds.has(text(entry, 'visitId', 'visit_id')),
+  );
   const approvalRows = records(workspace, 'approvals');
-  const incidentRows = [
+  const allIncidentRows = [
     ...records(workspace, 'incidents'),
     ...records(workspace, 'fieldIncidents').filter(
       (candidate) =>
@@ -227,12 +497,38 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
         ),
     ),
   ];
-  const invoiceRows = records(workspace, 'invoices');
-  const paymentRows = records(workspace, 'payments');
-  const notificationRows = records(workspace, 'notifications');
-  const recurringRows = records(workspace, 'recurringPlans');
-  const postServiceFollowupRows = records(workspace, 'postServiceFollowups');
-  const postServicePlanRows = records(workspace, 'postServiceMaintenancePlans');
+  const incidentRows = allIncidentRows.filter(
+    (incident) =>
+      role !== 'customer' ||
+      selectedVisitIds.has(text(incident, 'visitId', 'visit_id')) ||
+      selectedJobIds.has(text(incident, 'jobId', 'job_id')) ||
+      selectedPropertyIds.has(text(incident, 'propertyId', 'property_id')),
+  );
+  const notificationRows = records(workspace, 'notifications').filter(
+    (notification) =>
+      role !== 'customer' ||
+      text(notification, 'recipientCustomerId', 'recipient_customer_id') ===
+        selectedPortalCustomerId,
+  );
+  const recurringRows = records(workspace, 'recurringPlans').filter(
+    (plan) =>
+      role !== 'customer' || text(plan, 'customerId', 'customer_id') === selectedPortalCustomerId,
+  );
+  const postServiceFollowupRows = records(workspace, 'postServiceFollowups').filter(
+    (followup) =>
+      role !== 'customer' || selectedInvoiceIds.has(text(followup, 'invoiceId', 'invoice_id')),
+  );
+  const postServicePlanRows = records(workspace, 'postServiceMaintenancePlans').filter(
+    (plan) =>
+      role !== 'customer' || selectedInvoiceIds.has(text(plan, 'invoiceId', 'source_invoice_id')),
+  );
+  const selectedQuoteIds = new Set(quoteRows.map((quote) => text(quote, 'id')));
+  const transactionalDeliveryRows = records(workspace, 'transactionalDeliveries').filter(
+    (delivery) =>
+      role !== 'customer' ||
+      selectedQuoteIds.has(text(delivery, 'entityId', 'entity_id')) ||
+      selectedVisitIds.has(text(delivery, 'entityId', 'entity_id')),
+  );
 
   const customerById = new Map(customerRows.map((item) => [text(item, 'id'), item]));
   const propertyById = new Map(propertyRows.map((item) => [text(item, 'id'), item]));
@@ -240,6 +536,9 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
   const materialById = new Map(materialRows.map((item) => [text(item, 'id'), item]));
   const checklistDefinitionById = new Map(
     checklistDefinitionRows.map((item) => [text(item, 'id'), item]),
+  );
+  const fieldPacketByVisitId = new Map(
+    fieldPacketRows.map((item) => [text(item, 'visitId', 'visit_id'), item]),
   );
 
   const leads: DemoLead[] = leadRows.map((lead) => {
@@ -290,6 +589,7 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
     priceBookVersion: text(primaryEstimate ?? {}, 'priceBookVersion', 'price_book_version') || '—',
     drivewaySqFt: '0',
     gutterLinearFt: '0',
+    downspoutCount: '0',
     stories: '1',
     surface: 'concrete',
     soil: 'light',
@@ -320,12 +620,12 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
     },
   };
 
-  const checklistReferences: Record<string, LiveChecklistReference> = {};
+  const allChecklistReferences: Record<string, LiveChecklistReference> = {};
   for (const item of checklistRows) {
     const id = text(item, 'id');
     const status = text(item, 'status');
     if (!id) continue;
-    checklistReferences[id] = {
+    allChecklistReferences[id] = {
       id,
       version: integer(item, 'version'),
       visitId: text(item, 'visit_id', 'visitId'),
@@ -336,9 +636,60 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
           : 'pending',
     };
   }
+  const checklistReferences = Object.fromEntries(
+    Object.entries(allChecklistReferences).filter(
+      ([, reference]) => reference.visitId === selectedVisitId,
+    ),
+  );
 
   const visits: DemoVisit[] = visitRows.map((visit) => {
     const visitId = text(visit, 'id');
+    const fieldPacket = fieldPacketByVisitId.get(visitId);
+    const routeEvidence = asRecord(fieldPacket?.routeEvidence ?? fieldPacket?.route_evidence);
+    const weatherEvidence = asRecord(fieldPacket?.weatherEvidence ?? fieldPacket?.weather_evidence);
+    const accessRecord = asRecord(fieldPacket?.access);
+    const scopeLines: DemoFieldScopeLine[] = Array.isArray(fieldPacket?.scopeLines)
+      ? fieldPacket.scopeLines.map(asRecord).map((line) => ({
+          id: text(line, 'id'),
+          lineKind: text(line, 'lineKind', 'line_kind') === 'add_on' ? 'add_on' : 'service',
+          serviceCode: text(line, 'serviceCode', 'service_code') || undefined,
+          addOnCode: text(line, 'addOnCode', 'add_on_code') || undefined,
+          description: text(line, 'description'),
+          quantity: text(line, 'quantity'),
+          unit: text(line, 'unit'),
+          sortOrder: integer(line, 'sortOrder', 'sort_order'),
+        }))
+      : [];
+    const fieldEvidence: DemoFieldEvidence[] = Array.isArray(fieldPacket?.evidence)
+      ? fieldPacket.evidence.map(asRecord).map((evidence) => ({
+          id: text(evidence, 'id'),
+          purpose: text(evidence, 'purpose') === 'after' ? 'after' : 'before',
+          contentType: text(evidence, 'contentType', 'content_type') as
+            'image/jpeg' | 'image/png' | 'image/webp',
+          byteSize: integer(evidence, 'byteSize', 'byte_size'),
+          checksumSha256: text(evidence, 'checksumSha256', 'checksum_sha256'),
+          capturedAt: text(evidence, 'capturedAt', 'captured_at'),
+          syncState: text(evidence, 'syncState', 'sync_state') as 'pending' | 'synced' | 'failed',
+          customerVisible: evidence.customerVisible === true || evidence.customer_visible === true,
+        }))
+      : [];
+    const changeRequests: DemoFieldChangeRequest[] = Array.isArray(fieldPacket?.changeRequests)
+      ? fieldPacket.changeRequests.map(asRecord).map((request) => ({
+          id: text(request, 'id'),
+          reasonCode: text(request, 'reasonCode', 'reason_code') as
+            'scope_mismatch' | 'access_blocked' | 'customer_request' | 'site_condition' | 'other',
+          summary: text(request, 'summary'),
+          status: text(request, 'status') as 'submitted' | 'reviewing' | 'resolved' | 'cancelled',
+          createdAt: text(request, 'createdAt', 'created_at'),
+          version: integer(request, 'version'),
+        }))
+      : [];
+    const access: DemoFieldAccessFacts = {
+      instructions: text(accessRecord, 'instructions') || undefined,
+      waterSourceNotes: text(accessRecord, 'waterSourceNotes', 'water_source_notes') || undefined,
+      drainageNotes: text(accessRecord, 'drainageNotes', 'drainage_notes') || undefined,
+      knownHazards: stringList(accessRecord, 'knownHazards', 'known_hazards'),
+    };
     const job = jobById.get(text(visit, 'job_id', 'jobId'));
     const customer =
       customerById.get(text(job ?? {}, 'customerId', 'customer_id')) ??
@@ -379,25 +730,86 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
       jobNumber: text(job ?? {}, 'jobNumber', 'job_number') || 'Unnumbered job',
       customerName: text(customer ?? {}, 'display_name', 'displayName') || 'Customer',
       address: serviceAddress(property),
-      service: stringList(job ?? {}, 'serviceCodes', 'service_codes').join(', ') || 'Service scope',
-      date: datePart(startsAt),
-      startsAt: timePart(startsAt),
-      endsAt: timePart(endsAt),
+      service:
+        scopeLines.map((line) => line.description).join(', ') ||
+        stringList(job ?? {}, 'serviceCodes', 'service_codes').join(', ') ||
+        'Accepted scope not projected',
+      date: datePart(startsAt, workspace.company.timezone || 'UTC'),
+      startsAt: timePart(startsAt, workspace.company.timezone || 'UTC'),
+      endsAt: timePart(endsAt, workspace.company.timezone || 'UTC'),
       crew: text(visit, 'crew_id', 'crewId') || 'Assigned crew',
       status: visitStatus(text(visit, 'status')),
-      weather: {
-        temperature: 0,
-        precipitation: 0,
-        windMph: 0,
-        checkedAt: 'Not projected',
-        disposition: 'watch',
-      },
-      route: {
-        driveMinutes: 0,
-        miles: 0,
-        checkedAt: 'Not projected',
-        feasible: false,
-      },
+      weather: text(weatherEvidence, 'id')
+        ? {
+            temperature: optionalNumber(weatherEvidence, 'temperatureF', 'temperature_f'),
+            precipitation:
+              optionalNumber(
+                weatherEvidence,
+                'precipitationProbability',
+                'precipitation_probability',
+              ) === undefined
+                ? undefined
+                : Number(
+                    (
+                      (optionalNumber(
+                        weatherEvidence,
+                        'precipitationProbability',
+                        'precipitation_probability',
+                      ) ?? 0) * 100
+                    ).toFixed(2),
+                  ),
+            windMph: optionalNumber(weatherEvidence, 'windSpeedMph', 'wind_speed_mph'),
+            checkedAt: text(weatherEvidence, 'checkedAt', 'checked_at') || undefined,
+            disposition:
+              text(weatherEvidence, 'policyDisposition', 'policy_disposition') === 'eligible'
+                ? 'clear'
+                : text(weatherEvidence, 'policyDisposition', 'policy_disposition') === 'unavailable'
+                  ? 'hold'
+                  : 'watch',
+            provider: text(weatherEvidence, 'provider') as 'nws' | 'mock',
+            evidenceMode: text(weatherEvidence, 'evidenceMode', 'evidence_mode') as
+              'live' | 'sandbox',
+            freshness: text(weatherEvidence, 'freshness') as 'current' | 'stale',
+            forecastIssuedAt:
+              text(weatherEvidence, 'forecastIssuedAt', 'forecast_issued_at') || undefined,
+            periodStartsAt:
+              text(weatherEvidence, 'periodStartsAt', 'period_starts_at') || undefined,
+            periodEndsAt: text(weatherEvidence, 'periodEndsAt', 'period_ends_at') || undefined,
+            lightningRisk: text(weatherEvidence, 'lightningRisk', 'lightning_risk') as
+              'none' | 'low' | 'elevated' | 'severe' | 'unknown',
+            conditionCodes: stringList(weatherEvidence, 'conditionCodes', 'condition_codes'),
+            policyDisposition: text(weatherEvidence, 'policyDisposition', 'policy_disposition') as
+              'eligible' | 'requires_approval' | 'unavailable',
+          }
+        : {},
+      route: text(routeEvidence, 'id')
+        ? {
+            driveMinutes: optionalNumber(routeEvidence, 'driveMinutes', 'drive_minutes'),
+            miles: optionalNumber(routeEvidence, 'distanceMiles', 'distance_miles'),
+            checkedAt: text(routeEvidence, 'checkedAt', 'checked_at') || undefined,
+            feasible:
+              typeof routeEvidence.routeFeasible === 'boolean'
+                ? routeEvidence.routeFeasible
+                : typeof routeEvidence.route_feasible === 'boolean'
+                  ? routeEvidence.route_feasible
+                  : undefined,
+            provider: text(routeEvidence, 'provider') as 'vroom' | 'mock',
+            evidenceMode: text(routeEvidence, 'evidenceMode', 'evidence_mode') as
+              'live' | 'sandbox',
+            freshness: text(routeEvidence, 'freshness') as 'current' | 'stale',
+            violations: stringList(routeEvidence, 'violations'),
+          }
+        : {},
+      scopeLines,
+      exclusions: Array.isArray(fieldPacket?.exclusions)
+        ? fieldPacket.exclusions.filter(
+            (item): item is string => typeof item === 'string' && item.trim().length > 0,
+          )
+        : [],
+      exclusionsStatus: fieldPacket?.exclusionsStatus === 'recorded' ? 'recorded' : 'not_recorded',
+      access,
+      fieldEvidence,
+      changeRequests,
       checklist: checklistRows
         .filter((item) => text(item, 'visit_id', 'visitId') === visitId)
         .map((item) => {
@@ -419,8 +831,12 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
             complete: text(item, 'status') === 'complete',
           };
         }),
-      beforePhotos: visitMedia.filter((item) => text(item, 'purpose') === 'before').length,
-      afterPhotos: visitMedia.filter((item) => text(item, 'purpose') === 'after').length,
+      beforePhotos: fieldPacket
+        ? fieldEvidence.filter((item) => item.purpose === 'before').length
+        : visitMedia.filter((item) => text(item, 'purpose') === 'before').length,
+      afterPhotos: fieldPacket
+        ? fieldEvidence.filter((item) => item.purpose === 'after').length
+        : visitMedia.filter((item) => text(item, 'purpose') === 'after').length,
       signature: signatureRows.some(
         (signature) =>
           text(signature, 'visit_id', 'visitId') === visitId &&
@@ -434,38 +850,50 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
     };
   });
 
-  const approvals: DemoApproval[] = approvalRows.map((approval) => ({
-    id: text(approval, 'id'),
-    reason: approvalReason(text(approval, 'reason')),
-    title: text(approval, 'action_type', 'actionType') || 'Approval request',
-    summary: text(approval, 'summary'),
-    risk:
-      text(approval, 'risk_level', 'riskLevel') === 'high' ||
-      text(approval, 'risk_level', 'riskLevel') === 'critical'
-        ? 'high'
-        : 'medium',
-    status:
-      text(approval, 'status') === 'approved'
-        ? 'approved'
-        : text(approval, 'status') === 'rejected'
-          ? 'rejected'
-          : 'pending',
-    requestedAt: text(approval, 'requested_at', 'requestedAt'),
-    expiresAt: text(approval, 'expires_at', 'expiresAt') || 'No expiry',
-    entityId: text(approval, 'entity_id', 'entityId'),
-    payloadPreview: JSON.stringify(approval.exactPayload ?? { payloadHash: approval.payloadHash }),
-    policyVersion: text(approval, 'policy_version', 'policyVersion'),
-    actionType: text(approval, 'action_type', 'actionType') || undefined,
-    decidedAt: text(approval, 'decided_at', 'decidedAt') || undefined,
-    consumedAt: text(approval, 'consumed_at', 'consumedAt') || undefined,
-  }));
+  const approvals: DemoApproval[] = approvalRows.map((approval) => {
+    const exactPayload = approval.exactPayload;
+    const payloadHash = text(approval, 'payloadHash', 'payload_hash') || undefined;
+    return {
+      id: text(approval, 'id'),
+      reason: approvalReason(text(approval, 'reason')),
+      title: text(approval, 'action_type', 'actionType') || 'Approval request',
+      summary: text(approval, 'summary'),
+      risk: approvalRisk(text(approval, 'risk_level', 'riskLevel')),
+      status:
+        text(approval, 'status') === 'approved'
+          ? 'approved'
+          : text(approval, 'status') === 'rejected'
+            ? 'rejected'
+            : 'pending',
+      requestedAt: text(approval, 'requested_at', 'requestedAt'),
+      expiresAt: text(approval, 'expires_at', 'expiresAt') || 'No expiry',
+      entityId: text(approval, 'entity_id', 'entityId'),
+      payloadPreview: JSON.stringify(
+        exactPayload ?? { unavailable: true, payloadHash: payloadHash ?? null },
+        null,
+        2,
+      ),
+      payloadHash,
+      blockingFlags: approvalBlockingFlags(approval),
+      policyVersion: text(approval, 'policy_version', 'policyVersion'),
+      actionType: text(approval, 'action_type', 'actionType') || undefined,
+      decidedAt: text(approval, 'decided_at', 'decidedAt') || undefined,
+      consumedAt: text(approval, 'consumed_at', 'consumedAt') || undefined,
+    };
+  });
 
   const incidents: DemoIncident[] = incidentRows.map((incident) => {
     const visitId = text(incident, 'visit_id', 'visitId');
+    const jobId = text(incident, 'job_id', 'jobId') || undefined;
+    const propertyId = text(incident, 'property_id', 'propertyId') || undefined;
     return {
       id: text(incident, 'id'),
       visitId,
-      jobNumber: visits.find((visit) => visit.id === visitId)?.jobNumber ?? 'Unlinked incident',
+      jobId,
+      propertyId,
+      jobNumber:
+        visits.find((visit) => visit.id === visitId)?.jobNumber ??
+        (text(jobById.get(jobId ?? '') ?? {}, 'jobNumber', 'job_number') || 'Unlinked incident'),
       kind: incidentKind(text(incident, 'category')),
       summary: text(incident, 'summary'),
       status: text(incident, 'status') === 'closed' ? 'closed' : 'open',
@@ -596,12 +1024,25 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
       ? {
           id: text(sdsRecord, 'id'),
           version: integer(sdsRecord, 'version'),
+          documentVersion: integer(sdsRecord, 'documentVersion', 'document_version') || undefined,
           productName: text(sdsRecord, 'productName', 'product_name'),
           manufacturer: text(sdsRecord, 'manufacturer'),
           revisionDate: text(sdsRecord, 'revisionDate', 'revision_date'),
           reviewedAt: text(sdsRecord, 'reviewedAt', 'reviewed_at') || undefined,
           checksumSha256: text(sdsRecord, 'checksumSha256', 'checksum_sha256'),
           storageObjectPath: text(sdsRecord, 'storageObjectPath', 'storage_object_path'),
+          contentType:
+            text(sdsRecord, 'contentType', 'content_type') === 'application/pdf'
+              ? 'application/pdf'
+              : undefined,
+          byteSize: integer(sdsRecord, 'byteSize', 'byte_size') || undefined,
+          configurationRevision:
+            integer(sdsRecord, 'configurationRevision', 'configuration_revision') || undefined,
+          configurationHash:
+            text(sdsRecord, 'configurationHash', 'configuration_hash') || undefined,
+          baselineId: text(sdsRecord, 'baselineId', 'baseline_id') || undefined,
+          baselineHash: text(sdsRecord, 'baselineHash', 'baseline_hash') || undefined,
+          offlineStatus: 'not_cached',
         }
       : undefined;
     return {
@@ -613,19 +1054,117 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
       sdsDocument,
     };
   });
-  const primaryVisit = visitRows[0];
+  const fieldVisitReferences: Record<string, LiveFieldVisitReference> = Object.fromEntries(
+    visitRows.flatMap((visit) => {
+      const visitId = text(visit, 'id');
+      const jobId = text(visit, 'job_id', 'jobId');
+      const job = jobById.get(jobId);
+      const packet = fieldPacketByVisitId.get(visitId);
+      if (!job || !packet) return [];
+      const propertyId = text(job, 'propertyId', 'property_id');
+      if (
+        text(packet, 'visitId', 'visit_id') !== visitId ||
+        text(packet, 'jobId', 'job_id') !== jobId ||
+        text(packet, 'propertyId', 'property_id') !== propertyId ||
+        integer(packet, 'visitVersion', 'visit_version') !== integer(visit, 'version')
+      ) {
+        throw new Error(
+          'A role-visible field packet did not match its visit, job, property, and version.',
+        );
+      }
+      const activeEntry = timeRows.find(
+        (entry) =>
+          text(entry, 'visit_id', 'visitId') === visitId && !text(entry, 'ended_at', 'endedAt'),
+      );
+      const packetChecklistItems = Object.fromEntries(
+        Object.entries(allChecklistReferences).filter(
+          ([, reference]) => reference.visitId === visitId,
+        ),
+      );
+      const visitOnMyWayDelivery = mapTransactionalDelivery(
+        transactionalDeliveryRows.find(
+          (attempt) =>
+            text(attempt, 'action') === 'visit.on_my_way' &&
+            text(attempt, 'entityId', 'entity_id') === visitId,
+        ),
+      );
+      return [
+        [
+          visitId,
+          {
+            visit: { id: visitId, version: integer(visit, 'version') },
+            visitStatus: text(visit, 'status'),
+            visitStartsAt: text(visit, 'starts_at', 'startsAt') || undefined,
+            visitEndsAt: text(visit, 'ends_at', 'endsAt') || undefined,
+            job: { id: jobId, version: integer(job, 'version') },
+            jobId,
+            jobStatus: text(job, 'status') || undefined,
+            jobEstimatedDurationMinutes:
+              integer(job, 'estimatedDurationMinutes', 'estimated_duration_minutes') || undefined,
+            jobAssignedCrewId: text(job, 'assignedCrewId', 'assigned_crew_id') || undefined,
+            customerId: text(job, 'customerId', 'customer_id') || undefined,
+            propertyId,
+            activeTimeEntry: activeEntry
+              ? {
+                  id: text(activeEntry, 'id'),
+                  version: integer(activeEntry, 'version'),
+                }
+              : undefined,
+            checklistItems: packetChecklistItems,
+            onMyWayDelivery: visitOnMyWayDelivery,
+          } satisfies LiveFieldVisitReference,
+        ] as const,
+      ];
+    }),
+  );
+  const readyToScheduleJobs: LiveDispatchJobReference[] =
+    role === 'owner' || role === 'dispatcher'
+      ? jobRows
+          .filter((job) => text(job, 'status') === 'ready_to_schedule')
+          .map((job) => {
+            const customer = customerById.get(text(job, 'customerId', 'customer_id'));
+            const property = propertyById.get(text(job, 'propertyId', 'property_id'));
+            return {
+              id: text(job, 'id'),
+              version: integer(job, 'version'),
+              jobNumber: text(job, 'jobNumber', 'job_number') || 'Unnumbered job',
+              customerName:
+                text(customer ?? {}, 'display_name', 'displayName') || 'Customer not projected',
+              propertyAddress: serviceAddress(property),
+              estimatedDurationMinutes: integer(
+                job,
+                'estimatedDurationMinutes',
+                'estimated_duration_minutes',
+              ),
+              assignedCrewId: text(job, 'assignedCrewId', 'assigned_crew_id') || undefined,
+            };
+          })
+      : [];
+  const selectedDispatchJobId = selectReadyDispatchJobId(
+    readyToScheduleJobs.map((job) => ({ id: job.id, status: 'ready_to_schedule' })),
+    selection.selectedDispatchJobId,
+  );
+  const dispatchJob = readyToScheduleJobs.find((job) => job.id === selectedDispatchJobId);
+  const primaryVisit = visitRows.find((visit) => text(visit, 'id') === selectedVisitId);
   const primaryVisitId = text(primaryVisit ?? {}, 'id');
-  const primaryVisitJob = jobById.get(text(primaryVisit ?? {}, 'job_id', 'jobId'));
-  const primaryJob =
-    primaryVisitJob ??
-    jobRows.find((job) => text(job, 'quoteId', 'quote_id') === text(primaryQuote ?? {}, 'id')) ??
-    jobRows[0];
-  const primaryInvoice =
-    invoiceRows.find(
-      (invoice) =>
-        text(invoice, 'jobId', 'job_id') === text(primaryJob ?? {}, 'id') &&
-        text(invoice, 'purpose') !== 'other',
-    ) ?? invoiceRows[0];
+  const primaryVisitJobId = text(primaryVisit ?? {}, 'job_id', 'jobId');
+  const primaryVisitJob = jobById.get(primaryVisitJobId);
+  const selectedFieldReference = fieldVisitReferences[primaryVisitId];
+  if (primaryVisit && !primaryVisitJob) {
+    throw new Error('The selected role-visible visit did not include its exact job reference.');
+  }
+  const primaryJob = primaryVisit
+    ? primaryVisitJob
+    : (jobRows.find((job) => text(job, 'quoteId', 'quote_id') === text(primaryQuote ?? {}, 'id')) ??
+      jobRows[0]);
+  const matchingPrimaryInvoice = invoiceRows.find(
+    (invoice) =>
+      text(invoice, 'jobId', 'job_id') === text(primaryJob ?? {}, 'id') &&
+      text(invoice, 'purpose') !== 'other',
+  );
+  const primaryInvoice = primaryVisit
+    ? matchingPrimaryInvoice
+    : (matchingPrimaryInvoice ?? invoiceRows[0]);
   const postServiceInvoice = invoiceRows.find(
     (invoice) =>
       text(invoice, 'status') === 'paid' && number(invoice, 'balanceDue', 'balance_due') === 0,
@@ -650,12 +1189,114 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
     (entry) =>
       text(entry, 'visit_id', 'visitId') === primaryVisitId && !text(entry, 'ended_at', 'endedAt'),
   );
-  const quoteStatus = text(primaryQuote ?? {}, 'status');
-  const successfulPayments = paymentRows.filter((payment) =>
-    ['succeeded', 'paid', 'captured'].includes(text(payment, 'status')),
+  const portalCustomer = workspace.customerPortal?.customers.find(
+    (candidate) => candidate.customerId === selectedPortalCustomerId,
   );
-  const depositRequired = number(primaryQuote ?? {}, 'depositRequired', 'deposit_required');
-  const projectedDepositPaid = number(primaryInvoice ?? {}, 'amountPaid', 'amount_paid');
+  const liveQuote =
+    role === 'customer' && portalCustomer?.commercial.quote
+      ? asRecord(portalCustomer.commercial.quote)
+      : (primaryQuote ?? {});
+  const quoteDelivery = mapTransactionalDelivery(
+    transactionalDeliveryRows.find(
+      (attempt) =>
+        text(attempt, 'action') === 'quote.delivery' &&
+        text(attempt, 'entityId', 'entity_id') === text(liveQuote, 'id'),
+    ),
+  );
+  const onMyWayDelivery = mapTransactionalDelivery(
+    transactionalDeliveryRows.find(
+      (attempt) =>
+        text(attempt, 'action') === 'visit.on_my_way' &&
+        text(attempt, 'entityId', 'entity_id') === primaryVisitId,
+    ),
+  );
+  const quoteStatus = text(liveQuote, 'status');
+  const depositRequired = number(liveQuote, 'depositRequired', 'deposit_required');
+  const portalDepositEvidence = portalCustomer?.commercial.depositEvidence;
+  const portalDepositReady =
+    portalDepositEvidence?.quoteId === text(liveQuote, 'id') &&
+    Number(portalDepositEvidence.required) === depositRequired &&
+    Number(portalDepositEvidence.verified) >= depositRequired &&
+    portalDepositEvidence.ready;
+  const staffDepositEvidence = workspace.depositEvidence?.find(
+    (evidence) =>
+      evidence.quoteId === text(liveQuote, 'id') &&
+      evidence.jobId === text(primaryJob ?? {}, 'id') &&
+      evidence.invoiceId === text(primaryInvoice ?? {}, 'id'),
+  );
+  const staffDepositReady =
+    staffDepositEvidence?.providerProof === true &&
+    Boolean(staffDepositEvidence.paymentId) &&
+    Number(staffDepositEvidence.required) === depositRequired &&
+    Number(staffDepositEvidence.verified) >= depositRequired &&
+    staffDepositEvidence.ready;
+  const customerQuoteChangeRequests = records(workspace, 'customerQuoteChangeRequests').map(
+    (request) => ({
+      id: text(request, 'id'),
+      customerId: text(request, 'customerId', 'customer_id'),
+      propertyId: text(request, 'propertyId', 'property_id'),
+      quoteId: text(request, 'quoteId', 'quote_id'),
+      quoteNumber: text(request, 'quoteNumber', 'quote_number'),
+      quoteVersion: integer(request, 'quoteVersion', 'quote_version'),
+      requestedServiceCodes: stringList(
+        request,
+        'requestedServiceCodes',
+        'requested_service_codes',
+      ),
+      requestedAddOnCodes: stringList(request, 'requestedAddOnCodes', 'requested_add_on_codes'),
+      requestNotes: text(request, 'requestNotes', 'request_notes'),
+      status:
+        text(request, 'status') === 'reviewing' ? ('reviewing' as const) : ('submitted' as const),
+      createdAt: text(request, 'createdAt', 'created_at'),
+      version: integer(request, 'version'),
+      nextAction: text(request, 'nextAction', 'next_action'),
+    }),
+  );
+  const paymentAllocationConflicts = records(workspace, 'paymentAllocationConflicts').map(
+    (conflict) => ({
+      id: text(conflict, 'id'),
+      paymentId: text(conflict, 'paymentId', 'payment_id'),
+      invoiceId: text(conflict, 'invoiceId', 'invoice_id'),
+      invoiceNumber: text(conflict, 'invoiceNumber', 'invoice_number'),
+      customerId: text(conflict, 'customerId', 'customer_id'),
+      providerEventId: text(conflict, 'providerEventId', 'provider_event_id'),
+      conflictCode: text(conflict, 'conflictCode', 'conflict_code') as
+        | 'stale_invoice_version'
+        | 'invoice_not_payable'
+        | 'provider_overpayment'
+        | 'provider_underpayment'
+        | 'local_payment_amount_mismatch'
+        | 'retired_checkout_succeeded',
+      intendedAmount: text(conflict, 'intendedAmount', 'intended_amount'),
+      verifiedAmount: text(conflict, 'verifiedAmount', 'verified_amount'),
+      invoiceBalanceAtEvent: text(conflict, 'invoiceBalanceAtEvent', 'invoice_balance_at_event'),
+      providerCheckoutId: text(conflict, 'providerCheckoutId', 'provider_checkout_id') || undefined,
+      providerPaymentId: text(conflict, 'providerPaymentId', 'provider_payment_id'),
+      providerOccurredAt: text(conflict, 'providerOccurredAt', 'provider_occurred_at'),
+      approvalRequestId: text(conflict, 'approvalRequestId', 'approval_request_id') || undefined,
+      status: 'open' as const,
+      createdAt: text(conflict, 'createdAt', 'created_at'),
+      version: integer(conflict, 'version'),
+      resolutionAction: text(conflict, 'resolutionAction', 'resolution_action') as
+        'payment.allocation.apply_exact_current_balance' | 'payment.allocation.review_manual',
+      canApplyExactCurrentBalance:
+        conflict.canApplyExactCurrentBalance === true ||
+        conflict.can_apply_exact_current_balance === true,
+      nextAction: text(conflict, 'nextAction', 'next_action'),
+    }),
+  );
+  const recurringDueWork =
+    role === 'customer' && workspace.recurringDueWork
+      ? {
+          ...workspace.recurringDueWork,
+          plans: workspace.recurringDueWork.plans.filter(
+            (plan) => plan.customerId === selectedPortalCustomerId,
+          ),
+          workItems: workspace.recurringDueWork.workItems.filter(
+            (item) => item.customerId === selectedPortalCustomerId,
+          ),
+        }
+      : workspace.recurringDueWork;
   const base = createDemoState();
 
   return {
@@ -664,11 +1305,22 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
     dataMode: 'supabase',
     authStatus: 'signed_in',
     liveError: undefined,
+    serverVerifiedAt: workspace.serverTime,
     setupComplete: true,
+    companyConfiguration: workspace.companyConfiguration,
+    operatingBaseline: workspace.operatingBaseline,
+    providerLaunch: workspace.providerLaunch,
+    pilotReleaseEvidence: workspace.pilotReleaseEvidence,
+    recurringDueWork,
+    materialSdsRegistry: workspace.materialSdsRegistry,
+    aiOfficeRecent: workspace.aiOfficeRecent,
+    liveAuditFeed: workspace.auditFeed,
     role,
     online: navigator.onLine,
     syncRevision: 0,
     selectedLeadId: leads[0]?.id ?? '',
+    selectedVisitId,
+    selectedDispatchJobId,
     leads,
     estimate,
     approvals,
@@ -683,13 +1335,13 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
     toasts: [],
     offlineQueue: [],
     integrations: mapIntegrations(workspace),
+    customerPortalRequests: portalCustomer?.requests ?? [],
+    customerCommunicationPreferences:
+      portalCustomer?.preferences ?? base.customerCommunicationPreferences,
+    customerPortalServiceOptions: portalCustomer?.serviceOptions ?? [],
     customerQuoteAccepted: quoteStatus === 'accepted',
     depositPaid:
-      depositRequired === 0 ||
-      (projectedDepositPaid >= depositRequired &&
-        successfulPayments.some(
-          (payment) => text(payment, 'paymentType', 'payment_type') === 'deposit',
-        )),
+      depositRequired === 0 || portalDepositReady || (role !== 'customer' && staffDepositReady),
     reviewRequested: Boolean(reviewFollowup),
     referralInvited: Boolean(referralFollowup),
     recurringPlanActive:
@@ -700,37 +1352,63 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
       companyName: workspace.company.name,
       companyTimezone: workspace.company.timezone,
       customerName: text(customerRows[0] ?? {}, 'display_name', 'displayName') || undefined,
+      portalAccounts,
+      selectedPortalCustomerId,
       serverTime: workspace.serverTime,
-      quote: primaryQuote
+      profitabilityKpis: workspace.profitabilityKpis,
+      quote: text(liveQuote, 'id')
         ? {
-            id: text(primaryQuote, 'id'),
-            version: integer(primaryQuote, 'version'),
+            id: text(liveQuote, 'id'),
+            version: integer(liveQuote, 'version'),
           }
         : undefined,
-      quoteStatus: text(primaryQuote ?? {}, 'status') || undefined,
+      quoteStatus: text(liveQuote, 'status') || undefined,
       quoteTermsSnapshot:
-        typeof primaryQuote?.termsSnapshot === 'string'
-          ? primaryQuote.termsSnapshot
-          : primaryQuote?.termsSnapshot
-            ? JSON.stringify(primaryQuote.termsSnapshot)
+        typeof liveQuote.termsSnapshot === 'string'
+          ? liveQuote.termsSnapshot
+          : liveQuote.termsSnapshot
+            ? JSON.stringify(liveQuote.termsSnapshot)
             : undefined,
+      quoteDelivery,
       visit: primaryVisit
         ? {
             id: primaryVisitId,
             version: integer(primaryVisit, 'version'),
           }
         : undefined,
-      visitStatus: text(primaryVisit ?? {}, 'status') || undefined,
-      visitStartsAt: text(primaryVisit ?? {}, 'starts_at', 'startsAt') || undefined,
-      visitEndsAt: text(primaryVisit ?? {}, 'ends_at', 'endsAt') || undefined,
-      job: primaryJob
-        ? {
-            id: text(primaryJob, 'id'),
-            version: integer(primaryJob, 'version'),
-          }
-        : undefined,
-      jobStatus: text(primaryJob ?? {}, 'status') || undefined,
-      jobId: text(primaryJob ?? {}, 'id') || undefined,
+      fieldPacketVisitId: selectedFieldReference ? primaryVisitId : undefined,
+      visitStatus:
+        selectedFieldReference?.visitStatus || text(primaryVisit ?? {}, 'status') || undefined,
+      visitStartsAt:
+        selectedFieldReference?.visitStartsAt ||
+        text(primaryVisit ?? {}, 'starts_at', 'startsAt') ||
+        undefined,
+      visitEndsAt:
+        selectedFieldReference?.visitEndsAt ||
+        text(primaryVisit ?? {}, 'ends_at', 'endsAt') ||
+        undefined,
+      onMyWayDelivery,
+      fieldVisitReferences,
+      readyToScheduleJobs,
+      dispatchJob,
+      job:
+        selectedFieldReference?.job ??
+        (primaryJob
+          ? {
+              id: text(primaryJob, 'id'),
+              version: integer(primaryJob, 'version'),
+            }
+          : undefined),
+      jobStatus: selectedFieldReference?.jobStatus || text(primaryJob ?? {}, 'status') || undefined,
+      jobId: selectedFieldReference?.jobId || text(primaryJob ?? {}, 'id') || undefined,
+      jobEstimatedDurationMinutes:
+        selectedFieldReference?.jobEstimatedDurationMinutes ||
+        integer(primaryJob ?? {}, 'estimatedDurationMinutes', 'estimated_duration_minutes') ||
+        undefined,
+      jobAssignedCrewId:
+        selectedFieldReference?.jobAssignedCrewId ||
+        text(primaryJob ?? {}, 'assignedCrewId', 'assigned_crew_id') ||
+        undefined,
       invoice: primaryInvoice
         ? {
             id: text(primaryInvoice, 'id'),
@@ -770,14 +1448,18 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
         invoiceRows.map((invoice) => [text(invoice, 'id'), integer(invoice, 'version')]),
       ),
       customerId:
+        selectedFieldReference?.customerId ||
         text(primaryJob ?? {}, 'customerId', 'customer_id') ||
         (role === 'customer' ? text(customerRows[0] ?? {}, 'id') : undefined),
       propertyId:
+        selectedFieldReference?.propertyId ||
         text(primaryJob ?? {}, 'propertyId', 'property_id') ||
         (role === 'customer' ? text(propertyRows[0] ?? {}, 'id') : undefined),
-      activeTimeEntry: activeTime
-        ? { id: text(activeTime, 'id'), version: integer(activeTime, 'version') }
-        : undefined,
+      activeTimeEntry:
+        selectedFieldReference?.activeTimeEntry ??
+        (activeTime
+          ? { id: text(activeTime, 'id'), version: integer(activeTime, 'version') }
+          : undefined),
       leadVersions: Object.fromEntries(
         leadRows.map((lead) => [text(lead, 'id'), integer(lead, 'version')]),
       ),
@@ -793,13 +1475,41 @@ export function mapLiveWorkspace(workspace: LiveWorkspace): DemoState {
         approvalRows.map((item) => [text(item, 'id'), integer(item, 'version')]),
       ),
       materials: materialReferences,
+      customerCommercialPortal: portalCustomer?.commercial,
+      customerCompletedWork: portalCustomer?.completedWork,
+      customerQuoteChangeRequests,
+      paymentAllocationConflicts,
       customers: customerSummaries,
-      properties: propertyRows.map((property) => ({
-        id: text(property, 'id'),
-        customerId: text(property, 'customer_id', 'customerId'),
-        name: text(property, 'name') || 'Unnamed property',
-        address: serviceAddress(property),
-      })),
+      properties: propertyRows.map((property) => {
+        const candidateId = text(property, 'geocode_candidate_id', 'geocodeCandidateId');
+        const provider = text(property, 'geocode_provider', 'geocodeProvider');
+        const precision = text(property, 'geocode_precision', 'geocodePrecision');
+        const confidence = optionalNumber(property, 'geocode_confidence', 'geocodeConfidence');
+        const geocodedAt = text(property, 'geocoded_at', 'geocodedAt');
+        const confirmed =
+          candidateId.length > 0 &&
+          provider === 'google_maps' &&
+          ['rooftop', 'parcel', 'street'].includes(precision) &&
+          confidence !== undefined &&
+          confidence >= 0.8 &&
+          geocodedAt.length > 0;
+        return {
+          id: text(property, 'id'),
+          customerId: text(property, 'customer_id', 'customerId'),
+          name: text(property, 'name') || 'Unnamed property',
+          address: serviceAddress(property),
+          version: integer(property, 'version'),
+          geocodeReviewStatus: confirmed ? ('confirmed' as const) : ('review_required' as const),
+          ...(confirmed
+            ? {
+                geocodeProvider: 'google_maps' as const,
+                geocodePrecision: precision as 'rooftop' | 'parcel' | 'street',
+                geocodeConfidence: confidence,
+                geocodedAt,
+              }
+            : {}),
+        };
+      }),
     },
   };
 }
@@ -834,6 +1544,60 @@ export function createSignedOutLiveState(error?: string): DemoState {
   };
 }
 
+export function createCompanyControlRecoveryState(
+  controlState: CompanyControlState,
+  error?: string,
+  preservedOfflineQueue: readonly OfflineMutation[] = [],
+): DemoState {
+  if (controlState.status === 'setup') {
+    throw new Error('Setup companies must use the finite setup and publication workflow.');
+  }
+  const base = createSignedOutLiveState();
+  return {
+    ...base,
+    authStatus: 'signed_in',
+    setupComplete: true,
+    role: 'owner',
+    online: true,
+    serverVerifiedAt: controlState.serverTime,
+    liveError: error,
+    companyControlState: controlState,
+    companyControlRecovery: true,
+    offlineQueue: [...preservedOfflineQueue],
+    live: {
+      userId: controlState.userId,
+      companyId: controlState.companyId,
+      companyName: controlState.companyName,
+      companyTimezone: controlState.timezone,
+      serverTime: controlState.serverTime,
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+      paymentAllocationConflicts: [],
+      fieldVisitReferences: {},
+      readyToScheduleJobs: [],
+    },
+  };
+}
+
+export function createPausedCompanyRecoveryState(
+  controlState: CompanyControlState,
+  error?: string,
+  preservedOfflineQueue: readonly OfflineMutation[] = [],
+): DemoState {
+  if (controlState.status !== 'paused' || !controlState.canReactivate) {
+    throw new Error('Only a server-confirmed paused company can open owner recovery.');
+  }
+  return createCompanyControlRecoveryState(controlState, error, preservedOfflineQueue);
+}
+
 export function createLiveSetupRequiredState(setupState: LiveSetupState): DemoState {
   if (setupState.status !== 'required') {
     throw new Error('Only a setup-required server state can open authenticated onboarding.');
@@ -865,6 +1629,9 @@ export function createLiveSetupRequiredState(setupState: LiveSetupState): DemoSt
       materials: [],
       customers: [],
       properties: [],
+      paymentAllocationConflicts: [],
+      fieldVisitReferences: {},
+      readyToScheduleJobs: [],
     },
   };
 }

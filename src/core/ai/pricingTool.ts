@@ -7,14 +7,8 @@ const serviceSchema = z.object({
   serviceCode: z.string().min(1).max(100),
   quantity: z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/),
   attributes: z
-    .object({
-      stories: z.string().max(50).optional(),
-      surface: z.string().max(100).optional(),
-      soil: z.string().max(100).optional(),
-      access: z.string().max(100).optional(),
-      risk: z.string().max(100).optional(),
-    })
-    .strict(),
+    .record(z.string().regex(/^[a-z][a-z0-9_]{1,79}$/u), z.string().trim().min(1).max(80))
+    .refine((attributes) => Object.keys(attributes).length <= 30),
   addOns: z
     .array(
       z.object({
@@ -46,7 +40,12 @@ const pricingToolInputSchema = z.object({
     }),
   ]),
   customerTaxExempt: z.boolean(),
-  scopeEvidenceDisposition: z.enum(['usable_for_scope', 'human_review_required', 'insufficient']),
+  scopeEvidenceDisposition: z.enum([
+    'usable_for_scope',
+    'human_review_required',
+    'insufficient',
+    'not_applicable',
+  ]),
 });
 
 export type PricingToolInput = z.infer<typeof pricingToolInputSchema>;

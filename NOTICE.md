@@ -9,4 +9,7 @@ used only as a field-service domain checklist.
 
 Pinned upstream revisions, licenses, and usage boundaries are recorded in
 `THIRD_PARTY.md`. The complete locked npm inventory and installed
-license/notice material are preserved in `NPM_THIRD_PARTY_NOTICES.txt`.
+license/notice material are preserved in `NPM_THIRD_PARTY_NOTICES.txt`. The
+optional VROOM image carries its upstream BSD notices and the separate exact
+runtime inventory from
+`infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt`.

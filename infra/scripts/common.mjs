@@ -112,12 +112,46 @@ export function shellQuote(value) {
   return /^[A-Za-z0-9_./:@=-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function isSensitiveCredentialField(field) {
+  const normalized = field
+    .replace(/([a-z0-9])([A-Z])/gu, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/gu, '_')
+    .toUpperCase();
+  return /(?:^|_)(?:KEY|PASSWORD|SECRET|TOKEN)(?:_|$)/u.test(normalized);
+}
+
+function redactAssignedValue(value) {
+  if (value.startsWith('"') && value.endsWith('"')) return '"[REDACTED]"';
+  if (value.startsWith("'") && value.endsWith("'")) return "'[REDACTED]'";
+  return '[REDACTED]';
+}
+
 export function redactText(value, secrets = []) {
   let output = String(value);
   for (const secret of secrets.filter(Boolean).sort((left, right) => right.length - left.length)) {
     output = output.replaceAll(secret, '[REDACTED]');
   }
   output = output.replace(/\b(postgres(?:ql)?:\/\/[^:\s/]+:)([^@\s]+)(@)/giu, '$1[REDACTED]$3');
+  output = output.replace(
+    /("((?:\\.|[^"\\])*)"\s*:\s*)("(?:\\.|[^"\\])*")/gu,
+    (assignment, prefix, encodedField) => {
+      let field;
+      try {
+        field = JSON.parse(`"${encodedField}"`);
+      } catch {
+        field = encodedField;
+      }
+      if (!isSensitiveCredentialField(field)) return assignment;
+      return `${prefix}"[REDACTED]"`;
+    },
+  );
+  output = output.replace(
+    /^(\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]*)/gmu,
+    (assignment, prefix, field, assignedValue) => {
+      if (!isSensitiveCredentialField(field)) return assignment;
+      return `${prefix}${redactAssignedValue(assignedValue)}`;
+    },
+  );
   return output;
 }
 

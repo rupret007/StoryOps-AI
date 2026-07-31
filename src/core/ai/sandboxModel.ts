@@ -26,6 +26,7 @@ export class SandboxStructuredModel implements StructuredModel {
         'Live AI is disabled. Review source-of-truth records or enable the server-side OpenAI integration.',
       ],
       proposedActions: [],
+      customerDraft: null,
       ownerAttention: false,
     } satisfies OfficeAgentOutput;
   }

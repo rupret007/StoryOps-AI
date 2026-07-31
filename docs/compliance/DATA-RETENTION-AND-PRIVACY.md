@@ -80,6 +80,15 @@ encryption for IndexedDB. Production device encryption, OS/browser access,
 session lifetime, lost-device response, managed-device policy, and whether
 offline customer data is permitted are manual YELLOW privacy/security gates.
 
+An operational company pause preserves pending device packets so the kill
+switch cannot cause offline evidence loss. The paused recovery projection does
+not expose the packet body: diagnostics are limited to command/media kind,
+status, and creation time, plus last server-verified time and a bounded recovery
+error. It must never render or log customer/entity identifiers, command
+payloads, notes, photo bytes/thumbnails, or signature data. Packets cannot sync
+while paused and remain subject to the same device encryption, loss response,
+retention, sign-out, identity-mismatch, and legal-hold decisions.
+
 ## Customer notice and requests
 
 **REQUIRED PRIVACY LEGAL REVIEW:** counsel must determine applicability and exact

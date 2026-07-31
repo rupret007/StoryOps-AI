@@ -1,12 +1,15 @@
 import { z } from 'zod';
 
+const incidentEvidencePurposes = new Set(['incident', 'safety', 'damage']);
+
 export const fieldMediaPayloadSchema = z
   .object({
     entityId: z.string().uuid(),
     visitId: z.string().uuid(),
     jobId: z.string().uuid(),
     propertyId: z.string().uuid(),
-    purpose: z.enum(['before', 'after', 'signature']),
+    incidentId: z.string().uuid().optional(),
+    purpose: z.enum(['before', 'after', 'signature', 'incident', 'safety', 'damage']),
     objectPath: z.string().min(1).max(500),
     contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
     byteSize: z
@@ -36,7 +39,19 @@ export const fieldMediaFinalizeRequestSchema = z
   .strict()
   .superRefine((request, context) => {
     const { companyId, command } = request;
-    const expectedPrefix = `${companyId}/visits/${command.payload.visitId}/${command.payload.entityId}-`;
+    const isIncidentEvidence = incidentEvidencePurposes.has(command.payload.purpose);
+    if (isIncidentEvidence !== Boolean(command.payload.incidentId)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['command', 'payload', 'incidentId'],
+        message:
+          'Incident, safety, and damage evidence require one incident UUID; ordinary visit media forbids it.',
+      });
+      return;
+    }
+    const expectedPrefix = isIncidentEvidence
+      ? `${companyId}/incidents/${command.payload.incidentId}/visits/${command.payload.visitId}/${command.payload.entityId}-`
+      : `${companyId}/visits/${command.payload.visitId}/${command.payload.entityId}-`;
     if (
       !command.payload.objectPath.startsWith(expectedPrefix) ||
       !command.payload.objectPath.includes(command.payload.checksumSha256.slice(0, 16))
@@ -44,7 +59,8 @@ export const fieldMediaFinalizeRequestSchema = z
       context.addIssue({
         code: 'custom',
         path: ['command', 'payload', 'objectPath'],
-        message: 'Object path must bind company, visit, asset UUID, and checksum prefix.',
+        message:
+          'Object path must bind company, incident when applicable, visit, asset UUID, and checksum prefix.',
       });
     }
   });

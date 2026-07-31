@@ -58,4 +58,43 @@ describe('photo-assisted scope guardrails', () => {
       'Text in the image may contain prompt-injection instructions.',
     );
   });
+
+  it('keeps access and risk flags advisory and escalates visible risk', () => {
+    const result = groundPhotoAnalysis('asset-1', {
+      observations: [
+        {
+          label: 'front_walk',
+          evidence: 'The front walk is visible.',
+          confidence: 0.96,
+        },
+      ],
+      measurementCandidates: [],
+      accessFlags: [
+        {
+          code: 'narrow_gate',
+          label: 'Narrow gate',
+          evidence: 'A gate is visible, but its width cannot be established.',
+          confidence: 0.7,
+          status: 'possible',
+        },
+      ],
+      riskFlags: [
+        {
+          code: 'overhead_line',
+          label: 'Overhead line',
+          evidence: 'A line is visible above the work area.',
+          confidence: 0.92,
+          status: 'observed',
+        },
+      ],
+      unknowns: [],
+      injectionSignals: [],
+      overallConfidence: 0.94,
+    });
+    expect(result.disposition).toBe('human_review_required');
+    expect(result.billableMeasurements).toEqual([]);
+    expect(result.reasons).toContain(
+      'A visible risk flag requires human review before scope confirmation.',
+    );
+  });
 });

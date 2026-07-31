@@ -87,6 +87,30 @@ describe('authenticated live setup contracts', () => {
     ).toThrow();
   });
 
+  it('accepts a truthful receipt that distinguishes selected and installed service counts', () => {
+    expect(
+      liveSetupReceiptSchema.parse({
+        schemaVersion: 'storyops-live-setup-v1',
+        status: 'configured',
+        companyId: '98000000-0000-4000-8000-000000000001',
+        role: 'owner',
+        companyStatus: 'setup',
+        setupComplete: true,
+        requiresLaunchReview: true,
+        replayed: false,
+        commandId: '98000000-0000-4000-8000-000000000902',
+        requestHash: '9'.repeat(64),
+        serviceCount: 2,
+        availableServiceCount: 5,
+        integrationsDisabled: 11,
+        serverTime: '2026-07-28T12:00:00Z',
+      }),
+    ).toMatchObject({
+      serviceCount: 2,
+      availableServiceCount: 5,
+    });
+  });
+
   it('derives a stable actor-and-company scoped UUID for idempotent setup retries', async () => {
     const first = await stableLiveSetupCommandId(
       '10000000-0000-4000-8000-000000000102',

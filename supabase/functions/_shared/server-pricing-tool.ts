@@ -7,7 +7,9 @@ import {
   asISODateTime,
   asPercentageString,
   money,
+  type ApprovalReason,
   type PriceBook,
+  type ServicePackageDefinition,
 } from '../../../src/domain/index.ts';
 import { calculateEstimate } from '../../../src/core/pricing/index.ts';
 import type { OfficeToolRegistry } from '../../../src/core/ai/tools.ts';
@@ -15,9 +17,11 @@ import type { OfficeToolRegistry } from '../../../src/core/ai/tools.ts';
 type Row = Record<string, unknown>;
 
 const UNIT_EVIDENCE: Record<string, { kind: string; unit: string }> = {
+  flat: { kind: 'count', unit: 'each' },
   sq_ft: { kind: 'area_sq_ft', unit: 'sq_ft' },
   linear_ft: { kind: 'length_linear_ft', unit: 'linear_ft' },
   each: { kind: 'count', unit: 'each' },
+  hour: { kind: 'duration_hours', unit: 'hour' },
 };
 
 function text(row: Row, key: string): string {
@@ -64,7 +68,8 @@ function supportsPricingUnit(measurement: Row, pricingUnit: string): boolean {
   return (
     required !== undefined &&
     optionalText(measurement, 'kind') === required.kind &&
-    optionalText(measurement, 'unit') === required.unit
+    optionalText(measurement, 'unit') === required.unit &&
+    (pricingUnit !== 'flat' || new Decimal(text(measurement, 'value')).eq(1))
   );
 }
 
@@ -72,7 +77,7 @@ export async function loadActivePriceBook(
   client: SupabaseClient,
   companyId: string,
   priceBookId?: string,
-): Promise<PriceBook> {
+): Promise<PriceBook & { packages: readonly ServicePackageDefinition[] }> {
   const { data, error } = await client.rpc('load_active_price_book_snapshot', {
     p_company_id: companyId,
     p_price_book_id: priceBookId ?? null,
@@ -84,6 +89,7 @@ export async function loadActivePriceBook(
   const multipliers = rowArray(snapshot.multipliers, 'Price-book multipliers');
   const addOns = rowArray(snapshot.add_ons, 'Price-book add-ons');
   const zones = rowArray(snapshot.zones, 'Price-book travel zones');
+  const packages = rowArray(snapshot.packages, 'Price-book packages');
   for (const rule of rules) {
     const catalog = rule.service_catalog;
     if (
@@ -99,7 +105,28 @@ export async function loadActivePriceBook(
         `Price-book service ${text(rule, 'service_code')} lacks an active company-owned catalog entry and safety SOP reference.`,
       );
     }
+    const requiredMeasurementKinds = stringArray((catalog as Row).required_measurement_kinds);
+    const pricingEvidence = UNIT_EVIDENCE[text(rule, 'pricing_unit')];
+    if (
+      requiredMeasurementKinds.length === 0 ||
+      !pricingEvidence ||
+      requiredMeasurementKinds[0] !== pricingEvidence.kind
+    ) {
+      throw new Error(
+        `Price-book service ${text(rule, 'service_code')} has pricing semantics that do not match its primary catalog measurement.`,
+      );
+    }
   }
+
+  const approval = (row: Row): { reason: ApprovalReason; summary: string } | undefined => {
+    const reason = optionalText(row, 'approval_reason');
+    const summary = optionalText(row, 'approval_summary');
+    if (!reason && !summary) return undefined;
+    if (!reason || !summary) {
+      throw new Error('Price-book approval metadata is incomplete.');
+    }
+    return { reason: reason as ApprovalReason, summary };
+  };
 
   return {
     id: asDomainId(text(book, 'id')),
@@ -146,8 +173,13 @@ export async function loadActivePriceBook(
     })),
     serviceRules: rules.map((rule) => {
       const ruleId = text(rule, 'id');
+      const catalog = objectValue(
+        rule.service_catalog,
+        `Catalog entry for ${text(rule, 'service_code')}`,
+      );
       return {
         serviceCode: text(rule, 'service_code'),
+        requiredMeasurementKinds: stringArray(catalog.required_measurement_kinds),
         pricingUnit: text(rule, 'pricing_unit') as 'flat' | 'sq_ft' | 'linear_ft' | 'each' | 'hour',
         basePrice: moneyValue(rule, 'base_price'),
         unitPrice: decimalValue(rule, 'unit_price'),
@@ -170,9 +202,24 @@ export async function loadActivePriceBook(
           .filter((item) => text(item, 'service_rule_id') === ruleId)
           .map((item) => ({
             attribute: text(item, 'attribute') as
-              'stories' | 'surface' | 'soil' | 'access' | 'risk',
+              | 'stories'
+              | 'surface'
+              | 'soil'
+              | 'access'
+              | 'risk'
+              | 'siding_material'
+              | 'organic_growth'
+              | 'gutter_guards'
+              | 'roof_access'
+              | 'debris'
+              | 'roof_pitch'
+              | 'roof_material'
+              | 'service_side'
+              | 'screens'
+              | 'tracks',
             value: text(item, 'attribute_value'),
             multiplier: asDecimalString(text(item, 'multiplier')),
+            approval: approval(item),
           })),
         addOns: addOns
           .filter((item) => text(item, 'service_rule_id') === ruleId)
@@ -184,9 +231,25 @@ export async function loadActivePriceBook(
             taxable: item.taxable === true,
             estimatedUnitCost: decimalValue(item, 'estimated_unit_cost'),
             durationMinutesPerUnit: asDecimalString(text(item, 'duration_minutes_per_unit')),
+            approval: approval(item),
           })),
       };
     }),
+    packages: packages.map((servicePackage) => ({
+      code: text(servicePackage, 'code'),
+      name: text(servicePackage, 'name'),
+      description: text(servicePackage, 'description'),
+      tier: text(servicePackage, 'tier') as 'good' | 'better' | 'best',
+      components: rowArray(
+        servicePackage.components,
+        `Price-book package ${text(servicePackage, 'code')} components`,
+      ).map((component) => ({
+        serviceCode: text(component, 'serviceCode'),
+        required: component.required === true,
+        requiredAddOnCodes: stringArray(component.requiredAddOnCodes),
+        optionalAddOnCodes: stringArray(component.optionalAddOnCodes),
+      })),
+    })),
   };
 }
 
@@ -198,13 +261,8 @@ const storedInputSchema = z.object({
         measurementId: z.string().uuid().optional(),
         quantity: z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/u),
         attributes: z
-          .object({
-            stories: z.string().optional(),
-            surface: z.string().optional(),
-            soil: z.string().optional(),
-            access: z.string().optional(),
-            risk: z.string().optional(),
-          })
+          .record(z.string().regex(/^[a-z][a-z0-9_]{1,79}$/u), z.string().trim().min(1).max(80))
+          .refine((attributes) => Object.keys(attributes).length <= 30)
           .default({}),
         addOns: z
           .array(

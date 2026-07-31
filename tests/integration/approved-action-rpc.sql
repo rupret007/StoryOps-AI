@@ -7,8 +7,12 @@ values
   ('90000000-0000-4000-8000-000000000101'),
   ('90000000-0000-4000-8000-000000000102');
 
-insert into public.companies (id, name)
-values ('90000000-0000-4000-8000-000000000001', 'Approved action RPC test');
+insert into public.companies (id, name, status)
+values (
+  '90000000-0000-4000-8000-000000000001',
+  'Approved action RPC test',
+  'active'
+);
 
 insert into public.company_memberships (company_id, user_id, role)
 values
@@ -70,7 +74,9 @@ insert into public.payments (
   status,
   amount,
   processed_at,
-  idempotency_key
+  idempotency_key,
+  provider_amount_received,
+  allocation_status
 )
 values (
   '90000000-0000-4000-8000-000000000401',
@@ -83,7 +89,9 @@ values (
   'succeeded',
   100.00,
   now() - interval '1 day',
-  'rpc-original-payment-1'
+  'rpc-original-payment-1',
+  100.00,
+  'applied'
 );
 
 insert into public.approval_requests (
@@ -135,6 +143,129 @@ values (
   now() - interval '1 minute'
 );
 
+insert into public.approval_requests (
+  id,
+  company_id,
+  reason,
+  risk_level,
+  status,
+  requested_by_type,
+  requested_by_id,
+  requested_at,
+  expires_at,
+  entity_type,
+  entity_id,
+  action_type,
+  action_payload,
+  summary,
+  policy_version,
+  decided_by,
+  decided_at
+)
+values (
+  '90000000-0000-4000-8000-000000000502',
+  '90000000-0000-4000-8000-000000000001',
+  'other',
+  'low',
+  'approved',
+  'system',
+  'approval-capability-regression',
+  now() - interval '5 minutes',
+  now() + interval '1 day',
+  'company',
+  '90000000-0000-4000-8000-000000000001',
+  'test.consume_approval',
+  jsonb_build_object(
+    'exactPayload',
+    jsonb_build_object(
+      'companyId', '90000000-0000-4000-8000-000000000001'::uuid
+    ),
+    'payloadHash', repeat('a', 64)
+  ),
+  'Approval consumption capability regression',
+  'storyops-policy-v1.0.0',
+  '90000000-0000-4000-8000-000000000101',
+  now() - interval '1 minute'
+);
+
+do $$
+declare
+  direct_update_blocked boolean := false;
+  forged_setting_blocked boolean := false;
+begin
+  perform set_config('storyops.approval_consumption_token', '', true);
+  begin
+    update public.approval_requests
+    set
+      consumed_at = now(),
+      execution_receipt = '{"source":"direct-update"}'::jsonb
+    where id = '90000000-0000-4000-8000-000000000502';
+  exception
+    when others then
+      if position('Approval consumption is server-controlled' in sqlerrm) > 0 then
+        direct_update_blocked := true;
+      else
+        raise;
+      end if;
+  end;
+
+  perform set_config(
+    'storyops.approval_consumption_token',
+    '90000000-0000-4000-8000-000000000503',
+    true
+  );
+  begin
+    update public.approval_requests
+    set
+      consumed_at = now(),
+      execution_receipt = '{"source":"forged-setting"}'::jsonb
+    where id = '90000000-0000-4000-8000-000000000502';
+  exception
+    when others then
+      if position('Approval consumption is server-controlled' in sqlerrm) > 0 then
+        forged_setting_blocked := true;
+      else
+        raise;
+      end if;
+  end;
+  perform set_config('storyops.approval_consumption_token', '', true);
+
+  if not direct_update_blocked or not forged_setting_blocked then
+    raise exception 'A direct approval-consumption update bypassed the capability';
+  end if;
+  if not exists (
+    select 1
+    from public.approval_requests
+    where id = '90000000-0000-4000-8000-000000000502'
+      and consumed_at is null
+      and execution_receipt is null
+  ) then
+    raise exception 'A rejected approval-consumption forgery changed the row';
+  end if;
+  if has_table_privilege(
+      'authenticated', 'public.approval_requests', 'update'
+    )
+    or has_table_privilege(
+      'service_role', 'public.approval_requests', 'update'
+    )
+    or has_schema_privilege('authenticated', 'private', 'usage')
+    or has_schema_privilege('service_role', 'private', 'usage')
+    or has_function_privilege(
+      'authenticated',
+      'private.authorize_storyops_approval_consumption(uuid,uuid)',
+      'execute'
+    )
+    or has_function_privilege(
+      'service_role',
+      'private.authorize_storyops_approval_consumption(uuid,uuid)',
+      'execute'
+    )
+  then
+    raise exception 'An API role can forge an approval-consumption capability';
+  end if;
+end;
+$$;
+
 do $$
 declare
   first_claim record;
@@ -145,6 +276,35 @@ declare
   completion jsonb;
   receipt jsonb;
 begin
+  update public.companies
+  set status = 'paused'
+  where id = '90000000-0000-4000-8000-000000000001';
+  begin
+    perform *
+    from public.claim_ai_approved_action(
+      '90000000-0000-4000-8000-000000000001',
+      '90000000-0000-4000-8000-000000000501',
+      '90000000-0000-4000-8000-000000000101',
+      'rpc-refund-attempt-1',
+      'a1996ba0d030273265778e44684c6f62a05fab305dbcb384dd0a4b52a336a316'
+    );
+    raise exception 'Paused-company claim unexpectedly succeeded';
+  exception
+    when others then
+      if sqlerrm not like '%APPROVED_ACTION_OWNER_REQUIRED%' then
+        raise;
+      end if;
+  end;
+  if exists (
+    select 1 from public.approved_action_executions
+    where approval_request_id = '90000000-0000-4000-8000-000000000501'
+  ) then
+    raise exception 'Paused company created a provider execution lease';
+  end if;
+  update public.companies
+  set status = 'active'
+  where id = '90000000-0000-4000-8000-000000000001';
+
   begin
     perform *
     from public.claim_ai_approved_action(

@@ -1816,14 +1816,71 @@ create trigger retention_policies_immutable
   before update or delete on public.retention_policies
   for each row execute function public.protect_retention_policy();
 
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated, service_role;
+
+create table private.storyops_approval_consumption_capabilities (
+  backend_pid integer not null,
+  transaction_id bigint not null,
+  company_id uuid not null,
+  approval_request_id uuid not null,
+  token uuid not null,
+  created_at timestamptz not null default clock_timestamp(),
+  primary key (backend_pid, transaction_id, approval_request_id)
+);
+
+revoke all on table private.storyops_approval_consumption_capabilities
+  from public, anon, authenticated, service_role;
+
+create or replace function private.authorize_storyops_approval_consumption(
+  p_company_id uuid,
+  p_approval_request_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, private, extensions
+as $$
+declare
+  capability_token uuid := extensions.gen_random_uuid();
+begin
+  insert into private.storyops_approval_consumption_capabilities(
+    backend_pid,
+    transaction_id,
+    company_id,
+    approval_request_id,
+    token
+  )
+  values (
+    pg_backend_pid(),
+    txid_current(),
+    p_company_id,
+    p_approval_request_id,
+    capability_token
+  );
+  perform set_config(
+    'storyops.approval_consumption_token',
+    capability_token::text,
+    true
+  );
+end;
+$$;
+
+revoke all on function private.authorize_storyops_approval_consumption(
+  uuid, uuid
+) from public, anon, authenticated, service_role;
+
 create or replace function public.protect_approval_request()
 returns trigger
 language plpgsql
-set search_path = pg_catalog, public
+security definer
+set search_path = pg_catalog, public, private
 as $$
 declare
   immutable_old jsonb;
   immutable_new jsonb;
+  capability_setting text;
+  capability_token uuid;
 begin
   immutable_old := to_jsonb(old) - array[
     'status', 'decided_by', 'decided_at', 'decision_note',
@@ -1868,8 +1925,34 @@ begin
   if (
     new.consumed_at is distinct from old.consumed_at
     or new.execution_receipt is distinct from old.execution_receipt
-  ) and current_user <> 'postgres' then
-    raise exception 'Approval consumption is server-controlled';
+  ) then
+    capability_setting := current_setting(
+      'storyops.approval_consumption_token',
+      true
+    );
+    if capability_setting ~*
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    then
+      capability_token := capability_setting::uuid;
+    end if;
+    if capability_token is null or not exists (
+      select 1
+      from private.storyops_approval_consumption_capabilities capability
+      where capability.backend_pid = pg_backend_pid()
+        and capability.transaction_id = txid_current()
+        and capability.company_id = old.company_id
+        and capability.approval_request_id = old.id
+        and capability.token = capability_token
+    ) then
+      raise exception 'Approval consumption is server-controlled';
+    end if;
+    delete from private.storyops_approval_consumption_capabilities capability
+    where capability.backend_pid = pg_backend_pid()
+      and capability.transaction_id = txid_current()
+      and capability.company_id = old.company_id
+      and capability.approval_request_id = old.id
+      and capability.token = capability_token;
+    perform set_config('storyops.approval_consumption_token', '', true);
   end if;
   return new;
 end;
@@ -1878,6 +1961,9 @@ $$;
 create trigger approval_requests_scope_immutable
   before update on public.approval_requests
   for each row execute function public.protect_approval_request();
+
+revoke all on function public.protect_approval_request()
+  from public, anon, authenticated, service_role;
 
 create or replace function public.consume_exact_action_approval(
   p_company_id uuid,
@@ -1895,6 +1981,10 @@ security definer
 set search_path = pg_catalog, public
 as $$
 begin
+  perform private.authorize_storyops_approval_consumption(
+    p_company_id,
+    p_approval_request_id
+  );
   update public.approval_requests
   set
     consumed_at = now(),
@@ -2683,6 +2773,10 @@ begin
     raise exception 'Approval does not authorize this exact retention purge';
   end if;
 
+  perform private.authorize_storyops_approval_consumption(
+    p_company_id,
+    approval_row.id
+  );
   update public.approval_requests
   set
     consumed_at = now(),
@@ -2771,6 +2865,10 @@ begin
     generated_run_id, p_company_id, policy_row.id, approval_row.id, p_cutoff_at,
     false, 'succeeded', candidates, affected, evidence_hash,
     coalesce(auth.uid()::text, current_user)
+  );
+  perform private.authorize_storyops_approval_consumption(
+    p_company_id,
+    approval_row.id
   );
   update public.approval_requests
   set execution_receipt = jsonb_build_object(
@@ -3418,6 +3516,10 @@ begin
     raise exception 'Exact owner approval is required to delete %.%', tg_table_name, old.id;
   end if;
 
+  perform private.authorize_storyops_approval_consumption(
+    old.company_id,
+    approval_id_value
+  );
   update public.approval_requests
   set consumed_at = now(),
       execution_receipt = jsonb_build_object(

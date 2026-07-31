@@ -1,6 +1,6 @@
 {
   "name": "storyops-ai",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:infra": "node --test tests/integration/infra-scripts.test.mjs tests/integration/backup-restore-hardening.test.mjs",
+    "test:upgrade": "node tests/integration/field-media-canary-upgrade.mjs",
     "test:supabase": "node scripts/verify-local-supabase.mjs",
     "verify": "npm run licenses:check && npm run lint && npm run typecheck && npm run check:edge && npm test && npm run test:infra && npm run build",
     "mcp": "tsx mcp/storyops-server.ts",
@@ -27,6 +28,8 @@
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
     "demo:proof": "node scripts/demo-proof.mjs",
+    "eval:ai": "tsx --tsconfig tsconfig.app.json scripts/run-ai-evals.mjs",
+    "install:vroom-runtime": "npm ci --prefix infra/vroom/runtime-package --omit=dev --ignore-scripts",
     "licenses:generate": "node scripts/generate-npm-notices.mjs",
     "licenses:check": "node scripts/generate-npm-notices.mjs --check"
   },
@@ -54,6 +57,7 @@
     "eslint": "10.8.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
+    "fake-indexeddb": "6.2.5",
     "globals": "16.3.0",
     "jsdom": "26.1.0",
     "prettier": "3.9.6",

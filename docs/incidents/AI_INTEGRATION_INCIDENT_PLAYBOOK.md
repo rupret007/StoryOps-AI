@@ -5,6 +5,10 @@
 **Last updated:** 2026-07-28
 
 Print or cache this document. Do not depend on the affected AI/provider to tell you how to recover.
+For an injury, exposure, spill/runoff, suspected backflow, fall, heat/weather,
+equipment, vehicle, or property event, use the
+[field safety and environmental incident playbook](./FIELD_SAFETY_ENVIRONMENTAL_INCIDENT_PLAYBOOK.md)
+first; this playbook then governs any related AI/provider failure.
 
 ## Universal first five minutes
 

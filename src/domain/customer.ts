@@ -61,14 +61,15 @@ export interface Property extends EntityMetadata {
   lastServicedAt?: ISODateTime;
 }
 
-export type MeasurementKind = 'area_sq_ft' | 'length_linear_ft' | 'height_ft' | 'count' | 'stories';
+export type MeasurementKind =
+  'area_sq_ft' | 'length_linear_ft' | 'height_ft' | 'count' | 'stories' | 'duration_hours';
 
 export interface PropertyMeasurement extends EntityMetadata {
   propertyId: DomainId;
   kind: MeasurementKind;
   label: string;
   value: DecimalString;
-  unit: 'sq_ft' | 'linear_ft' | 'ft' | 'each' | 'story';
+  unit: 'sq_ft' | 'linear_ft' | 'ft' | 'each' | 'story' | 'hour';
   source: 'field_measured' | 'map' | 'customer_reported' | 'photo_assisted' | 'imported';
   measuredAt: ISODateTime;
   measuredBy?: DomainId;

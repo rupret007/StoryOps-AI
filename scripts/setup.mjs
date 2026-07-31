@@ -26,6 +26,8 @@ const verify = hasFlag(argv, '--verify');
 const resetSupabase = hasFlag(argv, '--reset-supabase');
 const unsafeAllowWildcardSupabasePorts = hasFlag(argv, '--unsafe-allow-wildcard-supabase-ports');
 const envTarget = resolve(REPO_ROOT, optionValue(argv, '--env-file', '.env.local'));
+const DOCKER_LOOPBACK_BINDING_OPTION = 'com.docker.network.bridge.host_binding_ipv4';
+const DOCKER_LOOPBACK_BINDING_ADDRESS = '127.0.0.1';
 
 const unknown = unknownOptions(
   argv,
@@ -290,13 +292,21 @@ async function ensureEnvironmentFile() {
 
 async function installDependencies() {
   if (skipInstall) return;
+  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   if (existsSync(resolve(REPO_ROOT, 'node_modules'))) {
     process.stdout.write('KEEP node_modules (dependencies already installed)\n');
-    return;
+  } else {
+    const args = existsSync(resolve(REPO_ROOT, 'package-lock.json')) ? ['ci'] : ['install'];
+    await runCommand({ command, args, dryRun });
   }
-  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const args = existsSync(resolve(REPO_ROOT, 'package-lock.json')) ? ['ci'] : ['install'];
-  await runCommand({ command, args, dryRun });
+  const vroomRuntimeModules = resolve(REPO_ROOT, 'infra/vroom/runtime-package/node_modules');
+  if (existsSync(vroomRuntimeModules)) {
+    process.stdout.write(
+      'KEEP infra/vroom/runtime-package/node_modules (dependencies already installed)\n',
+    );
+  } else {
+    await runCommand({ command, args: ['run', 'install:vroom-runtime'], dryRun });
+  }
 }
 
 async function ensureDocker() {
@@ -306,6 +316,81 @@ async function ensureDocker() {
     capture: true,
     dryRun,
   });
+}
+
+async function ensureSupabaseLoopbackNetwork(networkName) {
+  const inspectArgs = ['network', 'inspect', '--format', '{{json .}}', networkName];
+  const createArgs = [
+    'network',
+    'create',
+    '--driver',
+    'bridge',
+    '--opt',
+    `${DOCKER_LOOPBACK_BINDING_OPTION}=${DOCKER_LOOPBACK_BINDING_ADDRESS}`,
+    networkName,
+  ];
+
+  if (dryRun) {
+    process.stdout.write(
+      `PLAN ensure dedicated Docker network ${networkName} uses bridge driver with ${DOCKER_LOOPBACK_BINDING_OPTION}=${DOCKER_LOOPBACK_BINDING_ADDRESS}; create it only when absent and reject an incompatible existing network.\n`,
+    );
+    await runCommand({
+      command: 'docker',
+      args: ['network', 'ls', '--filter', `name=^${networkName}$`, '--format', '{{.Name}}'],
+      capture: true,
+      dryRun,
+    });
+    await runCommand({ command: 'docker', args: inspectArgs, capture: true, dryRun });
+    await runCommand({ command: 'docker', args: createArgs, capture: true, dryRun });
+    return;
+  }
+
+  const listing = await runCommand({
+    command: 'docker',
+    args: ['network', 'ls', '--filter', `name=^${networkName}$`, '--format', '{{.Name}}'],
+    capture: true,
+  });
+  const existingNames = listing.stdout
+    .split(/\r?\n/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (existingNames.some((name) => name !== networkName) || existingNames.length > 1) {
+    throw new Error(`Docker returned an ambiguous network match for ${networkName}.`);
+  }
+  if (existingNames.length === 0) {
+    await runCommand({ command: 'docker', args: createArgs, capture: true });
+    process.stdout.write(`CREATE dedicated loopback Docker network ${networkName}\n`);
+  }
+
+  const inspection = await runCommand({
+    command: 'docker',
+    args: inspectArgs,
+    capture: true,
+  });
+  const lines = inspection.stdout
+    .split(/\r?\n/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (lines.length !== 1) {
+    throw new Error(`Docker returned an incomplete network inspection for ${networkName}.`);
+  }
+  let network;
+  try {
+    network = JSON.parse(lines[0]);
+  } catch {
+    throw new Error(`Docker returned invalid network metadata for ${networkName}.`);
+  }
+  const bindingAddress = network?.Options?.[DOCKER_LOOPBACK_BINDING_OPTION];
+  if (
+    network?.Name !== networkName ||
+    network?.Driver !== 'bridge' ||
+    bindingAddress !== DOCKER_LOOPBACK_BINDING_ADDRESS
+  ) {
+    throw new Error(
+      `Refusing Docker network ${networkName}: expected driver=bridge and ${DOCKER_LOOPBACK_BINDING_OPTION}=${DOCKER_LOOPBACK_BINDING_ADDRESS}, received driver=${network?.Driver || 'unknown'} and ${DOCKER_LOOPBACK_BINDING_OPTION}=${bindingAddress || 'unset'}.`,
+    );
+  }
+  process.stdout.write(`OK dedicated Supabase Docker network ${networkName} is loopback-only\n`);
 }
 
 async function waitForHealth(url, label, timeoutMs = 90_000) {
@@ -343,6 +428,8 @@ async function startSupabase() {
     throw new Error('supabase/config.toml must contain a safe project_id.');
   }
   const cli = supabaseCommand();
+  const networkName = `${projectId}-supabase-loopback`;
+  await ensureSupabaseLoopbackNetwork(networkName);
   const containerIds = async () => {
     const result = await runCommand({
       command: 'docker',
@@ -364,7 +451,7 @@ async function startSupabase() {
   const before = dryRun ? [] : await containerIds();
   await runCommand({
     command: cli.command,
-    args: [...cli.prefix, 'start'],
+    args: [...cli.prefix, 'start', '--network-id', networkName],
     dryRun,
   });
   if (dryRun) {
@@ -379,7 +466,7 @@ async function startSupabase() {
     if (!justStarted) return;
     await runCommand({
       command: cli.command,
-      args: [...cli.prefix, 'stop', '--no-backup'],
+      args: [...cli.prefix, 'stop', '--no-backup', '--network-id', networkName],
     });
   };
   try {

@@ -12,6 +12,13 @@ const timeWindowSchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
 });
+const schedulingMessageContextSchema = z
+  .object({
+    intent: z.literal('booking_confirmation'),
+    jobId: z.string().min(1).max(128),
+    window: timeWindowSchema,
+  })
+  .strict();
 const moneySchema = z.object({
   amount: z.string().regex(/^(?:0|[1-9]\d*)\.\d{2}$/),
   currency: z.literal('USD'),
@@ -41,10 +48,37 @@ async function callProvider<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+function assertGenericToolsAreNonLive(suite: IntegrationSuite): void {
+  const liveProviders = [
+    suite.sms,
+    suite.email,
+    suite.payments,
+    suite.calendar,
+    suite.maps,
+    suite.weather,
+    suite.routing,
+    suite.storage,
+    suite.accounting,
+  ]
+    .filter((provider) => provider.mode === 'live')
+    .map((provider) => provider.provider);
+  if (liveProviders.length > 0) {
+    throw new IntegrationError(
+      `Generic AI integration tools cannot register live providers (${[
+        ...new Set(liveProviders),
+      ].join(', ')}). Use a company-authorized, capability-specific server boundary.`,
+      'configuration',
+      'LIVE_GENERIC_AI_TOOLS_FORBIDDEN',
+      false,
+    );
+  }
+}
+
 export function registerIntegrationOfficeTools(
   registry: OfficeToolRegistry,
   suite: IntegrationSuite,
 ): OfficeToolRegistry {
+  assertGenericToolsAreNonLive(suite);
   registry.register({
     name: 'maps.geocode',
     description: 'Geocode a supplied address; never infer or fabricate coordinates.',
@@ -124,28 +158,6 @@ export function registerIntegrationOfficeTools(
   });
 
   registry.register({
-    name: 'calendar.create_booking',
-    description: 'Create a confirmed calendar booking after capacity checks.',
-    input: calendarWriteSchema,
-    risk: 'low',
-    sideEffect: 'external_write',
-    reversible: false,
-    supportsIdempotency: true,
-    autoExecute: false,
-    execute: (input, context) =>
-      callProvider(() =>
-        suite.calendar.createBooking(
-          {
-            ...input,
-            calendarId: suite.calendar.allowedCalendarIds[0] ?? '',
-            idempotencyKey: context.idempotencyKey,
-          },
-          context.signal,
-        ),
-      ),
-  });
-
-  registry.register({
     name: 'weather.read_forecast',
     description: 'Read a provider-grounded forecast and alerts for a job window.',
     input: z.object({
@@ -202,29 +214,44 @@ export function registerIntegrationOfficeTools(
 
   registry.register({
     name: 'communications.send_sms',
-    description: 'Send a consent-checked SMS and return its provider delivery receipt.',
+    description:
+      'Record sandbox SMS only. Live SMS requires the durable outbox, submitted-unknown quarantine, and callback reconciliation boundary.',
     input: z.object({
       to: z.string().min(8).max(32),
       body: z.string().min(1).max(1_600),
       category: z.enum(['transactional', 'marketing']),
       consentSnapshotId: z.string().min(1),
+      schedulingContext: schedulingMessageContextSchema.optional(),
     }),
     risk: 'medium',
     sideEffect: 'external_write',
     reversible: false,
-    supportsIdempotency: true,
+    supportsIdempotency: false,
     autoExecute: false,
-    execute: (input, context) =>
-      callProvider(() =>
+    execute: (input, context) => {
+      if (suite.sms.mode === 'live') {
+        throw new ToolExecutionError(
+          'Generic AI live SMS is disabled until it uses the durable outbox and callback reconciliation path.',
+          {
+            retryable: false,
+            providerCode: 'LIVE_SMS_OUTBOX_REQUIRED',
+          },
+        );
+      }
+      return callProvider(() =>
         suite.sms.sendSms(
           {
-            ...input,
+            to: input.to,
+            body: input.body,
+            category: input.category,
+            consentSnapshotId: input.consentSnapshotId,
             companyId: context.companyId,
             idempotencyKey: context.idempotencyKey,
           },
           context.signal,
         ),
-      ),
+      );
+    },
   });
 
   registry.register({
@@ -238,6 +265,7 @@ export function registerIntegrationOfficeTools(
       html: z.string().max(200_000).optional(),
       category: z.enum(['transactional', 'marketing']),
       consentSnapshotIds: z.record(z.string(), z.string().min(1)),
+      schedulingContext: schedulingMessageContextSchema.optional(),
     }),
     risk: 'medium',
     sideEffect: 'external_write',
@@ -248,7 +276,13 @@ export function registerIntegrationOfficeTools(
       callProvider(() =>
         suite.email.sendEmail(
           {
-            ...input,
+            to: input.to,
+            replyTo: input.replyTo,
+            subject: input.subject,
+            text: input.text,
+            html: input.html,
+            category: input.category,
+            consentSnapshotIds: input.consentSnapshotIds,
             companyId: context.companyId,
             idempotencyKey: context.idempotencyKey,
           },

@@ -334,6 +334,7 @@ create index post_service_followups_queue_idx
   where status in ('queued', 'submitted');
 
 create or replace function public.queue_storyops_due_maintenance_followups(
+  p_company_id uuid,
   p_limit integer default 100
 )
 returns integer
@@ -352,12 +353,23 @@ declare
   inserted_count integer := 0;
   inserted_id uuid;
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_WORKER_TRUSTED_ROLE_REQUIRED';
   end if;
-  if p_limit is null or p_limit not between 1 and 500 then
+  if p_company_id is null
+    or not exists (
+      select 1
+      from public.companies company
+      where company.id = p_company_id
+    )
+    or p_limit is null
+    or p_limit not between 1 and 500
+  then
     raise exception 'POST_SERVICE_WORKER_INVALID_LIMIT';
   end if;
 
@@ -376,7 +388,8 @@ begin
       on customer.id = plan.customer_id
       and customer.company_id = plan.company_id
       and customer.lifecycle = 'active'
-    where plan.status = 'active'
+    where plan.company_id = p_company_id
+      and plan.status = 'active'
       and plan.source_invoice_id is not null
       and plan.source_job_id is not null
       and plan.next_due_date between
@@ -544,6 +557,7 @@ end;
 $$;
 
 create or replace function public.claim_storyops_post_service_followup(
+  p_company_id uuid,
   p_worker_id uuid,
   p_lease_seconds integer default 90
 )
@@ -574,19 +588,31 @@ declare
   terminal_action text;
   previous_provider_context text;
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_WORKER_TRUSTED_ROLE_REQUIRED';
   end if;
-  if p_worker_id is null
+  if p_company_id is null
+    or not exists (
+      select 1
+      from public.companies company
+      where company.id = p_company_id
+    )
+    or p_worker_id is null
     or p_lease_seconds is null
     or p_lease_seconds not between 30 and 300
   then
     raise exception 'POST_SERVICE_WORKER_INVALID_CLAIM';
   end if;
 
-  perform public.queue_storyops_due_maintenance_followups(100);
+  perform public.queue_storyops_due_maintenance_followups(
+    p_company_id,
+    100
+  );
 
   -- A worker may die after a lease is granted but before it reports failure.
   -- Since the attempt counters are incremented when the lease is granted,
@@ -596,7 +622,8 @@ begin
   for exhausted_row in
     select followup.*
     from public.post_service_followups followup
-    where (
+    where followup.company_id = p_company_id
+      and (
         (
           followup.status = 'queued'
           and followup.attempt_count >= followup.max_attempts
@@ -706,7 +733,8 @@ begin
     into followup_row
     from public.post_service_followups followup
     join public.companies company on company.id = followup.company_id
-    where (
+    where followup.company_id = p_company_id
+      and (
         (
           followup.status = 'queued'
           and followup.attempt_count < followup.max_attempts
@@ -714,7 +742,13 @@ begin
         or (
           followup.status = 'submitted'
           and followup.reconciliation_count < followup.max_attempts
+          and followup.last_error_code is distinct from
+            'RECONCILIATION_EXHAUSTED'
         )
+      )
+      and (
+        followup.status = 'submitted'
+        or company.status = 'active'
       )
       and followup.scheduled_at <= now()
       and followup.next_attempt_at <= now()
@@ -1031,8 +1065,11 @@ as $$
 declare
   followup_row public.post_service_followups%rowtype;
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_WORKER_TRUSTED_ROLE_REQUIRED';
   end if;
@@ -1132,8 +1169,11 @@ declare
   provider_id_value text := nullif(btrim(p_provider_message_id), '');
   previous_provider_context text;
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_WORKER_TRUSTED_ROLE_REQUIRED';
   end if;
@@ -1273,8 +1313,11 @@ declare
   external_delivery_value boolean;
   previous_provider_context text;
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_WORKER_TRUSTED_ROLE_REQUIRED';
   end if;
@@ -1520,9 +1563,14 @@ declare
   status_value text;
   retry_delay_seconds integer;
   previous_provider_context text;
+  retry_scheduled boolean;
+  manual_reconciliation_required boolean;
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_WORKER_TRUSTED_ROLE_REQUIRED';
   end if;
@@ -1591,8 +1639,34 @@ begin
         )
       )
       then followup_row.status
+    when followup_row.claim_operation = 'reconcile'
+      then 'submitted'
     else 'failed'
   end;
+  retry_scheduled := p_retryable
+    and status_value in ('queued', 'submitted')
+    and p_error_code not in (
+      'PROVIDER_DISABLED',
+      'LIVE_PROVIDER_REQUIRED_FOR_RECONCILIATION'
+    )
+    and (
+      (
+        followup_row.claim_operation = 'send'
+        and followup_row.attempt_count < followup_row.max_attempts
+      )
+      or (
+        followup_row.claim_operation = 'reconcile'
+        and followup_row.reconciliation_count < followup_row.max_attempts
+      )
+    );
+  manual_reconciliation_required :=
+    followup_row.claim_operation = 'reconcile'
+    and status_value = 'submitted'
+    and not retry_scheduled
+    and p_error_code not in (
+      'PROVIDER_DISABLED',
+      'LIVE_PROVIDER_REQUIRED_FOR_RECONCILIATION'
+    );
   retry_delay_seconds := least(
     3600,
     30 * (2 ^ greatest(
@@ -1640,9 +1714,13 @@ begin
       when followup_row.status = 'submitted_unknown' then null
       else provider_message_id
     end,
-    last_error_code = p_error_code,
+    last_error_code = case
+      when manual_reconciliation_required
+        then 'RECONCILIATION_EXHAUSTED'
+      else p_error_code
+    end,
     next_attempt_at = case
-      when status_value in ('queued', 'submitted')
+      when retry_scheduled
         then now() + make_interval(secs => retry_delay_seconds)
       else next_attempt_at
     end,
@@ -1685,8 +1763,10 @@ begin
     'system',
     'post-service-worker-v1',
     case
-      when status_value in ('queued', 'submitted')
+      when retry_scheduled
         then 'post_service.outbound_retry_scheduled'
+      when manual_reconciliation_required
+        then 'post_service.reconciliation_required'
       when status_value = 'cancelled'
         then 'post_service.outbound_cancelled'
       else 'post_service.outbound_failed'
@@ -1696,8 +1776,18 @@ begin
     jsonb_build_object('status', followup_row.status),
     jsonb_build_object(
       'status', status_value,
-      'errorCode', p_error_code,
+      'errorCode', case
+        when manual_reconciliation_required
+          then 'RECONCILIATION_EXHAUSTED'
+        else p_error_code
+      end,
+      'providerReadErrorCode', case
+        when manual_reconciliation_required then p_error_code
+        else null
+      end,
       'retryable', p_retryable,
+      'manualReconciliationRequired',
+        manual_reconciliation_required,
       'externalDeliveryClaimed', false
     )
   );
@@ -1706,8 +1796,18 @@ begin
     'schemaVersion', 'storyops-post-service-worker-result-v1',
     'followupId', followup_row.id,
     'status', status_value,
-    'errorCode', p_error_code,
-    'retryScheduled', status_value in ('queued', 'submitted'),
+    'errorCode', case
+      when manual_reconciliation_required
+        then 'RECONCILIATION_EXHAUSTED'
+      else p_error_code
+    end,
+    'providerReadErrorCode', case
+      when manual_reconciliation_required then p_error_code
+      else null
+    end,
+    'retryScheduled', retry_scheduled,
+    'manualReconciliationRequired',
+      manual_reconciliation_required,
     'externalDeliveryClaimed', false
   );
 end;
@@ -1794,9 +1894,9 @@ create trigger communication_messages_post_service_reconcile
   when (old.delivery_status is distinct from new.delivery_status)
   execute function public.reconcile_storyops_post_service_delivery();
 
-revoke all on function public.queue_storyops_due_maintenance_followups(integer)
+revoke all on function public.queue_storyops_due_maintenance_followups(uuid, integer)
   from public, anon, authenticated;
-revoke all on function public.claim_storyops_post_service_followup(uuid, integer)
+revoke all on function public.claim_storyops_post_service_followup(uuid, uuid, integer)
   from public, anon, authenticated;
 revoke all on function public.begin_storyops_post_service_submission(
   uuid,
@@ -1819,9 +1919,9 @@ revoke all on function public.fail_storyops_post_service_followup(
   boolean
 ) from public, anon, authenticated;
 
-grant execute on function public.queue_storyops_due_maintenance_followups(integer)
+grant execute on function public.queue_storyops_due_maintenance_followups(uuid, integer)
   to service_role;
-grant execute on function public.claim_storyops_post_service_followup(uuid, integer)
+grant execute on function public.claim_storyops_post_service_followup(uuid, uuid, integer)
   to service_role;
 grant execute on function public.begin_storyops_post_service_submission(
   uuid,
@@ -1844,8 +1944,8 @@ grant execute on function public.fail_storyops_post_service_followup(
   boolean
 ) to service_role;
 
-comment on function public.claim_storyops_post_service_followup(uuid, integer) is
-  'Service-role-only leased claimant. It revalidates exact current marketing consent and prepares one deterministic routine message without exposing it to authenticated clients.';
+comment on function public.claim_storyops_post_service_followup(uuid, uuid, integer) is
+  'Service-role-only company-scoped leased claimant. It revalidates exact current marketing consent and prepares one deterministic routine message without exposing it to authenticated clients.';
 comment on function public.begin_storyops_post_service_submission(uuid, uuid, text) is
   'Persists a fail-safe live Twilio submission boundary before the external create call. A crash after this point cannot produce an automatic resend.';
 comment on function public.mark_storyops_post_service_submission_unknown(

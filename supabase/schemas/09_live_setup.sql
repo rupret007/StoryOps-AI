@@ -1,7 +1,8 @@
 -- Authenticated single-company onboarding. A signed-in user with no existing
--- StoryOps scope may create exactly one setup-mode company. The wizard creates
--- review-required drafts and disabled integrations; it never publishes prices,
--- terms, retention policy, providers, or launch authorization.
+-- StoryOps scope may create exactly one setup-mode company. The wizard installs
+-- all five supported service templates inactive, records the selected initial
+-- scope, and creates review-required drafts and disabled integrations; it never
+-- publishes prices, terms, retention policy, providers, or launch authorization.
 
 create or replace function public.get_storyops_setup_state(
   p_company_id uuid default null
@@ -143,7 +144,9 @@ declare
   prior_command_id text;
   prior_request_hash text;
   configured_service_count integer;
+  available_service_count integer;
   disabled_integration_count integer;
+  setup_completed_at timestamptz := now();
 begin
   if actor_user_id is null then
     raise exception 'Authentication is required';
@@ -174,13 +177,15 @@ begin
     raise exception 'Setup policy acknowledgement is required';
   end if;
   if coalesce(cardinality(p_enabled_service_codes), 0) < 1
-    or cardinality(p_enabled_service_codes) > 3
+    or cardinality(p_enabled_service_codes) > 5
     or not (
       p_enabled_service_codes
       <@ array[
         'pressure-wash-flatwork',
         'soft-wash-house',
-        'gutter-cleaning'
+        'gutter-cleaning',
+        'roof-washing',
+        'window-cleaning'
       ]::text[]
     )
     or (
@@ -188,7 +193,7 @@ begin
       from unnest(p_enabled_service_codes) candidate
     )
   then
-    raise exception 'Select one to three unique supported services';
+    raise exception 'Select one to five unique supported services';
   end if;
 
   current_setup_input := jsonb_build_object(
@@ -280,7 +285,13 @@ begin
         'replayed', true,
         'commandId', p_command_id,
         'requestHash', p_request_hash,
-        'serverTime', now()
+        'serviceCount', cardinality(p_enabled_service_codes),
+        'availableServiceCount', 5,
+        'integrationsDisabled', 10,
+        'serverTime', coalesce(
+          company_record.settings ->> 'setupCompletedAt',
+          company_record.updated_at::text
+        )
       );
     end if;
     raise exception 'Company setup is already complete with a different request';
@@ -335,6 +346,7 @@ begin
     'setupCommandId', p_command_id,
     'setupRequestHash', p_request_hash,
     'setupInput', current_setup_input,
+    'setupCompletedAt', setup_completed_at,
     'launchAuthorized', false,
     'requiredReviews', jsonb_build_array(
       'pricing',
@@ -426,7 +438,13 @@ begin
     )
   on conflict (template_id, item_key) do nothing;
 
-  foreach service_code in array p_enabled_service_codes
+  foreach service_code in array array[
+    'pressure-wash-flatwork',
+    'soft-wash-house',
+    'gutter-cleaning',
+    'roof-washing',
+    'window-cleaning'
+  ]::text[]
   loop
     select
       supported.name,
@@ -451,20 +469,28 @@ begin
           'Pressure Wash Flatwork',
           'Pressure washing for verified, approved hardscape scope.',
           'pressure_washing',
-          array['pressure-washing']::text[],
+          array['surface-identification', 'pressure-washing']::text[],
           array['pressure-washer', 'surface-cleaner']::text[],
           array['area_sq_ft']::text[],
-          'SOP-PW-REVIEW-REQUIRED'
+          'SOP-PW-FLATWORK-001'
         ),
         (
           'soft-wash-house',
           'House Soft Wash',
           'Low-pressure exterior cleaning for verified, approved surfaces.',
           'soft_washing',
-          array['soft-washing']::text[],
-          array['soft-wash-system']::text[],
-          array['area_sq_ft', 'stories']::text[],
-          'SOP-SW-REVIEW-REQUIRED'
+          array[
+            'soft-washing',
+            'siding-identification',
+            'chemical-handling'
+          ]::text[],
+          array[
+            'soft-wash-system',
+            'chemical-metering',
+            'plant-protection'
+          ]::text[],
+          array['area_sq_ft']::text[],
+          'SOP-SW-HOUSE-001'
         ),
         (
           'gutter-cleaning',
@@ -472,9 +498,37 @@ begin
           'Debris removal and downspout flow verification for safe, approved access.',
           'gutter_cleaning',
           array['ladder-safety', 'gutter-cleaning']::text[],
-          array['ladder']::text[],
-          array['length_linear_ft', 'stories']::text[],
-          'SOP-GC-REVIEW-REQUIRED'
+          array['ladder', 'fall-protection', 'gutter-tools']::text[],
+          array['length_linear_ft', 'count']::text[],
+          'SOP-GUTTER-001'
+        ),
+        (
+          'roof-washing',
+          'Roof Soft Wash',
+          'Low-pressure roof cleaning for verified, approved roof materials and access.',
+          'roof_washing',
+          array[
+            'roof-soft-washing',
+            'fall-protection',
+            'chemical-handling'
+          ]::text[],
+          array[
+            'soft-wash-system',
+            'fall-protection',
+            'plant-protection'
+          ]::text[],
+          array['area_sq_ft']::text[],
+          'SOP-SW-ROOF-001'
+        ),
+        (
+          'window-cleaning',
+          'Exterior Window Cleaning',
+          'Exterior window cleaning for verified panes, screens, tracks, stories, and access.',
+          'window_cleaning',
+          array['window-cleaning', 'ladder-safety']::text[],
+          array['window-cleaning-kit', 'ladder']::text[],
+          array['count']::text[],
+          'SOP-WINDOW-001'
         )
     ) as supported(
       code,
@@ -626,6 +680,19 @@ begin
     and not service.active;
 
   select count(*)::integer
+  into available_service_count
+  from public.service_catalog service
+  where service.company_id = p_company_id
+    and service.code = any(array[
+      'pressure-wash-flatwork',
+      'soft-wash-house',
+      'gutter-cleaning',
+      'roof-washing',
+      'window-cleaning'
+    ]::text[])
+    and not service.active;
+
+  select count(*)::integer
   into disabled_integration_count
   from public.integration_connections integration
   where integration.company_id = p_company_id
@@ -633,6 +700,7 @@ begin
     and integration.status = 'disabled';
 
   if configured_service_count <> cardinality(p_enabled_service_codes)
+    or available_service_count <> 5
     or disabled_integration_count <> 10
     or not exists (
       select 1
@@ -702,8 +770,9 @@ begin
     'commandId', p_command_id,
     'requestHash', p_request_hash,
     'serviceCount', configured_service_count,
+    'availableServiceCount', available_service_count,
     'integrationsDisabled', disabled_integration_count,
-    'serverTime', now()
+    'serverTime', setup_completed_at
   );
 end;
 $$;
@@ -738,6 +807,7 @@ begin
     'setupCommandId',
     'setupRequestHash',
     'setupInput',
+    'setupCompletedAt',
     'launchAuthorized',
     'requiredReviews',
     'enabledServiceCodes'
@@ -804,4 +874,4 @@ comment on function public.complete_storyops_setup(
   text[],
   boolean
 ) is
-  'Idempotently provisions one setup-mode company with review-required drafts and disabled providers.';
+  'Idempotently provisions one setup-mode company with all five supported service templates inactive, review-required drafts, and disabled providers.';

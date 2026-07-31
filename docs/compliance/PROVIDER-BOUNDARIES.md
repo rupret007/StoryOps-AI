@@ -7,8 +7,9 @@ message, and missing environment names without ever returning secret values.
 
 ## Shared contract
 
-Every adapter—OpenAI, Twilio, email, Stripe, Google Calendar, maps, NWS, VROOM,
-Storage, and accounting export—must enforce the same boundary:
+Every adapter—OpenAI, Twilio, email, Supabase Auth invitation delivery, Stripe,
+Google Calendar, maps, NWS, VROOM, Storage, and accounting export—must enforce
+the same boundary:
 
 Before the rules below, outbound activation has three independent gates: the
 provider-specific mode must be `live`, the matching explicit capability flag
@@ -17,6 +18,15 @@ present. A mode-only or flag-only configuration produces a disabled adapter,
 not a live adapter or sandbox receipt. `MODE=disabled` is an operational stop:
 it must report `disabled` and must not fall through to synthetic sandbox
 behavior.
+
+Company lifecycle is an additional independent gate. `setup` cannot perform
+ordinary work until the reviewed operating baseline changes it to `active`.
+`paused` denies every new operational/provider action at its reservation or
+exact pre-provider boundary, even when the integration itself is live and an
+approval exists. The pause does not discard a provider action already accepted:
+signed webhook/retrieval reconciliation, bounded failure recording, retention,
+and orphan cleanup remain available. Those paths may record external truth or
+remove an abandoned object; they may not initiate replacement customer work.
 
 1. Accept a typed request with company/resource IDs, actor, consent/approval
    references where relevant, and an idempotency key.
@@ -71,12 +81,21 @@ Lead ingress is separate from delivery/payment callbacks. Web/chat/email JSON
 uses timestamped HMAC; Twilio SMS/voice uses its request signature and canonical
 URL. The live endpoint is bound to one configured company, enforces body/time/
 company/contact limits, normalizes identity/message/consent without granting
-missing consent, and durably deduplicates the event before creating or extending
-lead, communication, and consent records. Sandbox intake is local-stack/
-loopback only and requires an explicit sandbox header. Because this boundary
-receives signed inbound events and never initiates a provider call,
-`LEAD_INTAKE_MODE` is intentionally mode-only; this exception does not apply to
-Twilio, email, or any other outbound adapter.
+missing consent, and durably deduplicates the event before one lease-bound RPC
+atomically resolves the customer/lead subject and persists communication and
+consent records. A converted lead linked to the matching customer is an alias
+of that customer even when only the converted lead retains the contact. STOP
+first commits a hashed contact-level suppression consulted by every outbound
+authorization. A missing or unrelated duplicate subject is then quarantined and
+reported as a failed intake without leaving an earlier grant usable. Twilio inbound
+fan-out through either signed endpoint uses the same provider event key, lease,
+and transactional RPC, so it cannot create a second subject or consent write.
+The lease has a five-minute reclaim window and a token checked by persistence
+and completion, so a crashed invocation can recover without allowing its stale
+pre-crash continuation to commit.
+Sandbox intake is local-stack/loopback only and requires an explicit sandbox
+header. Live intake requires both `LEAD_INTAKE_MODE=live` and
+`LEAD_INTAKE_LIVE_ENABLED=true`; a mismatch disables the boundary.
 
 ## Secret boundary
 
@@ -99,24 +118,35 @@ environment variable or key-management service:
 
 ## Provider activation matrix
 
-| Provider          | Sandbox behavior                                                                                        | Minimum live environment                                                                              | Manual YELLOW evidence gate                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| OpenAI            | Deterministic structured fixture/model; no network                                                      | `OPENAI_MODE=live`, enable flag, API key, explicit model; separate vision enable/model                | Prompt/tool/vision evals, policy tests, durable budgets, redaction/spend canary |
-| Twilio SMS/voice  | Synthetic queued/delivered-state reconciliation in a local ledger; no network or customer-contact proof | Live flag, account SID, auth token, owned From numbers, company/canonical webhook, Supabase           | Number ownership, registration/legal review, signature/opt-out/delivery canary  |
-| Email             | Synthetic local outbox and delivery/bounce-state events; no provider-delivery proof                     | Live flag, HTTPS provider/health endpoint, token, From identity, webhook secret, Supabase             | Domain authentication, reply/bounce/complaint/suppression canary                |
-| Stripe            | Synthetic local checkout/invoice/refund receipts; no funds move or provider payment is asserted         | Live flag, secret/signing keys, HTTPS return URLs, Supabase                                           | Account, signature/idempotency/reconciliation canary, accounting/tax sign-off   |
-| Google Calendar   | In-memory capacity windows and holds                                                                    | Approved calendar ID plus OAuth client/secret/refresh token, or diagnostic access token               | Least-privilege grant, expiry/refresh, ownership and conflict/race canary       |
-| Maps/geocoding    | Known DFW fixtures with declared precision                                                              | Live flag and restricted Google Maps key                                                              | Key restrictions, quota, precision/human-review rules and canary                |
-| NWS weather       | Fixed forecast/alert fixtures                                                                           | Live flag and identifying `NWS_USER_AGENT`                                                            | Monitored contact, timeout/cache, outage and stale-data canary                  |
-| VROOM             | Deterministic custom cost matrices                                                                      | Live flag, private HTTPS/loopback `VROOM_URL`; approved router backend for coordinates                | Version/health, matrix contract, timeout/capacity, manual route acceptance      |
-| Core field media  | IndexedDB-scoped packet; no Supabase Storage network call                                               | `VITE_STORYOPS_DATA_MODE=supabase`, public URL/anon key, private `job-media`, finalizer               | Auth/RLS, byte checksum/tamper, overwrite denial, offline/device canary         |
-| Signed targets    | `sandbox://` upload/download target                                                                     | `SIGNED_STORAGE_TARGETS_MODE=live`, explicit enable, server credentials, private bucket               | Optional target scope/expiry/use/reconciliation canary                          |
-| QuickBooks export | Deterministic owner-downloadable export artifact                                                        | `QUICKBOOKS_MODE=live` and `QUICKBOOKS_EXPORT_ENABLED=true`; any API mode needs separate OAuth review | Owner approval, balanced totals, duplicate guard, accountant import acceptance  |
+| Provider          | Sandbox behavior                                                                                        | Minimum live environment                                                                                                    | Manual YELLOW evidence gate                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| OpenAI            | Deterministic structured fixture/model; no network                                                      | `OPENAI_MODE=live`, enable flag, API key, explicit model; separate vision enable/model                                      | Prompt/tool/vision evals, policy tests, durable budgets, redaction/spend canary                      |
+| Twilio SMS/voice  | Synthetic queued/delivered-state reconciliation in a local ledger; no network or customer-contact proof | Live flag, account SID, auth token, owned From numbers, company/canonical webhook, Supabase                                 | Number ownership, registration/legal review, signature/opt-out/delivery canary                       |
+| Email             | Synthetic local outbox and delivery/bounce-state events; no provider-delivery proof                     | Live flag, HTTPS provider/health endpoint, token, From identity, webhook secret, Supabase                                   | Domain authentication, reply/bounce/complaint/suppression canary                                     |
+| Supabase Auth     | Disabled identity invitation; directory reconciliation only                                             | `STORYOPS_IDENTITY_INVITE_MODE=live`, independent live-enable flag, reviewed redirect, server-only Supabase credentials     | Read-only admin-directory probe, owner activation, trusted canary, controlled-launch reauthorization |
+| Stripe            | Synthetic local checkout/invoice/refund receipts; no funds move or provider payment is asserted         | Live flag, secret/signing keys, HTTPS return URLs, Supabase                                                                 | Account, signature/idempotency/reconciliation canary, accounting/tax sign-off                        |
+| Google Calendar   | In-memory capacity windows and holds                                                                    | Approved calendar ID plus OAuth client/secret/refresh token, or diagnostic access token                                     | Least-privilege grant, expiry/refresh, ownership and conflict/race canary                            |
+| Maps/geocoding    | Known DFW fixtures with declared precision                                                              | Live flag and restricted Google Maps key                                                                                    | Key restrictions, quota, precision/human-review rules and canary                                     |
+| NWS weather       | Fixed forecast/alert fixtures                                                                           | `WEATHER_MODE=live`, `NWS_LIVE_ENABLED=true`, identifying `NWS_USER_AGENT`                                                  | Monitored contact, timeout/cache, outage and stale-data canary                                       |
+| VROOM             | Deterministic custom cost matrices                                                                      | `ROUTING_MODE=live`, `VROOM_LIVE_ENABLED=true`, private HTTPS/loopback `VROOM_URL`; approved router backend for coordinates | Version/health, matrix contract, timeout/capacity, manual route acceptance                           |
+| Core field media  | IndexedDB-scoped packet; no Supabase Storage network call                                               | `VITE_STORYOPS_DATA_MODE=supabase`, public URL/anon key, private `job-media`, finalizer                                     | Auth/RLS, byte checksum/tamper, overwrite denial, offline/device canary                              |
+| Signed targets    | `sandbox://` upload/download target                                                                     | `SIGNED_STORAGE_TARGETS_MODE=live`, explicit enable, server credentials, private bucket                                     | Optional target scope/expiry/use/reconciliation canary                                               |
+| QuickBooks export | Deterministic owner-downloadable export artifact                                                        | `QUICKBOOKS_MODE=live` and `QUICKBOOKS_EXPORT_ENABLED=true`; any API mode needs separate OAuth review                       | Owner approval, balanced totals, duplicate guard, accountant import acceptance                       |
 
 “Not configured” is an expected status and must not be presented as healthy.
 The core golden path must remain usable in sandbox without keys.
 All listed live adapters are implemented server-side; none has passed a real
 credential/external provider canary in this release.
+
+Supabase Auth invitation delivery uses provider
+`supabase_auth:identity_invitation`; it is not interchangeable with the email
+adapter. Its health/canary operation is a bounded Admin-directory `GET`, never
+an invitation. A live environment proof is still inert until the active owner
+enables the exact connection. The final invitation marker repeats the
+deployment-fingerprint provider assertion under the provider lock and repeats
+the `customer_contact` launch assertion. Provider disable, health/generation
+change, launch revocation, or company pause blocks new submission; credentials
+alone never authorize it.
 
 ## OpenAI and agent orchestration
 
@@ -173,6 +203,10 @@ Boundary rules:
 - Opt-out creates a durable suppression before any agent continuation. Delivery
   callbacks update provider delivery only after signature and event
   deduplication.
+- Contact suppression is keyed by company, channel, and a normalized-contact
+  SHA-256 fingerprint. Ambiguous/no-subject STOP remains an operator-visible
+  failed event, but the suppression commits first and blocks any old
+  subject-scoped grant. START never releases it.
 - Live sends reload the exact snapshot, require it to remain the latest grant
   for the same subject/channel/purpose and stored recipient, honor
   do-not-contact, and consume durable company/contact rate windows.
@@ -180,6 +214,10 @@ Boundary rules:
   post-service worker commits an unknown-submission quarantine before the live
   create call; any timeout/crash/invalid-response ambiguity is excluded from
   resend and reconciled by authoritative SID/callback/account evidence.
+- The generic AI `communications.send_sms` tool is sandbox-only in this
+  release. Its metadata is non-idempotent and it fails before a live Twilio
+  create. Only the durable post-service outbox/quarantine path may submit a live
+  SMS until every caller has equivalent pre-submit and callback reconciliation.
 - Call recordings/transcripts are off until counsel-approved notice, consent,
   retention, access, and deletion controls exist.
 - **REQUIRED COMMUNICATIONS/RECORDING LEGAL REVIEW:** TCPA, FCC consent/
@@ -270,6 +308,35 @@ Boundary rules:
 - Weather evidence may block or request approval; it never independently
   certifies ladder, roof, chemical, heat, or driving safety.
 
+## Pre-departure dispatch clearance
+
+- Live departure has a separate dual switch:
+  `DISPATCH_CLEARANCE_MODE=live` and
+  `DISPATCH_CLEARANCE_LIVE_ENABLED=true`. It also requires independently
+  authorized live NWS/weather and VROOM/routing provider connections for the
+  exact company. A mode-only, flag-only, sandbox, disabled, or unknown response
+  never authorizes `confirmed → en_route`.
+- `dispatch-clearance` accepts only the exact company, visit/version,
+  idempotency key, and bounded trace context. Trusted server code loads the
+  current job/property/crew/window, reviewed geocode provenance, published
+  configuration, active operating baseline, original scheduling receipt, and
+  provider bindings; the browser and model cannot supply or override those
+  facts.
+- The service-role recorder persists append-only NWS and VROOM observations and
+  one short-lived receipt. The authenticated consume RPC revalidates every
+  binding under locks, consumes the receipt once, and changes the visit to
+  `en_route` in the same transaction. Generic visit transitions and direct DML
+  cannot create that authorization.
+- Provider outage, stale or incomplete payload, weather hold, route
+  infeasibility/unassignment, changed server fact, hash mismatch, or receipt
+  replay is a stop condition. Do not substitute a manual “safe” value or carry
+  forward the booking-time forecast/route.
+- Departure is intentionally absent from the offline allowlist. Reconnect,
+  reload authoritative state, and obtain a new exact receipt. A consumed
+  receipt proves only that the bounded provider/policy checks passed for that
+  transition; it is not a driving, site, ladder, chemical, environmental, or
+  legal safety certification.
+
 ## VROOM routing service
 
 - VROOM core is pinned to `v1.15.0` commit
@@ -312,6 +379,16 @@ Boundary rules:
   server `received_at` timestamp.
 - Store object IDs and metadata in domain records; deliver short-lived signed
   URLs only after authorization. A bucket’s `public` flag is a security decision.
+- The scope-photo workflow takes the active-company lock before it creates a
+  fresh signed upload target, including an exact reservation replay. A paused
+  company receives no new target. A token minted before the pause is not
+  retroactively revoked by the lifecycle command, so keep expiry short and
+  treat it as sensitive until then; paused Storage/finalization gates prevent
+  the object from becoming registered evidence.
+- Expired unregistered scope-photo reservations remain eligible for the trusted
+  orphan worker while paused. Claim and completion are bounded cleanup/
+  bookkeeping paths, not an upload or evidence-finalization bypass; retain the
+  cleanup result and never delete registered or held evidence through it.
 - Validate maximum size, declared/detected media type, company/job ownership,
   uploader, hash, and retention class. Preserve originals used as evidence.
 - Back up object bytes separately from the database. Supabase documents that

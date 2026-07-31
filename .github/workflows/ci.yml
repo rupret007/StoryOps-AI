@@ -48,11 +48,20 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Install locked VROOM runtime dependencies
+        run: npm run install:vroom-runtime
+
       - name: Audit dependency graph
         run: npm audit --audit-level=high
 
+      - name: Audit VROOM runtime dependency graph
+        run: npm audit --prefix infra/vroom/runtime-package --audit-level=high
+
       - name: Verify generated third-party notices
         run: npm run licenses:check
+
+      - name: Check formatting
+        run: npm run format:check
 
       - name: Validate no-key configuration
         run: npm run setup:app -- --check --skip-install
@@ -68,6 +77,9 @@ jobs:
 
       - name: Unit and UI tests
         run: npm test
+
+      - name: Run AI evaluations
+        run: npm run eval:ai
 
       - name: Infrastructure integration tests
         run: npm run test:infra
@@ -85,6 +97,7 @@ jobs:
             LICENSE.atomic-crm.md
             THIRD_PARTY.md
             NPM_THIRD_PARTY_NOTICES.txt
+            infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -143,11 +156,16 @@ jobs:
         run: npm ci
 
       - name: Start pinned local Supabase
-        run: npx --yes supabase@2.110.0 start
+        run: node scripts/setup.mjs --skip-install --with-supabase --env-file .env.local
 
       - name: Run migration, RLS, RPC, and Edge release contract
         run: npm run test:supabase -- --reset
 
+      - name: Run disposable migration upgrade rehearsal
+        run: npm run test:upgrade
+
       - name: Stop local Supabase
         if: always()
-        run: npx --yes supabase@2.110.0 stop --no-backup
+        run: >-
+          npx --yes supabase@2.110.0 stop --no-backup
+          --network-id storyops-ai-supabase-loopback

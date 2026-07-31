@@ -1,4 +1,8 @@
-import { depositCheckoutResponseSchema, goldenPathRequestSchema } from './contracts.ts';
+import {
+  depositCheckoutResponseSchema,
+  goldenPathRequestSchema,
+  invoiceCheckoutResponseSchema,
+} from './contracts.ts';
 import { resolveLiveProviderActivation } from '../../../src/core/integrations/configuration.ts';
 
 function assert(condition: unknown, message = 'Assertion failed.'): asserts condition {
@@ -46,6 +50,15 @@ Deno.test('deposit checkout request accepts identifiers and version only', () =>
     }).success,
   );
   assert(
+    goldenPathRequestSchema.safeParse({
+      companyId: COMPANY_ID,
+      action: 'invoice.checkout',
+      commandId: INVOICE_ID,
+      entityId: INVOICE_ID,
+      expectedVersion: 3,
+    }).success,
+  );
+  assert(
     !goldenPathRequestSchema.safeParse({
       companyId: COMPANY_ID,
       action: 'deposit.checkout',
@@ -53,6 +66,38 @@ Deno.test('deposit checkout request accepts identifiers and version only', () =>
       entityId: QUOTE_ID,
       expectedVersion: 1,
       amount: '0.01',
+    }).success,
+  );
+});
+
+Deno.test('invoice checkout is pending-only and sandbox receipts say no funds moved', () => {
+  const sandbox = invoiceCheckoutResponseSchema.safeParse({
+    action: 'invoice.checkout',
+    status: 'checkout_open',
+    mode: 'sandbox',
+    quoteId: QUOTE_ID,
+    jobId: JOB_ID,
+    invoiceId: INVOICE_ID,
+    invoiceVersion: 3,
+    amount: '528.00',
+    currency: 'USD',
+    paymentVerified: false,
+    invoicePaid: false,
+    replayed: false,
+    checkoutId: 'cs_sandbox_invoice_balance',
+    sandboxReceipt: 'Sandbox only; no funds moved and no payment was recorded.',
+  });
+  assert(sandbox.success);
+  assert(
+    !invoiceCheckoutResponseSchema.safeParse({
+      ...sandbox.data,
+      paymentVerified: true,
+    }).success,
+  );
+  assert(
+    !invoiceCheckoutResponseSchema.safeParse({
+      ...sandbox.data,
+      invoicePaid: true,
     }).success,
   );
 });

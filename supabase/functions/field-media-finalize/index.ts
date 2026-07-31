@@ -97,7 +97,7 @@ Deno.serve(async (request) => {
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
     const { data, error: finalizationError } = await serviceClient.rpc(
-      'finalize_storyops_media_upload',
+      'finalize_storyops_media_upload_from_edge',
       {
         p_company_id: companyId,
         p_command_id: command.commandId,

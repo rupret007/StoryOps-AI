@@ -3,7 +3,10 @@ import type {
   StructuredGenerationRequest,
   StructuredModel,
 } from '../../../src/core/ai/contracts.ts';
-import { officeAgentOutputSchema } from '../../../src/core/ai/contracts.ts';
+import {
+  decodeOpenAiOfficeAgentOutput,
+  openAiOfficeAgentOutputSchema,
+} from '../../../src/core/ai/contracts.ts';
 
 export class EdgeOpenAiAgentsModel implements StructuredModel {
   readonly provider = 'openai';
@@ -31,7 +34,7 @@ export class EdgeOpenAiAgentsModel implements StructuredModel {
         maxTokens: this.maxOutputTokens,
         store: false,
       },
-      outputType: officeAgentOutputSchema,
+      outputType: openAiOfficeAgentOutputSchema,
       tools: [],
       handoffs: [],
     });
@@ -41,6 +44,6 @@ export class EdgeOpenAiAgentsModel implements StructuredModel {
     if (!result.finalOutput) {
       throw new Error('OpenAI returned no structured output.');
     }
-    return result.finalOutput;
+    return decodeOpenAiOfficeAgentOutput(result.finalOutput);
   }
 }

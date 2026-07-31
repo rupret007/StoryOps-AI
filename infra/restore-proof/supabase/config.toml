@@ -1,0 +1,60 @@
+# Disposable, isolated target for the StoryOps recovery drill.
+#
+# Start only with the pinned CLI and the exclusions documented in
+# docs/compliance/BACKUP-RESTORE.md. This project intentionally has no
+# migrations or seed: the restore command must populate it from a verified
+# backup. Never reuse the primary StoryOps project_id or ports.
+project_id = "storyops-restore-proof"
+
+[api]
+enabled = true
+port = 55321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 55322
+shadow_port = 55320
+major_version = 15
+
+[db.seed]
+enabled = false
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+port = 55323
+api_url = "http://127.0.0.1"
+
+[local_smtp]
+enabled = false
+port = 55324
+
+[storage]
+enabled = true
+file_size_limit = "25MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5173"
+additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = false
+minimum_password_length = 12
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+enable_confirmations = true
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false
+policy = "per_worker"

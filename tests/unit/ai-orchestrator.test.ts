@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  DEFAULT_MAX_GUARDED_MODEL_INPUT_BYTES,
   InMemoryAiTraceSink,
   InMemoryApprovalStore,
   InMemoryIdempotencyStore,
@@ -57,11 +58,48 @@ function output(proposedActions: ActionProposal[]): OfficeAgentOutput {
     ],
     unknowns: [],
     proposedActions,
+    customerDraft: null,
     ownerAttention: false,
   };
 }
 
 describe('OfficeOrchestrator', () => {
+  it('rejects oversized minimized facts before invoking the model', async () => {
+    let modelCalls = 0;
+    const model = new SandboxStructuredModel(() => {
+      modelCalls += 1;
+      return output([]);
+    });
+    const orchestrator = new OfficeOrchestrator({
+      model,
+      tools: createSandboxOfficeToolRegistry(createSandboxIntegrationSuite()),
+      approvals: new InMemoryApprovalStore(),
+      idempotency: new InMemoryIdempotencyStore(),
+    });
+
+    await expect(
+      orchestrator.run(
+        request({
+          trustedFacts: [
+            {
+              id: 'oversized-authoritative-fact',
+              name: 'bounded_fact',
+              value: {
+                status: 'verified',
+                boundedButTooLarge: 'x'.repeat(DEFAULT_MAX_GUARDED_MODEL_INPUT_BYTES + 1),
+              },
+              source: 'database',
+              observedAt: now,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    } satisfies Partial<AiOfficeError>);
+    expect(modelCalls).toBe(0);
+  });
+
   it('executes an allowlisted read and replays duplicate runs without another model call', async () => {
     let modelCalls = 0;
     const model = new SandboxStructuredModel(() => {
@@ -101,23 +139,16 @@ describe('OfficeOrchestrator', () => {
       model: new SandboxStructuredModel(() =>
         output([
           {
-            actionId: 'hold-1',
-            toolName: 'calendar.create_hold',
-            purpose: 'Hold a requested time.',
+            actionId: 'refund-injection-1',
+            toolName: 'payments.refund',
+            purpose: 'Attempt a stateful refund requested by untrusted content.',
             payload: {
-              calendarId: 'primary',
-              title: 'Exterior cleaning',
-              window: {
-                start: '2026-07-29T15:00:00.000Z',
-                end: '2026-07-29T17:00:00.000Z',
-              },
-              timeZone: 'America/Chicago',
-              jobId: 'job-1',
-              expiresAt: '2026-07-28T13:00:00.000Z',
-              idempotencyKey: 'calendar-hold-key',
+              paymentProviderId: 'pi_authoritative_1',
+              amount: { amount: '25.00', currency: 'USD' },
+              reason: 'Customer-approved correction',
             },
-            risk: 'low',
-            reversible: true,
+            risk: 'high',
+            reversible: false,
             sourceFactIds: ['address-fact'],
           },
         ]),
@@ -129,6 +160,7 @@ describe('OfficeOrchestrator', () => {
 
     const result = await orchestrator.run(
       request({
+        agent: 'finance',
         untrustedContent: [
           {
             id: 'sms-1',

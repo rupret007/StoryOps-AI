@@ -5,7 +5,13 @@ import type {
 } from '../../../src/core/integrations/contracts.ts';
 import { IntegrationError } from '../../../src/core/integrations/contracts.ts';
 import {
+  PRIVATE_WORKER_TOKEN_MINIMUM_BYTES,
+  inspectPrivateWorkerConfiguration,
+} from '../_shared/private-worker.ts';
+import {
   outboundClaimSchema,
+  workerRequestSchema,
+  workerResultSchema,
   workerResponseSchema,
   type OutboundClaim,
   type WorkerResult,
@@ -39,6 +45,21 @@ function result(status: WorkerResult['status']): WorkerResult {
     externalDeliveryClaimed: status === 'completed',
   };
 }
+
+Deno.test('manual reconciliation result preserves the provider-read error separately', () => {
+  const parsed = workerResultSchema.parse({
+    schemaVersion: 'storyops-post-service-worker-result-v1',
+    followupId: CLAIM_IDENTITY.followupId,
+    status: 'submitted',
+    errorCode: 'RECONCILIATION_EXHAUSTED',
+    providerReadErrorCode: 'HTTP_503',
+    retryScheduled: false,
+    manualReconciliationRequired: true,
+    externalDeliveryClaimed: false,
+  });
+  assert(parsed.manualReconciliationRequired === true);
+  assert(parsed.providerReadErrorCode === 'HTTP_503');
+});
 
 function repository(records: Array<Record<string, unknown>>): OutboundWorkerRepository {
   return {
@@ -361,7 +382,10 @@ Deno.test('live reconciliation reads provider state and never resends', async ()
 Deno.test('worker response exposes only safe receipt metadata', () => {
   assert(
     workerResponseSchema.safeParse({
-      schemaVersion: 'storyops-post-service-worker-run-v1',
+      schemaVersion: 'storyops-post-service-worker-run-v2',
+      activationMode: 'manual',
+      trigger: 'manual',
+      status: 'processed',
       workerId: 'a0000000-0000-4000-8000-000000000003',
       claimed: 1,
       empty: false,
@@ -376,6 +400,78 @@ Deno.test('worker response exposes only safe receipt metadata', () => {
           externalDeliveryClaimed: false,
         },
       ],
+      checkedAt: '2026-07-30T21:30:00.000Z',
     }).success,
   );
+});
+
+Deno.test('private worker request requires an explicit bounded trigger', () => {
+  assert(
+    workerRequestSchema.safeParse({
+      companyId: CLAIM_IDENTITY.companyId,
+      trigger: 'scheduled',
+      batchSize: 25,
+      leaseSeconds: 300,
+    }).success,
+  );
+  assert(
+    !workerRequestSchema.safeParse({
+      trigger: 'scheduled',
+      batchSize: 25,
+      leaseSeconds: 300,
+    }).success,
+  );
+  assert(!workerRequestSchema.safeParse({ batchSize: 10, leaseSeconds: 90 }).success);
+  assert(
+    !workerRequestSchema.safeParse({
+      companyId: CLAIM_IDENTITY.companyId,
+      trigger: 'scheduled',
+      batchSize: 26,
+      leaseSeconds: 90,
+    }).success,
+  );
+});
+
+Deno.test('private worker credential is dedicated, independent, and at least 32 bytes', () => {
+  const serviceRoleKey = 'service-role-key-that-is-longer-than-thirty-two-bytes';
+  const validWorkerToken = 'post-service-worker-token-that-is-long-enough';
+  const peerWorkerToken = 'transactional-worker-token-that-is-long-enough';
+  assert(
+    new TextEncoder().encode(validWorkerToken).byteLength >= PRIVATE_WORKER_TOKEN_MINIMUM_BYTES,
+  );
+
+  const base = {
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
+    POST_SERVICE_WORKER_MODE: 'scheduled',
+    TRANSACTIONAL_OUTBOUND_WORKER_TOKEN: peerWorkerToken,
+  };
+  assert(
+    inspectPrivateWorkerConfiguration(
+      { ...base, POST_SERVICE_WORKER_TOKEN: validWorkerToken },
+      {
+        label: 'post-service worker',
+        tokenName: 'POST_SERVICE_WORKER_TOKEN',
+        modeName: 'POST_SERVICE_WORKER_MODE',
+        peerTokenNames: ['TRANSACTIONAL_OUTBOUND_WORKER_TOKEN'],
+      },
+    ).readiness === 'ready',
+  );
+  for (const [token, expectedStatus] of [
+    ['too-short', 'too_short'],
+    [` ${validWorkerToken}`, 'surrounding_whitespace'],
+    [serviceRoleKey, 'service_role_reuse'],
+    [peerWorkerToken, 'peer_worker_reuse'],
+  ] as const) {
+    const inspection = inspectPrivateWorkerConfiguration(
+      { ...base, POST_SERVICE_WORKER_TOKEN: token },
+      {
+        label: 'post-service worker',
+        tokenName: 'POST_SERVICE_WORKER_TOKEN',
+        modeName: 'POST_SERVICE_WORKER_MODE',
+        peerTokenNames: ['TRANSACTIONAL_OUTBOUND_WORKER_TOKEN'],
+      },
+    );
+    assert(inspection.credentialStatus === expectedStatus);
+    assert(inspection.readiness === 'blocked');
+  }
 });

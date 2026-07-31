@@ -263,6 +263,10 @@ begin
   end if;
 
   if not p_dry_run and p_approval_request_id is not null then
+    perform private.authorize_storyops_approval_consumption(
+      p_company_id,
+      p_approval_request_id
+    );
     update public.approval_requests
     set execution_receipt = jsonb_build_object(
       'runId', core_result.run_id,
@@ -515,8 +519,11 @@ declare
   already_existed_value boolean := false;
   allowed_keys text[];
 begin
-  if current_user not in ('postgres', 'service_role')
-    and auth.role() is distinct from 'service_role'
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
   then
     raise exception 'POST_SERVICE_TRUSTED_EDGE_REQUIRED';
   end if;

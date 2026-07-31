@@ -2,7 +2,7 @@
 
 **Audience:** owner and designated dispatcher/operator  
 **Status:** V1 sandbox operations plus production activation controls  
-**Last reviewed:** 2026-07-28
+**Last reviewed:** 2026-07-29
 
 The owner is accountable for business policy and every live commitment even
 when an automation prepared it. The safest operating posture is simple:
@@ -28,9 +28,12 @@ company, follow the
    changes only synthetic IndexedDB state. In Supabase mode, a protected
    first-owner invitation may use it to create one setup-only company, first
    owner membership, inactive selected services, draft zero-valued price book/
-   terms/retention records, ten disabled optional integrations, and
+   terms/retention records, eleven disabled integrations (including the
+   separately gated Supabase Auth invitation provider), and
    `launchAuthorized=false`. It does not publish services, prices, terms, or
-   authorize launch.
+   authorize launch. The ordinary workspace remains closed while the company is
+   `setup`; only the finite reviewed configuration/baseline sequence may
+   activate it.
 3. For local authenticated/RLS verification, start the local Supabase stack and
    set `VITE_STORYOPS_DATA_MODE=supabase` with the local public URL, public anon
    key, and seeded company UUID. The app will present magic-link sign-in and
@@ -95,6 +98,63 @@ trusting an email claim. The sole first-owner exception is
 company UUID. Browser state, email address, the public UUID, and user-editable
 metadata are never authority.
 
+## Company operational control
+
+**Company control** is an owner-only company-wide kill switch in authenticated
+Supabase mode. It is unavailable to dispatchers, technicians, customers,
+service credentials, and a company still in `setup`. Do not use a company
+profile/settings edit or direct SQL from an operator session to change
+lifecycle state.
+
+To pause:
+
+1. make people and the site safe first; the app is not an emergency system;
+2. open **Company control** from a currently server-verified owner session;
+3. record a factual reason of 10–1,000 characters and type the exact displayed
+   `PAUSE <company name>` confirmation;
+4. submit once and retain the lifecycle receipt, request hash, server time, and
+   audit event; and
+5. refresh recovery state from a second authorized owner device where possible.
+
+Pending offline packets never prevent pausing. They stay on the originating
+device, cannot sync while paused, and are not copied into the lifecycle
+request. The recovery page intentionally shows only packet kind, status, and
+creation time, plus last server verification and any current recovery error.
+Do not add payloads, entity/customer IDs, photo bytes, thumbnails, notes, or
+signature data to screenshots, logs, or incident channels.
+
+While paused, ordinary tenant writes, new provider-call or automation starts,
+field finalization, and Storage writes fail closed. The scope-photo boundary
+will not mint a fresh signed upload target, including from a replayed
+reservation. A signed token issued before the pause is not retroactively
+revoked; treat it as sensitive until its short expiry. It cannot be finalized
+into company evidence while paused, and an expired unregistered reservation may
+be processed by the trusted orphan-cleanup worker.
+
+Do not disable reconciliation just because the company is paused. Signed
+callbacks/provider retrieval for already accepted external work, bounded
+failure bookkeeping, approved retention processing, and orphan cleanup remain
+available so StoryOps does not lose external truth or leave abandoned objects.
+Do not use those narrow paths to start new customer work.
+
+To reactivate:
+
+1. identify and disposition the incident/cause, including accepted or unknown
+   provider actions and every pending device packet;
+2. from a server-verified owner session, enter the reason and exact
+   `REACTIVATE <company name>` confirmation;
+3. reconcile the returned receipt against the read-only lifecycle history;
+4. require a successful full server workspace reload before operating; and
+5. replay the original offline queue idempotently, resolving any stale version
+   or authorization conflict instead of creating replacement commands.
+
+The server accepts only `active → paused` and `paused → active` with an exact
+expected state and canonical hashed request. Same-command/same-request replay
+returns the original result; changed reuse or stale state conflicts.
+Reactivation restores eligible operational writes only. It does not turn on
+live providers, authorize customer contact, approve launch, release a payment
+hold, or resolve the incident by itself.
+
 When someone leaves:
 
 1. disable/revoke their auth access and active membership;
@@ -112,7 +172,9 @@ Before publishing:
 
 - verify service code/unit, included quantity, service/company minimum,
   attribute allowlist/multiplier, add-on, estimated cost/duration, taxability,
-  travel zone, deposit, automatic discount limit, and margin floor;
+  exact non-overlapping five-digit ZIP-to-travel-zone mappings, deposit,
+  automatic discount limit, and margin floor;
+- record the travel-zone mapping reviewer, review time, and evidence reference;
 - attach tax/legal/business review evidence;
 - run fixed fixtures and boundary tests;
 - compare the old/new totals on representative properties;
@@ -122,6 +184,16 @@ Before publishing:
 Published versions are immutable. Correct an error by publishing a new version,
 not editing history. Existing estimates/quotes retain their source version and
 calculation snapshot.
+
+Mileage bands are optional descriptive metadata; they never select a fee.
+StoryOps resolves a travel fee only from one exact reviewed ZIP mapping.
+Unmapped or multiply mapped ZIPs block the estimate. After upgrading an
+installation with a legacy active price book, check
+`companies.settings.travelZoneRemediationRequired`. If true, review the ZIP
+mappings in Company Configuration Studio, publish a new live configuration,
+then publish a new operating baseline. Do not clear the flag manually; a
+successfully activated price book with complete mapping evidence clears it
+atomically.
 
 Measurements need method, unit, source, confidence, observation time, and human
 verification where required. Photo observations may inform scope but may not
@@ -214,11 +286,12 @@ still not healthy until its active probe and canary are recorded.
 - Persist opt-out before any later automation. Do not send marketing after
   withdrawal.
 - Provider acceptance is not delivery. Reconcile callbacks/retrieval.
-- Run `post-service-worker` only from a trusted scheduler using the Supabase
-  service-role bearer credential. The finite endpoint leases at most 25 due
-  records per request, rechecks current consent/contact/suppression, prepares a
-  deterministic routine template, and submits through the configured adapter.
-  Schedule it at least every 15 minutes during approved contact hours.
+- Run `post-service-worker` only from a trusted scheduler using its independent
+  `POST_SERVICE_WORKER_TOKEN`; never use the Supabase service-role key as a
+  network bearer. The finite endpoint leases at most 25 due records per
+  request, rechecks current consent/contact/suppression, prepares a deterministic
+  routine template, and submits through the configured adapter. Schedule it at
+  least every 15 minutes during approved contact hours.
 - A `sandboxed` follow-up and `sandbox_recorded` provider status prove only
   local workflow execution. The linked communication remains `queued`, has no
   provider message ID, and must never be reported as sent or delivered.
@@ -275,6 +348,13 @@ have an owner/dispatcher resolve the authoritative server state. Hosted
 device-loss, revoked-access, conflict, quota-exhaustion, and recovery canaries
 remain manual YELLOW launch gates.
 
+If the company is paused, do not clear or replace the queue. The owner may still
+engage the kill switch when packets are pending; the device preserves them and
+shows metadata-only diagnostics. Resume sync only after owner reactivation and
+a successful full workspace reload. A packet rejected because its role,
+assignment, expected version, or company facts changed remains a conflict for
+review—not permission to replay it under a new identity.
+
 ## Invoices, payments, and accounting
 
 - Issue only from completed, reviewed work and approved amounts.
@@ -324,6 +404,8 @@ event, secret exposure, cross-company access, or missing evidence:
 
 1. make people/site safe and use the reviewed emergency plan;
 2. stop/disable the affected automation or provider without deleting evidence;
+   when the impact is company-wide, have an owner with active membership engage
+   **Company control** and record the exact pause receipt;
 3. preserve original records, photos, raw provider IDs, logs, trace/approval/
    idempotency IDs, and timeline;
 4. notify the accountable owner and required professional/authority;
@@ -331,7 +413,8 @@ event, secret exposure, cross-company access, or missing evidence:
 6. use
    [the incident playbook](incidents/AI_INTEGRATION_INCIDENT_PLAYBOOK.md) and
    [incident template](templates/INCIDENT_REPORT.md); and
-7. re-enable only after corrective-action tests and owner approval.
+7. reactivate/re-enable only after corrective-action tests, reconciliation,
+   full workspace readback, and owner approval.
 
 AI may organize supplied facts and draft reviewed communications. It may not
 diagnose, direct emergency/chemical response, admit liability, contact a

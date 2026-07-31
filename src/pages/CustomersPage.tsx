@@ -6,6 +6,7 @@ import {
   Download,
   Home,
   MapPin,
+  MapPinned,
   Plus,
   Search,
   ShieldCheck,
@@ -14,6 +15,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, Badge, Button, Card, PageHeader } from '@/components/ui/Primitives';
+import {
+  candidateIsConfirmable,
+  type PropertyGeocodeCandidatesReceipt,
+} from '@/core/properties/contracts';
 import { useStoryOps } from '@/state/StoryOpsProvider';
 import { downloadText, rowsToCsv } from '@/utils/download';
 
@@ -92,6 +97,14 @@ export function CustomersPage() {
   const [records, setRecords] = useState(initialCustomers);
   const [selectedId, setSelectedId] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string>();
+  const [geocodeBusyId, setGeocodeBusyId] = useState<string>();
+  const [geocodeError, setGeocodeError] = useState<{
+    propertyId: string;
+    message: string;
+  }>();
+  const [geocodeReceipt, setGeocodeReceipt] = useState<PropertyGeocodeCandidatesReceipt>();
   const [draft, setDraft] = useState({
     name: '',
     email: '',
@@ -114,6 +127,10 @@ export function CustomersPage() {
         }))
       : records;
   const selected = displayedRecords.find((customer) => customer.id === selectedId);
+  const selectedProperties =
+    state.dataMode === 'supabase' && selected
+      ? (state.live?.properties ?? []).filter((property) => property.customerId === selected.id)
+      : [];
   const visible = displayedRecords.filter((customer) => {
     const matchesQuery = `${customer.name} ${customer.email} ${customer.address}`
       .toLowerCase()
@@ -359,7 +376,7 @@ export function CustomersPage() {
           onMouseDown={() => setSelectedId(undefined)}
         >
           <section
-            className="record-dialog"
+            className="record-dialog customer-record-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="customer-record-title"
@@ -393,6 +410,179 @@ export function CustomersPage() {
                 <span>{selected.nextDue}</span>
               </div>
             </div>
+            {state.dataMode === 'supabase' && (
+              <section
+                className="property-geocode-review"
+                aria-labelledby="property-geocode-review-title"
+              >
+                <div className="property-geocode-review__heading">
+                  <div>
+                    <p className="eyebrow">Scheduling prerequisite</p>
+                    <h3 id="property-geocode-review-title">Review service coordinates</h3>
+                  </div>
+                  <MapPinned aria-hidden="true" size={19} />
+                </div>
+                <p>
+                  StoryOps accepts coordinates only from a fresh live Maps result that an owner or
+                  dispatcher explicitly confirms. Typed addresses never become coordinates by
+                  inference.
+                </p>
+                {selectedProperties.length === 0 ? (
+                  <div className="property-geocode-review__notice" role="status">
+                    No role-visible service property is attached to this customer.
+                  </div>
+                ) : (
+                  <ul className="property-geocode-list" aria-label="Customer service properties">
+                    {selectedProperties.map((property) => {
+                      const candidates =
+                        geocodeReceipt?.propertyId === property.id &&
+                        geocodeReceipt.propertyVersion === property.version
+                          ? geocodeReceipt.candidates
+                          : [];
+                      const busy = geocodeBusyId === property.id;
+                      return (
+                        <li key={property.id}>
+                          <div className="property-geocode-row">
+                            <div>
+                              <strong>{property.name}</strong>
+                              <span>{property.address}</span>
+                              <small>Record version {property.version}</small>
+                            </div>
+                            <Badge
+                              tone={
+                                property.geocodeReviewStatus === 'confirmed'
+                                  ? 'positive'
+                                  : 'warning'
+                              }
+                            >
+                              {property.geocodeReviewStatus === 'confirmed'
+                                ? 'Live coordinates reviewed'
+                                : 'Review required'}
+                            </Badge>
+                          </div>
+                          {property.geocodeReviewStatus === 'confirmed' ? (
+                            <div className="property-geocode-review__notice" role="status">
+                              {property.geocodeProvider?.replaceAll('_', ' ')} ·{' '}
+                              {property.geocodePrecision} ·{' '}
+                              {Math.round((property.geocodeConfidence ?? 0) * 100)}% provider
+                              confidence
+                            </div>
+                          ) : (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                loading={busy && candidates.length === 0}
+                                disabled={
+                                  !can('properties.write') ||
+                                  !state.online ||
+                                  !state.serverVerifiedAt ||
+                                  property.version < 1
+                                }
+                                onClick={async () => {
+                                  setGeocodeBusyId(property.id);
+                                  setGeocodeError(undefined);
+                                  const receipt = await actions.requestPropertyGeocode({
+                                    propertyId: property.id,
+                                    expectedPropertyVersion: property.version,
+                                  });
+                                  setGeocodeBusyId(undefined);
+                                  if (receipt) {
+                                    setGeocodeReceipt(receipt);
+                                  } else {
+                                    setGeocodeError({
+                                      propertyId: property.id,
+                                      message:
+                                        'No coordinates were accepted. Verify live Maps health, then retry this exact property.',
+                                    });
+                                  }
+                                }}
+                              >
+                                Request live address candidates
+                              </Button>
+                              {geocodeError?.propertyId === property.id && (
+                                <div className="property-geocode-review__error" role="alert">
+                                  {geocodeError.message}
+                                </div>
+                              )}
+                              {candidates.length > 0 && (
+                                <div
+                                  className="property-geocode-candidates"
+                                  aria-label={`Live address candidates for ${property.name}`}
+                                >
+                                  <p>
+                                    Compare the provider result with the customer-supplied service
+                                    address. Confirmation changes the property record and unlocks
+                                    only the coordinate prerequisite.
+                                  </p>
+                                  <ul>
+                                    {candidates.map((candidate) => {
+                                      const confirmable = candidateIsConfirmable(candidate);
+                                      return (
+                                        <li key={candidate.id}>
+                                          <div>
+                                            <strong>{candidate.formattedAddress}</strong>
+                                            <span>
+                                              Google Maps · {candidate.precision} ·{' '}
+                                              {Math.round(candidate.confidence * 100)}% confidence
+                                            </span>
+                                            <small>
+                                              Evidence expires{' '}
+                                              <time dateTime={candidate.expiresAt}>
+                                                {new Date(candidate.expiresAt).toLocaleString()}
+                                              </time>
+                                            </small>
+                                          </div>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            loading={busy}
+                                            disabled={!confirmable || busy}
+                                            aria-label={`Confirm exact address ${candidate.formattedAddress}`}
+                                            onClick={async () => {
+                                              setGeocodeBusyId(property.id);
+                                              setGeocodeError(undefined);
+                                              const receipt = await actions.confirmPropertyGeocode({
+                                                propertyId: property.id,
+                                                expectedPropertyVersion: property.version,
+                                                candidateId: candidate.id,
+                                              });
+                                              setGeocodeBusyId(undefined);
+                                              if (receipt) {
+                                                setGeocodeReceipt(undefined);
+                                              } else {
+                                                setGeocodeError({
+                                                  propertyId: property.id,
+                                                  message:
+                                                    'The candidate was not confirmed. Refresh the property and request fresh evidence.',
+                                                });
+                                              }
+                                            }}
+                                          >
+                                            Confirm exact address
+                                          </Button>
+                                          {!confirmable && (
+                                            <small className="property-geocode-candidate__blocked">
+                                              This result is stale, too imprecise, or below the
+                                              confirmation threshold.
+                                            </small>
+                                          )}
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            )}
           </section>
         </div>
       )}
@@ -405,12 +595,14 @@ export function CustomersPage() {
             aria-modal="true"
             aria-labelledby="add-customer-title"
             onMouseDown={(event) => event.stopPropagation()}
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
               const name = draft.name.trim();
               if (!name || !draft.address.trim()) return;
               if (state.dataMode === 'supabase') {
-                actions.createCustomerProperty({
+                setCreateBusy(true);
+                setCreateError(undefined);
+                const receipt = await actions.createCustomerProperty({
                   displayName: name,
                   email: draft.email,
                   phone: draft.phone,
@@ -424,6 +616,13 @@ export function CustomersPage() {
                     country: 'US',
                   },
                 });
+                setCreateBusy(false);
+                if (!receipt) {
+                  setCreateError(
+                    'No creation receipt was accepted. Keep these facts unchanged and retry the same operation, or refresh the authoritative workspace before entering different facts.',
+                  );
+                  return;
+                }
                 setDraft({
                   name: '',
                   email: '',
@@ -468,6 +667,11 @@ export function CustomersPage() {
             <p className="section-card__subtitle">
               Enter supplied facts only. Measurements and pricing remain separate.
             </p>
+            {createError && (
+              <div className="property-geocode-review__error" role="alert">
+                {createError}
+              </div>
+            )}
             <label htmlFor="new-customer-name">Customer name</label>
             <input
               id="new-customer-name"
@@ -538,10 +742,17 @@ export function CustomersPage() {
               }
             />
             <div className="record-dialog__actions">
-              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={createBusy}
+                onClick={() => setAddOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit">Create customer</Button>
+              <Button type="submit" loading={createBusy}>
+                Create customer and property
+              </Button>
             </div>
           </form>
         </div>

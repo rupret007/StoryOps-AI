@@ -27,6 +27,10 @@ export type StripeReconciliation = {
   quoteId?: string;
   jobId?: string;
   approvalId?: string;
+  checkoutPurpose?: 'quote_deposit' | 'invoice_balance';
+  checkoutAttempt?: number;
+  invoiceId?: string;
+  invoiceVersion?: number;
   paymentIntentId?: string;
   amountCents?: number;
   amountPaidCents?: number;
@@ -121,6 +125,24 @@ function optionalNonNegativeInteger(value: unknown, field: string): number | und
     );
   }
   return value as number;
+}
+
+function optionalPositiveIntegerMetadata(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || !/^[1-9]\d*$/u.test(value)) {
+    throw new ProviderReconciliationError(
+      `Verified provider event has an invalid ${field}.`,
+      'INVALID_REFERENCE',
+    );
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new ProviderReconciliationError(
+      `Verified provider event has an invalid ${field}.`,
+      'INVALID_REFERENCE',
+    );
+  }
+  return parsed;
 }
 
 function providerTimestamp(value: unknown): string {
@@ -227,6 +249,20 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
   const quoteId = optionalUuid(metadata.quote_id, 'quote_id');
   const jobId = optionalUuid(metadata.job_id, 'job_id');
   const approvalId = optionalUuid(metadata.approval_id, 'approval_id');
+  const rawCheckoutPurpose = optionalString(metadata.checkout_purpose, 40);
+  const checkoutPurpose =
+    rawCheckoutPurpose === 'quote_deposit' || rawCheckoutPurpose === 'invoice_balance'
+      ? rawCheckoutPurpose
+      : undefined;
+  const checkoutAttempt = optionalPositiveIntegerMetadata(
+    metadata.checkout_attempt,
+    'checkout_attempt',
+  );
+  const invoiceId = optionalUuid(metadata.invoice_id, 'invoice_id');
+  const invoiceVersion = optionalPositiveIntegerMetadata(
+    metadata.invoice_version,
+    'invoice_version',
+  );
   const objectKind = stripeObjectKind(eventType);
   const action = stripeAction(eventType, object);
   const paymentIntentId =
@@ -287,6 +323,40 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
       'MISSING_REFERENCE',
     );
   }
+  if (
+    action !== 'ignore' &&
+    (objectKind === 'checkout' || objectKind === 'payment_intent') &&
+    (!checkoutPurpose || checkoutAttempt === undefined)
+  ) {
+    throw new ProviderReconciliationError(
+      'StoryOps payment event omitted valid checkout_purpose or checkout_attempt metadata.',
+      rawCheckoutPurpose && metadata.checkout_attempt !== undefined
+        ? 'INVALID_REFERENCE'
+        : 'MISSING_REFERENCE',
+    );
+  }
+  if (
+    action !== 'ignore' &&
+    (objectKind === 'checkout' || objectKind === 'payment_intent') &&
+    checkoutPurpose === 'invoice_balance' &&
+    (!invoiceId || invoiceVersion === undefined)
+  ) {
+    throw new ProviderReconciliationError(
+      'StoryOps invoice-balance event omitted invoice_id or invoice_version metadata.',
+      'MISSING_REFERENCE',
+    );
+  }
+  if (
+    action !== 'ignore' &&
+    (objectKind === 'checkout' || objectKind === 'payment_intent') &&
+    checkoutPurpose === 'quote_deposit' &&
+    (invoiceId !== undefined || invoiceVersion !== undefined)
+  ) {
+    throw new ProviderReconciliationError(
+      'StoryOps deposit event contained invoice-balance metadata.',
+      'INVALID_REFERENCE',
+    );
+  }
   if (action !== 'ignore' && objectKind === 'invoice' && !jobId) {
     throw new ProviderReconciliationError(
       'StoryOps invoice event omitted job_id metadata.',
@@ -314,6 +384,10 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
     ...(quoteId ? { quoteId } : {}),
     ...(jobId ? { jobId } : {}),
     ...(approvalId ? { approvalId } : {}),
+    ...(checkoutPurpose ? { checkoutPurpose } : {}),
+    ...(checkoutAttempt !== undefined ? { checkoutAttempt } : {}),
+    ...(invoiceId ? { invoiceId } : {}),
+    ...(invoiceVersion !== undefined ? { invoiceVersion } : {}),
     ...(paymentIntentId ? { paymentIntentId } : {}),
     ...(amountCents !== undefined ? { amountCents } : {}),
     ...(amountPaidCents !== undefined ? { amountPaidCents } : {}),
@@ -332,6 +406,10 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
     quoteId,
     jobId,
     approvalId,
+    checkoutPurpose,
+    checkoutAttempt,
+    invoiceId,
+    invoiceVersion,
     paymentIntentId,
     amountCents,
     amountPaidCents,

@@ -3,20 +3,20 @@
 **Purpose:** Keep the AI back office grounded, reviewable, and safely delegated.  
 **Primary owner:** Company owner  
 **Technical owner:** Principal engineer / designated operator  
-**Last updated:** 2026-07-28
+**Last updated:** 2026-07-29
 
 This is a living cadence, not a log. Findings belong in status, approvals, incidents, traces, and
 audit events.
 
 ## Daily — before field work
 
-| Time             | Task                                    | Owner | Pass condition                                                             |
-| ---------------- | --------------------------------------- | ----- | -------------------------------------------------------------------------- |
-| Start of day     | Read owner briefing                     | Owner | Today, approvals, cash, pipeline, risks are sourced and current            |
-| Start of day     | Review safety/weather exceptions        | Owner | No unresolved critical flag before dispatch                                |
-| Start of day     | Clear or reject expired/stale approvals | Owner | No action relies on changed payload, price book, schedule, or consent      |
-| Before first job | Confirm integration health              | Owner | Required live providers are healthy or sandbox/manual fallback is declared |
-| Before first job | Check overnight failed automation runs  | Owner | Failures are retried safely, handled manually, or opened as incidents      |
+| Time             | Task                                    | Owner | Pass condition                                                                                                           |
+| ---------------- | --------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------ |
+| Start of day     | Manually run and read owner briefing    | Owner | Durable run/trace IDs and current sourced unknowns are visible                                                           |
+| Start of day     | Review safety/weather exceptions        | Owner | No unresolved critical flag before dispatch                                                                              |
+| Start of day     | Clear or reject expired/stale approvals | Owner | No action relies on changed payload, price book, schedule, or consent                                                    |
+| Before first job | Confirm integration health              | Owner | Required live providers are healthy or the affected live action is disabled with a documented manual process             |
+| Before first job | Check operational worker failures       | Owner | Scheduling/post-service/cleanup worker failures are reconciled or opened as incidents; this is not an AI Office schedule |
 
 ## During the day
 
@@ -29,6 +29,10 @@ audit events.
 - If source evidence is stale, refresh it. Never edit the trace to make it look current.
 - Treat the Edge-resolved fact set as controlling. A client-supplied fact value,
   summary, or model recollection does not replace the database record.
+- AI Office does not run on a scheduler. Press the manual run control, wait for the durable readback,
+  and never infer that an overnight or recurring briefing exists.
+- A specialist request may identify one allowed root record by type and UUID. Optional manual text
+  is untrusted context, not a fact or instruction. The specialist objective is fixed in code.
 - When a provider is down, use the documented manual fallback and record the provider ID when it
   returns.
 
@@ -84,12 +88,13 @@ reloads the active price book, human-verified measurement evidence, tax status,
 and scope disposition. A pricing drift or missing measurement is a blocked
 estimate, not an approval candidate.
 
-V1 external execution after approval is limited to an owner-triggered
-`payments.refund`. After deciding the approval, confirm the current payment and
-unrefunded amount, stay online, and execute once through the approved-action
-boundary. If the result is ambiguous, do not create a second approval or
-idempotency key; reconcile provider/local state and retry the same action only
-when the runbook permits.
+V1.1 approved execution is limited to owner-triggered `records.create_lead`,
+`records.update_lead`, and `payments.refund`. For a lead action, verify the exact
+approved normalized lead fields and current record version. For a refund,
+confirm the current payment and unrefunded amount. Stay online and execute once
+through the approved-action boundary. If the result is ambiguous, do not create
+a second approval or idempotency key; reconcile durable/provider state and retry
+the same action only when the runbook permits.
 
 ## Missed task response
 
@@ -113,9 +118,19 @@ when the runbook permits.
 
 ## Emergency stop
 
-Set `OPENAI_LIVE_ENABLED=false` and place live integrations into disabled/sandbox mode. Do not
-delete pending events or traces. Continue the back office manually, record provider IDs, and follow
-the incident playbook.
+Set `OPENAI_LIVE_ENABLED=false` and place affected live integrations into
+`disabled` mode. Do not switch an incident environment to sandbox and confuse
+synthetic evidence with production state. Do not delete pending events or
+traces. Continue the back office manually, record provider IDs, and follow the
+incident playbook.
+
+When the stop must cover the whole company, an owner with active membership
+should also engage **Company control**. The server then rejects new AI run
+reservations and completion outputs while preserving failure bookkeeping and
+read-only lifecycle recovery. Pending offline packets remain on their devices.
+Continue to reconcile provider actions that were already accepted; do not use
+reactivation or a new AI idempotency key to hide an unknown result. Reactivate
+only after owner readback and full workspace reload.
 
 Durable model budgets are configured by
 `AI_OFFICE_RUNS_PER_USER_PER_HOUR`,
@@ -126,6 +141,9 @@ configuration, and preserve the related traces.
 
 ## Changelog
 
-- **2026-07-28 — v1.1:** Added server-authoritative facts/pricing, durable budgets,
+- **2026-07-29 — v1.1:** Added the authenticated manual run contract, durable
+  automation/briefing readback, no-scheduler declaration, and exact-approved
+  lead execution, plus company-wide pause/recovery behavior.
+- **2026-07-28 — v1.0.1:** Added server-authoritative facts/pricing, durable budgets,
   and exact-approved refund execution.
 - **2026-07-28 — v1.0:** Initial AI-office cadence, approval checklist, and emergency stop.

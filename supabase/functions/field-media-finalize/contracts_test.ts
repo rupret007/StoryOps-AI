@@ -5,7 +5,18 @@ import {
 } from './contracts.ts';
 
 function assertEquals(actual: unknown, expected: unknown): void {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  const canonicalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, item]) => [key, canonicalize(item)]),
+      );
+    }
+    return value;
+  };
+  if (JSON.stringify(canonicalize(actual)) !== JSON.stringify(canonicalize(expected))) {
     throw new Error(`Expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}.`);
   }
 }
@@ -47,6 +58,22 @@ const request = {
   },
 } as const;
 
+const incidentRequest = {
+  ...request,
+  command: {
+    ...request.command,
+    commandId: '96000000-0000-4000-8000-000000000902',
+    payload: {
+      ...request.command.payload,
+      incidentId: '95000000-0000-4000-8000-000000000521',
+      purpose: 'incident',
+      objectPath:
+        '10000000-0000-4000-8000-000000000001/incidents/95000000-0000-4000-8000-000000000521/visits/10000000-0000-4000-8000-000000000641/96000000-0000-4000-8000-000000000811-431ced6916a2a21a-incident.png',
+    },
+    requestHash: 'a'.repeat(64),
+  },
+} as const;
+
 Deno.test('field media finalize accepts only a content-addressed visit command', () => {
   assertEquals(fieldMediaFinalizeRequestSchema.parse(request), request);
   assertEquals(
@@ -55,6 +82,49 @@ Deno.test('field media finalize accepts only a content-addressed visit command',
       command: {
         ...request.command,
         payload: { ...request.command.payload, objectPath: 'other/path.png' },
+      },
+    }).success,
+    false,
+  );
+});
+
+Deno.test('incident evidence binds the incident and visit into one private object identity', () => {
+  assertEquals(fieldMediaFinalizeRequestSchema.parse(incidentRequest), incidentRequest);
+  assertEquals(
+    fieldMediaFinalizeRequestSchema.safeParse({
+      ...incidentRequest,
+      command: {
+        ...incidentRequest.command,
+        payload: {
+          ...incidentRequest.command.payload,
+          incidentId: undefined,
+        },
+      },
+    }).success,
+    false,
+  );
+  assertEquals(
+    fieldMediaFinalizeRequestSchema.safeParse({
+      ...incidentRequest,
+      command: {
+        ...incidentRequest.command,
+        payload: {
+          ...incidentRequest.command.payload,
+          purpose: 'before',
+        },
+      },
+    }).success,
+    false,
+  );
+  assertEquals(
+    fieldMediaFinalizeRequestSchema.safeParse({
+      ...incidentRequest,
+      command: {
+        ...incidentRequest.command,
+        payload: {
+          ...incidentRequest.command.payload,
+          visitId: '10000000-0000-4000-8000-000000000642',
+        },
       },
     }).success,
     false,

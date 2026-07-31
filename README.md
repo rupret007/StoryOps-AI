@@ -1,10 +1,13 @@
 # StoryOps AI
 
-StoryOps AI is an AI-first operations system for a single, owner-operated
-exterior-services company. The V1 vertical slice covers pressure/soft washing
-and gutter/downspout cleaning from lead qualification through recurring
-maintenance, with deterministic pricing, approval gates, field evidence,
-invoicing, and an auditable AI office.
+StoryOps AI is an AI-first service-business operating system. V1.1 runs one
+company and ships its first complete industry pack for an owner-operated
+exterior-cleaning business: pressure washing, soft washing, gutter/downspout
+cleaning, roof washing, and window cleaning. The reusable kernel owns identity,
+customers/properties, deterministic pricing, approvals, scheduling, field
+execution, finance, provider truth, AI safety, and audit; the versioned pack
+owns service-specific measurements, formulas, evidence, skills, equipment, and
+operating guidance.
 
 The repository is safe to run without credentials. Its default browser
 workspace and every provider are sandboxed; no message, charge, calendar event,
@@ -26,20 +29,27 @@ route request, upload, or accounting mutation leaves the device.
   workbench, dispatch board, offline-first field mode, finance, AI office,
   approvals, operations, integration health, audit trail, setup wizard, and
   customer portal.
+- A reviewed company-configuration studio and versioned industry-pack contract.
+  Setup creates drafts and requires separate publication; it never silently
+  activates prices, terms, providers, outbound communication, or launch
+  authority.
 - Owner, dispatcher, technician, and customer permissions in application code
   and PostgreSQL row-level security.
 - A versioned DFW price book and Decimal-based pricing engine for company and
   service minimums, square/linear footage, stories, surface, soil, access, risk,
   travel zones, add-ons, duration, cost, tax, deposits, discounts, and margin
   floors. Models do not calculate or invent prices.
-- Photo-evidence contracts that preserve observations, confidence, unknowns,
-  source IDs, and human-review disposition separately from billable
-  measurements.
+- A bounded private scope-photo workflow with versioned required views,
+  observations, confidence, unknowns, human-confirmed measurements, reviewer
+  decisions, cleanup, and an exact estimate authorization bundle. A generic
+  property photo cannot authorize an unrelated service or request.
 - Capacity-, skill-, equipment-, weather-, and route-aware booking contracts.
 - An AI office orchestrator with intake, estimating, scheduling, follow-up,
   marketing, finance, safety, and owner-briefing specialists; structured output;
   least-privilege tools; evidence grounding; injection defense; exact-payload
-  approvals; tracing; idempotency; and bounded retry.
+  approvals; tracing; idempotency; and bounded retry. Authenticated owners and
+  dispatchers can run a bounded specialist or read-only owner briefing and read
+  back its durable result; V1.1 does not claim an unattended scheduler.
 - Sandbox provider implementations for OpenAI behavior, SMS/voice, email,
   payments, calendar, geocoding, weather, routing, optional signed Storage
   targets, and QuickBooks CSV export, plus opt-in server adapters for OpenAI,
@@ -52,16 +62,34 @@ route request, upload, or accounting mutation leaves the device.
   immutable audit events, approval/automation/AI evidence, provider-event
   claim/process/complete state, operation budgets, approved-action execution,
   idempotency claims, Storage policies, RLS, and role-specific mutation guards.
+- An explicit customer quote-acceptance boundary requiring a typed signer and
+  affirmative acknowledgement of the exact published quote version, terms
+  version, and total. The append-only acceptance receipt is separate from
+  inferred customer identity or a generic workspace command.
+- An owner-only, bounded, redacted audit metadata feed. It never projects raw
+  actor IDs or before/after payloads and is an operational view—not backup or
+  cryptographic integrity proof.
+- An owner-only company operational kill switch. A finite, idempotent,
+  server-verified command moves only `active → paused` or `paused → active`,
+  records the reason, receipt, and audit evidence, and cannot be replaced by a
+  profile/settings update. While paused, the browser opens a minimal recovery
+  workspace instead of projecting operational data.
 - An authenticated estimate boundary that loads current human-verified
   measurements, operator classifications, the effective published price book,
-  derived travel zone, scope-photo disposition, customer tax state, and an
-  approved terms version on the server; it then persists the estimate, lines,
-  quote, provenance snapshot, idempotency receipt, and any exact owner approval
-  in one transaction.
+  exact owner-reviewed ZIP-to-travel-zone mapping, scope-photo disposition,
+  customer tax state, and an approved terms version on the server; unmapped or
+  ambiguous ZIPs stop for review rather than falling back by fee or mileage. It
+  then persists the estimate, lines, quote, provenance snapshot, idempotency
+  receipt, and any exact owner approval in one transaction.
 - A server-authoritative accepted-quote path for Stripe deposit checkout,
   provider-confirmed payment, capacity/weather/route-gated booking, field
   completion, and invoice issuance. Sandbox checkout remains explicitly unpaid
   until a verified payment event exists.
+- Stripe Checkout Session (`cs_*`) and PaymentIntent (`pi_*`) identities remain
+  distinct. Terminal failed/expired checkout attempts are retired before a
+  replacement; late successes and amount/version conflicts quarantine verified
+  funds, pause collection, and permit automatic ledger application only through
+  an exact owner-approved current-balance resolver.
 - Dockerized static runtime, optional pinned VROOM service, backup/restore
   scripts, health probes, runbooks, incident templates, and DFW launch/safety
   checklists.
@@ -70,10 +98,10 @@ route request, upload, or accounting mutation leaves the device.
 
 Prerequisites for the no-key app are Node `22.22.3` (see `.nvmrc`) and npm.
 Docker is additionally required for the pinned Edge typecheck. From the
-repository root, the one-command full setup copies `.env.example` to an
-owner-only `.env.local`, installs the locked dependency graph when needed,
-validates sandbox configuration, and runs the license, lint, type, Edge,
-unit, infrastructure, and production-build checks:
+repository root, the setup-and-core-verification command copies `.env.example`
+to an owner-only `.env.local`, installs the locked dependency graph when
+needed, validates sandbox configuration, and runs the license, lint, type,
+Edge, unit, infrastructure, and production-build checks:
 
 ```bash
 npm run setup:app -- --verify
@@ -116,8 +144,8 @@ explicit
 `--unsafe-allow-wildcard-supabase-ports` override accepts local-network
 exposure and is only for an operator who has reviewed that risk.
 
-To start Supabase and run the complete repository verification plus the live
-local Supabase release contract without rebuilding the database:
+To start Supabase and run the core verification subset plus the live local
+Supabase release contract without rebuilding the database:
 
 ```bash
 npm run setup:app -- --with-supabase --verify
@@ -146,6 +174,16 @@ project. Its `terms-v1` service terms are synthetic fixtures whose review
 reference is explicitly local-sandbox-only; they are not legal advice and
 cannot satisfy the production terms/legal launch gate.
 
+Live dispatch additionally requires `pg_cron`. Migration `20260728610000`
+registers exactly one `storyops-dispatch-origin-purge` job at a five-second
+cadence. Launch and departure fail closed unless **Integrations** observes a
+recent scheduler-owned success, zero retention backlog, exact ACLs, and healthy
+worker state; calling the cleanup function manually is not health proof. The
+worker prunes only its own history older than 24 hours in bounded batches.
+Recovery re-registers the job and waits for a real scheduled run. See the
+[pilot operator runbook](docs/runbooks/PILOT_OPERATOR_RUNBOOK.md#dispatch-origin-retention-scheduler)
+for recovery and the disclosed `UNLOGGED`/MVCC/provider-retention limits.
+
 Local seed identities use the password `StoryOpsDemo1!`:
 
 | Role       | Local email                 |
@@ -172,6 +210,39 @@ only when Auth `app_metadata.storyops_bootstrap_company_id` exactly matches the
 configured public company UUID. The browser calls the read-only
 `get_storyops_setup_state` and guarded `complete_storyops_setup` RPCs; see
 [`docs/runbooks/LIVE_SETUP_RUNBOOK.md`](docs/runbooks/LIVE_SETUP_RUNBOOK.md).
+The resulting company remains in `setup`: ordinary workspace reads/writes and
+provider starts remain closed until the owner separately publishes a reviewed
+live configuration and the exact operating baseline changes it to `active`.
+Setup completion alone is never an operational or launch-ready state.
+
+### Company pause and recovery
+
+In authenticated Supabase mode, a signed-in owner with an active membership can
+use **Company control** to pause or reactivate operations. The UI requires a reason and exact typed
+confirmation; the server binds the expected/target status, normalized reason,
+canonical request, SHA-256 hash, actor, and stable command ID. Same-command
+replay returns its receipt, while stale status or changed-payload reuse fails
+closed. Dispatchers, technicians, customers, service credentials, generic
+workspace commands, and direct company-profile writes cannot operate this
+control.
+
+Pausing is a company-wide server gate, not a navigation toggle. New
+operational mutations, provider-call starts, automation starts, field evidence
+finalization, Storage writes, and fresh scope-photo signed upload targets are
+blocked. Already accepted provider callbacks/retrieval can still reconcile;
+bounded failure recording, retention work, and scope-photo orphan cleanup stay
+available so external truth and cleanup evidence are not lost. A pause does not
+retroactively revoke an already-issued short-lived upload token, so keep its
+expiry short; the paused company still cannot finalize/register the object, and
+the expired reservation can be cleaned through the trusted orphan worker.
+
+Pending offline command/media packets do not prevent the owner from engaging
+the kill switch and are not deleted. Recovery shows only packet kind, status,
+and creation time plus the last server-verified time and current recovery
+error—never command payloads, entity IDs, photo bytes, or signature data.
+Packets cannot sync while paused. Reactivate only after review, reload the full
+server workspace, and then reconcile the original idempotent queue. Reactivation
+does not authorize launch or enable any provider.
 
 Authenticated Supabase mode also makes the private `job-media` bucket and
 `field-media-finalize` Edge function mandatory core data-plane dependencies.
@@ -219,8 +290,8 @@ book, deterministic pricing, stable idempotent replay/conflict, owner approval,
 and quote publication to the eligible portal projection. The `golden-path`
 boundary then proves accepted quote through
 invoice without treating sandbox or provider-accepted state as payment.
-The service-role-only `post-service-worker` then leases due review, referral,
-and recurring-maintenance messages, rechecks the exact current marketing
+The dedicated-token `post-service-worker` keeps the service role internal while
+leasing due review, referral, and recurring-maintenance messages. It rechecks the exact current marketing
 consent immediately before submission, and uses the provider adapters with a
 stable StoryOps correlation key. Before a live Twilio create call it commits a
 fail-safe `submitted_unknown` boundary; an ambiguous result is excluded from
@@ -288,19 +359,19 @@ server-side adapter, required secrets, successful health check, reconciliation
 procedure, owner approval, and provider-specific launch evidence are all
 required.
 
-| Capability       | Default proof                                       | Implemented live boundary / remaining YELLOW gate                                                                                |
-| ---------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| OpenAI           | Deterministic structured sandbox result             | Node/Edge Agents SDK; explicit enable, credentials, evals, spend canary pending                                                  |
-| Twilio SMS/voice | Consent/rate/idempotency sandbox ledger             | Server sends + signed callbacks; owned numbers, registration, legal review, canary pending                                       |
-| Email            | Consent-checked sandbox ledger                      | Token-authenticated HTTPS adapter + signed delivery callback; domain/provider canary pending                                     |
-| Stripe           | Sandbox checkout/invoice/payment/refund artifacts   | Checkout/Invoicing/refund adapters + signed reconciliation; account/tax/canary pending                                           |
-| Google Calendar  | Deterministic sandbox availability and entries      | Allowlisted calendar, OAuth refresh, free/busy, holds/bookings; OAuth canary pending                                             |
-| Maps/geocoding   | Low-confidence synthetic DFW point marked `unknown` | Validated Google Maps adapter; restricted key, quota, precision canary pending                                                   |
-| NWS weather      | Explicit unknown forecast; no invented conditions   | Read-only NWS adapter; monitored User-Agent and operational canary pending                                                       |
-| VROOM routing    | Deterministic sandbox plan/custom matrix            | Validated HTTP adapter; private engine/backend and route acceptance pending                                                      |
-| Core field media | IndexedDB/local sandbox packet; zero Storage calls  | Mandatory with Supabase data mode: private RLS upload/read-back + byte-verifying trusted finalizer; hosted device canary pending |
-| Signed targets   | `sandbox://` targets                                | Optional server-issued upload/download targets gated by `SIGNED_STORAGE_TARGETS_MODE` + `SIGNED_STORAGE_TARGETS_LIVE_ENABLED`    |
-| QuickBooks       | Checksummed, reviewable CSV                         | Manual import only; no OAuth posting, vendor action, or bank mutation                                                            |
+| Capability       | Default proof                                       | Implemented live boundary / remaining YELLOW gate                                                                                            |
+| ---------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI           | Deterministic structured sandbox result             | Node/Edge Agents SDK; explicit enable, credentials, evals, spend canary pending                                                              |
+| Twilio SMS/voice | Consent/rate/idempotency sandbox ledger             | Server sends + signed callbacks; owned numbers, registration, legal review, canary pending                                                   |
+| Email            | Consent-checked sandbox ledger                      | Token-authenticated HTTPS adapter + signed delivery callback; domain/provider canary pending                                                 |
+| Stripe           | Sandbox checkout/invoice/payment/refund artifacts   | Checkout/Invoicing/refund + signed reconciliation, retired attempts, collection holds, exact approved allocation; account/tax/canary pending |
+| Google Calendar  | Deterministic sandbox availability and entries      | Allowlisted calendar, OAuth refresh, free/busy, holds/bookings; OAuth canary pending                                                         |
+| Maps/geocoding   | Low-confidence synthetic DFW point marked `unknown` | Validated Google Maps adapter; restricted key, quota, precision canary pending                                                               |
+| NWS weather      | Explicit unknown forecast; no invented conditions   | Read-only NWS adapter; monitored User-Agent and operational canary pending                                                                   |
+| VROOM routing    | Deterministic sandbox plan/custom matrix            | Validated HTTP adapter; private engine/backend and route acceptance pending                                                                  |
+| Core field media | IndexedDB/local sandbox packet; zero Storage calls  | Mandatory with Supabase data mode: private RLS upload/read-back + byte-verifying trusted finalizer; hosted device canary pending             |
+| Signed targets   | `sandbox://` targets                                | Optional server-issued upload/download targets gated by `SIGNED_STORAGE_TARGETS_MODE` + `SIGNED_STORAGE_TARGETS_LIVE_ENABLED`                |
+| QuickBooks       | Checksummed, reviewable CSV                         | Manual import only; no OAuth posting, vendor action, or bank mutation                                                                        |
 
 Read `.env.example` and
 [docs/compliance/PROVIDER-BOUNDARIES.md](docs/compliance/PROVIDER-BOUNDARIES.md)
@@ -315,22 +386,24 @@ compiled adapters are not evidence that any external provider canary passed.
 
 External text, transcripts, OCR, photos, reviews, and retrieved prose are data,
 never instructions. A specialist can only propose tools in its allowlist.
-The AI Edge boundary ignores client-supplied fact values and resolves the
-company’s authoritative records itself. Its `pricing.calculate` tool accepts
+The AI Edge boundary never accepts client-supplied fact values as truth. A
+bounded root selector contains an ID only; the server reloads the permitted
+company-owned record and relationships. Its `pricing.calculate` tool accepts
 only a stored estimate ID, reloads the active price book and human-verified
 measurements, and rejects any total drift. Trusted code validates structured
 output, source IDs, permissions, pricing/SOP compliance, risk, reversibility,
 idempotency, and exact-payload approvals before any side effect.
 
-Only grounded, low-risk, reversible, idempotent allowlisted actions may run
-automatically. Price exceptions, discounts above policy, refunds, legal/safety
-messages, negative-review replies, campaign sends, vendor/bank actions,
-destructive changes, and work outside published price books/SOPs require
-approval or remain human-only. V1 includes one external approved-action resume
-path: an authenticated owner may execute an exact approved Stripe refund after
-server-side payment/amount revalidation and an atomic execution lease. Other
-sensitive external actions remain unexecuted/manual until they receive an
-equally constrained server executor.
+Only grounded, low-risk, reversible, idempotent allowlisted actions may be
+eligible for automatic execution. V1.1 does not activate an unattended
+scheduler: an owner or dispatcher deliberately starts each AI Office run.
+Price exceptions, discounts above policy, refunds, legal/safety messages,
+negative-review replies, campaign sends, vendor/bank actions, destructive
+changes, and work outside published price books/SOPs require approval or remain
+human-only. V1.1 includes separate exact approved-action executors for Stripe
+refunds and the supported AI lead mutations. Both revalidate current state
+under an atomic execution lease. Other sensitive actions remain
+unexecuted/manual until they receive an equally constrained server executor.
 
 AI must never invent measurements, prices, availability, payment state,
 regulations, chemical/safety instructions, or provider success.
@@ -351,6 +424,11 @@ company/assignment scope. UI route hiding is not an authorization boundary.
 ## Verification
 
 ```bash
+npm ci
+npm audit --audit-level=high
+npm run install:vroom-runtime
+npm audit --prefix infra/vroom/runtime-package --audit-level=high
+npm run format:check
 npm run licenses:check
 npm run lint
 npm run typecheck
@@ -360,15 +438,21 @@ npm run test:infra
 npm run build
 npm run test:e2e
 npm run test:supabase -- --reset
+npm run eval:ai
 ```
 
-The final command is the required local live-data proof. It rebuilds all 12
-ordered migrations and the synthetic seed, runs database lint and every SQL
+The final command is the required local live-data proof. It rebuilds every
+ordered migration and the synthetic seed, runs database lint and every SQL
 security/workflow contract, starts the local Edge worker, and exercises the
-authenticated estimating flow, durable post-service worker, and actual-byte
-offline-field media upload/tamper/overwrite/replay/dependent-completion
-integration. This is local proof—not a hosted or physical-device canary—and it
-prints no local keys.
+authenticated estimating flow, affirmative acceptance/audit boundaries,
+payment-allocation and retired-checkout contracts, durable post-service worker,
+and actual-byte offline-field media
+upload/tamper/overwrite/replay/dependent-completion integration. This is local
+proof—not a hosted or physical-device canary—and it prints no local keys.
+It also exercises real Supabase CLI schema and data artifacts: the data dump
+uses exactly the `auth`, `public`, and `private` schemas, excludes `storage` and
+`cron` by that allowlist, and explicitly omits the three private
+dispatch-origin transient tables.
 
 The executable proof runs the no-key prerequisite check, backup dry run, infra
 tests, lint, typecheck, unit/integration tests, production build, and both
@@ -415,6 +499,13 @@ run server/Edge workloads in reviewed infrastructure before any live launch.
 - Backup: `npm run backup -- --local`
 - Safe restore validation:
   `npm run restore -- --backup /absolute/path --dry-run --local`
+- Recovery-grade database dumps allow exactly `auth`, `public`, and `private`
+  data. Storage and cron data are excluded by that schema allowlist, while
+  `private.dispatch_current_origin_ephemera`,
+  `private.dispatch_current_origin_verifiers`, and
+  `private.dispatch_origin_purge_worker_health` are explicit table exclusions.
+- Backup source evidence and restored-target verification must each report zero
+  `service_role` DML and related table-data privileges on `public` base tables.
 - External health probe: `node infra/observability/health-check.mjs`
 - Detailed recovery:
   [docs/compliance/BACKUP-RESTORE.md](docs/compliance/BACKUP-RESTORE.md)
@@ -427,28 +518,37 @@ legal holds, and prove restores.
 
 ## Documentation map
 
-| Read this                                                                   | When                                                            |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [Source of truth](docs/SOURCE_OF_TRUTH.md)                                  | Deciding which record, rule, or document controls               |
-| [Current status](docs/STATUS.md)                                            | Before planning work, testing, or considering launch            |
-| [Current owner briefing](docs/briefings/CURRENT.md)                         | Reading the current read-only owner summary                     |
-| [Admin guide](docs/ADMIN_GUIDE.md)                                          | Operating the company and approval/provider controls            |
-| [Developer guide](docs/DEVELOPER_GUIDE.md)                                  | Changing code, schema, policies, adapters, or tests             |
-| [AI office architecture](docs/architecture/AI_OFFICE.md)                    | Changing agents, tools, traces, injection defense, or approvals |
-| [Integration architecture](docs/architecture/INTEGRATIONS.md)               | Connecting or reconciling a provider                            |
-| [AI office runbook](docs/runbooks/AI_OFFICE_RUNBOOK.md)                     | Daily/weekly AI operations                                      |
-| [Integration runbook](docs/runbooks/INTEGRATION_RUNBOOK.md)                 | Health checks, activation, outages, and reconciliation          |
-| [Authenticated setup runbook](docs/runbooks/LIVE_SETUP_RUNBOOK.md)          | Inviting and verifying a protected first owner                  |
-| [Provider boundaries](docs/compliance/PROVIDER-BOUNDARIES.md)               | Credentials, consent, webhook, and provider-specific gates      |
-| [Backup/restore](docs/compliance/BACKUP-RESTORE.md)                         | Protecting or recovering data                                   |
-| [Retention/privacy](docs/compliance/DATA-RETENTION-AND-PRIVACY.md)          | Classifying, retaining, exporting, or deleting data             |
-| [Incident playbook](docs/incidents/AI_INTEGRATION_INCIDENT_PLAYBOOK.md)     | Containing AI/provider, payment, consent, or data incidents     |
-| [Approval template](docs/templates/APPROVAL_RECORD.md)                      | Recording exact-payload decisions outside the product           |
-| [Incident template](docs/templates/INCIDENT_REPORT.md)                      | Capturing timeline, impact, evidence, and corrective actions    |
-| [Reconciliation template](docs/templates/PROVIDER_RECONCILIATION.md)        | Matching provider and local state by stable IDs                 |
-| [Owner briefing template](docs/templates/OWNER_BRIEFING.md)                 | Producing a sourced, read-only owner brief                      |
-| [DFW launch checklist](docs/launch/DFW-LAUNCH-CHECKLIST.md)                 | Preparing Texas/DFW launch                                      |
-| [Field safety checklist](docs/launch/EXTERIOR-CLEANING-SAFETY-CHECKLIST.md) | Adopting SOPs and preparing every visit                         |
+| Read this                                                                                                    | When                                                                                    |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| [Build report](BUILD_REPORT.md)                                                                              | Reading final architecture, flow, verification, image, and handoff evidence             |
+| [Pilot readiness report](PILOT_READINESS_REPORT.md)                                                          | Separating local rehearsal readiness from live-launch gates                             |
+| [Source of truth](docs/SOURCE_OF_TRUTH.md)                                                                   | Deciding which record, rule, or document controls                                       |
+| [Current status](docs/STATUS.md)                                                                             | Before planning work, testing, or considering launch                                    |
+| [Current owner briefing](docs/briefings/CURRENT.md)                                                          | Reading the current read-only owner summary                                             |
+| [Admin guide](docs/ADMIN_GUIDE.md)                                                                           | Operating the company and approval/provider controls                                    |
+| [Developer guide](docs/DEVELOPER_GUIDE.md)                                                                   | Changing code, schema, policies, adapters, or tests                                     |
+| [AI office architecture](docs/architecture/AI_OFFICE.md)                                                     | Changing agents, tools, traces, injection defense, or approvals                         |
+| [Industry-pack architecture](docs/architecture/INDUSTRY_PACKS.md)                                            | Adding or changing a supported service vertical                                         |
+| [Integration architecture](docs/architecture/INTEGRATIONS.md)                                                | Connecting or reconciling a provider                                                    |
+| [Pilot operator runbook](docs/runbooks/PILOT_OPERATOR_RUNBOOK.md)                                            | Rehearsing and signing the bounded first-pilot operating record                         |
+| [AI office runbook](docs/runbooks/AI_OFFICE_RUNBOOK.md)                                                      | Daily/weekly AI operations                                                              |
+| [Integration runbook](docs/runbooks/INTEGRATION_RUNBOOK.md)                                                  | Health checks, activation, outages, and reconciliation                                  |
+| [Authenticated setup runbook](docs/runbooks/LIVE_SETUP_RUNBOOK.md)                                           | Inviting and verifying a protected first owner                                          |
+| [Identity provisioning runbook](docs/runbooks/IDENTITY_PROVISIONING.md)                                      | Inviting, changing, offboarding, and reconciling identities                             |
+| [Scheduling reconciliation](docs/runbooks/SCHEDULING_RECONCILIATION.md)                                      | Resolving route, weather, calendar, resource, and orphan evidence                       |
+| [Scope-photo evidence runbook](docs/runbooks/SCOPE_PHOTO_EVIDENCE.md)                                        | Requesting, reviewing, retaining, and cleaning private scope media                      |
+| [Provider boundaries](docs/compliance/PROVIDER-BOUNDARIES.md)                                                | Credentials, consent, webhook, and provider-specific gates                              |
+| [Backup/restore](docs/compliance/BACKUP-RESTORE.md)                                                          | Protecting or recovering data                                                           |
+| [Retention/privacy](docs/compliance/DATA-RETENTION-AND-PRIVACY.md)                                           | Classifying, retaining, exporting, or deleting data                                     |
+| [Incident playbook](docs/incidents/AI_INTEGRATION_INCIDENT_PLAYBOOK.md)                                      | Containing AI/provider, payment, consent, or data incidents                             |
+| [Field safety/environment incident playbook](docs/incidents/FIELD_SAFETY_ENVIRONMENTAL_INCIDENT_PLAYBOOK.md) | Stopping work and containing injury, chemical, runoff, property, or equipment incidents |
+| [Approval template](docs/templates/APPROVAL_RECORD.md)                                                       | Recording exact-payload decisions outside the product                                   |
+| [Incident template](docs/templates/INCIDENT_REPORT.md)                                                       | Capturing timeline, impact, evidence, and corrective actions                            |
+| [Reconciliation template](docs/templates/PROVIDER_RECONCILIATION.md)                                         | Matching provider and local state by stable IDs                                         |
+| [Owner briefing template](docs/templates/OWNER_BRIEFING.md)                                                  | Producing a sourced, read-only owner brief                                              |
+| [DFW launch checklist](docs/launch/DFW-LAUNCH-CHECKLIST.md)                                                  | Preparing Texas/DFW launch                                                              |
+| [Field safety checklist](docs/launch/EXTERIOR-CLEANING-SAFETY-CHECKLIST.md)                                  | Adopting SOPs and preparing every visit                                                 |
+| [Next V1.2 goal prompt](NEXT_GOAL_PROMPT.md)                                                                 | Proving the reusable kernel with residential cleaning                                   |
 
 The launch and safety documents cite official sources but are not legal,
 medical, tax, environmental, insurance, or safety advice. Every item marked
@@ -461,6 +561,9 @@ pins and usage boundaries are in [THIRD_PARTY.md](THIRD_PARTY.md).
 OCA/field-service was used only as an AGPL-licensed domain checklist; no OCA
 code was copied. StoryLand’s operating patterns were independently
 reimplemented; no StoryLand code or text was copied. Transitive npm notices are
-generated in `NPM_THIRD_PARTY_NOTICES.txt`. StoryOps AI itself has no release
+generated in `NPM_THIRD_PARTY_NOTICES.txt`; the separately locked VROOM runtime
+graph is captured in
+`infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt` and that exact
+inventory is copied into the routing image. StoryOps AI itself has no release
 license selected in this repository; choosing and documenting the root-project
 license is a manual YELLOW gate before distribution.

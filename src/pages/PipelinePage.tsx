@@ -227,7 +227,7 @@ function LeadDetail({ lead, onClose }: { lead: DemoLead; onClose(): void }) {
               </select>
               <Button
                 variant="secondary"
-                disabled={!scopeProperty || !state.online}
+                disabled={!scopeProperty || !state.online || !state.serverVerifiedAt}
                 onClick={() => {
                   if (scopeProperty) {
                     actions.linkLeadScope(lead.id, scopeProperty.customerId, scopeProperty.id);

@@ -14,13 +14,17 @@ import {
   ShieldCheck,
   Truck,
   UsersRound,
-  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from '@/router';
 import { Badge, Button, Card, PageHeader, Progress } from '@/components/ui/Primitives';
+import { MaterialSdsRegistrationPanel } from '@/components/MaterialSdsRegistrationPanel';
 import { useStoryOps } from '@/state/StoryOpsProvider';
-import type { SandboxServiceCode } from '@/state/model';
+import {
+  deriveSandboxPricingPresentation,
+  type SandboxPricingPresentation,
+} from '@/data/sandboxPricingPresentation';
 
 type OperationsTab = 'services' | 'resources' | 'safety' | 'recurring';
 
@@ -28,6 +32,7 @@ export function OperationsPage() {
   const { state, can } = useStoryOps();
   const [tab, setTab] = useState<OperationsTab>('services');
   const [draftCreated, setDraftCreated] = useState(false);
+  const pricing = deriveSandboxPricingPresentation(state.companyConfiguration?.published);
 
   if (state.dataMode === 'supabase') return <LiveOperationsPage />;
 
@@ -76,7 +81,7 @@ export function OperationsPage() {
       {tab === 'services' && (
         <ServicesPanel
           draftCreated={draftCreated}
-          enabledServiceCodes={state.setupProfile?.enabledServiceCodes ?? []}
+          pricing={pricing}
           onCreateDraft={() => setDraftCreated(true)}
         />
       )}
@@ -90,14 +95,15 @@ export function OperationsPage() {
 }
 
 function LiveOperationsPage() {
-  const { state, actions } = useStoryOps();
+  const { state, actions, can } = useStoryOps();
+  const recurring = state.recurringDueWork;
 
   return (
     <div className="page">
       <PageHeader
         eyebrow="Authenticated service operations"
         title="Role-visible operational records"
-        description="The field read model exposes active materials, linked SDS metadata, checklist definitions, and incidents. Configuration writes, private SDS file contents, price-book rules, crew capacity, and recurring-plan administration remain outside this screen."
+        description="The field read model exposes safety records and the recurring due-work boundary. Due work creates an internal fresh-estimate task only; normal pricing and booking controls remain authoritative."
         actions={
           <Button variant="secondary" onClick={() => void actions.reloadLiveWorkspace()}>
             Refresh workspace
@@ -186,6 +192,104 @@ function LiveOperationsPage() {
           )}
         </Card>
       </div>
+
+      {state.role === 'owner' && <MaterialSdsRegistrationPanel />}
+
+      <Card className="section-card operations-recurring-live">
+        <div className="section-card__header">
+          <div>
+            <h2>Recurring due work</h2>
+            <p className="section-card__subtitle">
+              One idempotent fresh-estimate task per active plan and due date
+            </p>
+          </div>
+          <Badge tone={recurring?.plans.some((plan) => plan.dueNow) ? 'warning' : 'neutral'}>
+            {recurring?.plans.filter((plan) => plan.dueNow).length ?? 0} due
+          </Badge>
+        </div>
+        <div className="projection-warning">
+          <ShieldCheck size={18} />
+          <div>
+            <strong>No visit is created here</strong>
+            <p>
+              Current measurements, a deterministic estimate, policy approval when required,
+              customer quote acceptance, deposit verification when required, live scheduling
+              evidence, and the normal job.book command are still required.
+            </p>
+          </div>
+        </div>
+        {(recurring?.plans.length ?? 0) > 0 ? (
+          <div className="recurring-live-list">
+            {recurring?.plans.map((plan) => (
+              <article className="template-row recurring-live-row" key={plan.planId}>
+                <span>
+                  <strong>
+                    {plan.customerName} · {plan.propertyName}
+                  </strong>
+                  <small>
+                    {plan.serviceCodes.join(', ')} · {plan.cadence} · due {plan.nextDueDate}
+                  </small>
+                </span>
+                {plan.dueNow &&
+                plan.generationAction === 'create_fresh_estimate_work_item' &&
+                can('campaigns.manage') ? (
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      void actions.createRecurringDueWork({
+                        planId: plan.planId,
+                        planVersion: plan.planVersion,
+                        dueDate: plan.nextDueDate,
+                      })
+                    }
+                  >
+                    Create fresh-estimate work item
+                  </Button>
+                ) : (
+                  <Badge tone={plan.dueNow ? 'warning' : 'neutral'}>
+                    {plan.dueNow ? 'Due · staff action required' : 'Upcoming'}
+                  </Badge>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="incident-empty">
+            <CalendarSync size={22} />
+            <div>
+              <h3>No active maintenance plans projected</h3>
+              <p>Activate a source-linked plan only from verified completed and paid work.</p>
+            </div>
+          </div>
+        )}
+        {(recurring?.workItems.length ?? 0) > 0 && (
+          <div className="recurring-live-work-items">
+            <h3>Fresh-estimate work queue</h3>
+            {recurring?.workItems.map((item) => (
+              <article className="template-row recurring-live-row" key={item.id}>
+                <span>
+                  <strong>
+                    {item.customerName} · {item.propertyName}
+                  </strong>
+                  <small>
+                    Due {item.planDueDate} · no historical price copied · no customer contacted
+                  </small>
+                </span>
+                {item.status === 'fresh_estimate_required' ? (
+                  <Link
+                    className="button button--secondary button--sm"
+                    to={`/estimates/new?recurringWorkItem=${item.id}`}
+                  >
+                    Capture measurements and estimate
+                  </Link>
+                ) : (
+                  <Badge tone="positive">Estimate prepared · quote review next</Badge>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -194,11 +298,11 @@ type ServicesSection = 'price-book' | 'catalog' | 'zones' | 'checklists';
 
 function ServicesPanel({
   draftCreated,
-  enabledServiceCodes,
+  pricing,
   onCreateDraft,
 }: {
   draftCreated: boolean;
-  enabledServiceCodes: SandboxServiceCode[];
+  pricing: SandboxPricingPresentation;
   onCreateDraft(): void;
 }) {
   const [section, setSection] = useState<ServicesSection>('price-book');
@@ -229,11 +333,16 @@ function ServicesPanel({
             <Card className="section-card">
               <div className="price-book-banner">
                 <div>
-                  <Badge tone="positive" dot>
-                    Active
+                  <Badge
+                    tone={pricing.source === 'published_configuration' ? 'positive' : 'warning'}
+                    dot
+                  >
+                    {pricing.source === 'published_configuration'
+                      ? 'Published snapshot'
+                      : 'Starter fixture'}
                   </Badge>
-                  <h3>DFW Residential · 2026.07-v3</h3>
-                  <p>Published Jul 1 by owner · effective Jul 1 · immutable after publication</p>
+                  <h3>{pricing.versionLabel}</h3>
+                  <p>{pricing.sourceLabel}</p>
                 </div>
                 <Button
                   variant="secondary"
@@ -247,23 +356,26 @@ function ServicesPanel({
               <div className="price-book-controls">
                 <div>
                   <span>Company minimum</span>
-                  <strong>$225.00</strong>
+                  <strong>{pricing.companyMinimum}</strong>
                 </div>
                 <div>
                   <span>Margin floor</span>
-                  <strong>42%</strong>
+                  <strong>{pricing.marginFloor}</strong>
                 </div>
                 <div>
                   <span>Auto discount</span>
-                  <strong>≤ 10%</strong>
+                  <strong>≤ {pricing.automaticDiscountLimit}</strong>
                 </div>
                 <div>
                   <span>Deposit</span>
-                  <strong>25%</strong>
+                  <strong>{pricing.deposit}</strong>
                 </div>
                 <div>
                   <span>Tax rule</span>
-                  <strong>8.25%*</strong>
+                  <strong>
+                    {pricing.taxRule}
+                    {pricing.taxRule === 'Disabled' ? '' : '*'}
+                  </strong>
                 </div>
               </div>
               <p className="legal-review-note">
@@ -275,16 +387,17 @@ function ServicesPanel({
               <Card className="section-card">
                 <div className="section-card__header">
                   <div>
-                    <h2>DFW Residential · 2026.08-v1</h2>
+                    <h2>Local draft copy</h2>
                     <p className="section-card__subtitle">
-                      Editable draft copied from 2026.07-v3 · not available to quoting tools
+                      Editable UI draft copied from {pricing.versionLabel} · not available to
+                      quoting tools
                     </p>
                   </div>
                   <Badge tone="warning">Draft</Badge>
                 </div>
                 <p className="legal-review-note">
                   Publishing remains an owner-controlled operation. Existing quotes keep their
-                  immutable 2026.07-v3 calculation snapshot.
+                  immutable calculation snapshot.
                 </p>
               </Card>
             )}
@@ -301,69 +414,42 @@ function ServicesPanel({
                 </p>
               </div>
               <Badge tone="neutral">
-                {enabledServiceCodes.length} of 3 primary services enabled
+                {pricing.enabledServiceCodes.length} of {pricing.serviceRules.length} configured
+                services enabled
               </Badge>
             </div>
-            {[
-              {
-                name: 'Driveway pressure wash',
-                code: 'DRIVEWAY_WASH',
-                serviceCode: 'pressure-wash-flatwork',
-                detail: '$110 base + $0.14 / sq ft after 500 · $185 service minimum',
-                icon: Droplets,
-                unit: 'square foot',
-              },
-              {
-                name: 'House soft wash',
-                code: 'HOUSE_SOFT_WASH',
-                serviceCode: 'soft-wash-house',
-                detail: '$240 base + $0.18 / sq ft · stories, surface, access, risk',
-                icon: Beaker,
-                unit: 'square foot',
-              },
-              {
-                name: 'Gutter cleaning',
-                code: 'GUTTER_CLEAN',
-                serviceCode: 'gutter-cleaning',
-                detail: '$155 base + $0.85 / linear ft after 100 · $180 minimum',
-                icon: HardHat,
-                unit: 'linear foot',
-              },
-              {
-                name: 'Downspout flow test & flush',
-                code: 'DOWNSPOUT_FLUSH',
-                serviceCode: 'gutter-cleaning',
-                detail: '$18 / each · available only with approved gutter service',
-                icon: Wrench,
-                unit: 'each',
-              },
-            ].map(({ name, code, serviceCode, detail, icon: Icon, unit }) => (
-              <div className="catalog-service" key={code}>
-                <span className="catalog-service__icon">
-                  <Icon size={18} />
-                </span>
-                <div>
-                  <p className="catalog-service__name">{name}</p>
-                  <p className="catalog-service__detail">
-                    {code} · {detail}
-                  </p>
+            {pricing.serviceRules.map((rule) => {
+              const Icon =
+                rule.serviceCode === 'gutter-cleaning'
+                  ? HardHat
+                  : rule.serviceCode.includes('soft-wash')
+                    ? Beaker
+                    : Droplets;
+              return (
+                <div className="catalog-service" key={rule.serviceCode}>
+                  <span className="catalog-service__icon">
+                    <Icon size={18} />
+                  </span>
+                  <div>
+                    <p className="catalog-service__name">{rule.name}</p>
+                    <p className="catalog-service__detail">
+                      {rule.serviceCode} · {rule.summary}
+                      {rule.addOns.length > 0
+                        ? ` · Add-ons: ${rule.addOns
+                            .map((addOn) => `${addOn.code} ${addOn.summary}`)
+                            .join(', ')}`
+                        : ''}
+                    </p>
+                  </div>
+                  <span>
+                    <Badge tone={rule.enabled ? 'positive' : 'neutral'}>
+                      {rule.enabled ? 'Enabled' : 'Not enabled'}
+                    </Badge>
+                    <small className="catalog-service__unit">{rule.unitLabel}</small>
+                  </span>
                 </div>
-                <span>
-                  <Badge
-                    tone={
-                      enabledServiceCodes.includes(serviceCode as SandboxServiceCode)
-                        ? 'positive'
-                        : 'neutral'
-                    }
-                  >
-                    {enabledServiceCodes.includes(serviceCode as SandboxServiceCode)
-                      ? 'Enabled'
-                      : 'Not enabled'}
-                  </Badge>
-                  <small className="catalog-service__unit">{unit}</small>
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </Card>
         )}
 
@@ -376,21 +462,17 @@ function ServicesPanel({
                   Deterministic fees from verified geocoding distance
                 </p>
               </div>
-              <Badge tone="neutral">3 zones</Badge>
+              <Badge tone="neutral">{pricing.travelZones.length} zones</Badge>
             </div>
-            {[
-              ['DFW-A', '0–15 road miles', '$0.00', 'Default operating area'],
-              ['DFW-B', '15.1–25 road miles', '$35.00', 'Owner crew capacity required'],
-              ['DFW-C', '25.1–40 road miles', '$75.00', 'Manual scheduling review'],
-            ].map(([zone, range, fee, policy]) => (
-              <div className="template-row" key={zone}>
+            {pricing.travelZones.map((zone, index) => (
+              <div className="template-row" key={zone.code}>
                 <span>
                   <strong>
-                    {zone} · {range}
+                    {zone.code} · {zone.boundary}
                   </strong>
-                  <small>{policy}</small>
+                  <small>{zone.name}</small>
                 </span>
-                <Badge tone={zone === 'DFW-C' ? 'warning' : 'neutral'}>{fee}</Badge>
+                <Badge tone={index === 0 ? 'neutral' : 'warning'}>{zone.fee}</Badge>
               </div>
             ))}
             <p className="legal-review-note">
@@ -571,18 +653,16 @@ function SafetyPanel() {
         <div className="section-card__header">
           <div>
             <h2>Incident readiness</h2>
-            <p className="section-card__subtitle">
-              Universal spine plus scenario-specific playbooks
-            </p>
+            <p className="section-card__subtitle">Rehearsal controls; not a live-launch score</p>
           </div>
           <ShieldEllipsis size={18} color="#1f6d5e" />
         </div>
         <div className="readiness-score">
           <span>
-            <strong>92%</strong>
-            <small>launch readiness</small>
+            <strong>4 controls</strong>
+            <small>loaded in this sandbox scenario</small>
           </span>
-          <Progress value={92} label="Incident readiness" tone="green" />
+          <Badge tone="warning">Professional review open</Badge>
         </div>
         <ul className="readiness-list">
           <li>

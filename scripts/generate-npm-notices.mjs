@@ -4,11 +4,30 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const lockfilePath = join(repositoryRoot, 'package-lock.json');
-const outputPath = join(repositoryRoot, 'NPM_THIRD_PARTY_NOTICES.txt');
 const checkOnly = process.argv.includes('--check');
 const unknown = 'UNKNOWN';
 const noticeFilePattern = /^(?:licen[cs]e|copying|notice|copyright)(?:$|[._-].*)/i;
+const inventoryConfigurations = [
+  {
+    title: 'STORYOPS AI — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
+    lockfilePath: join(repositoryRoot, 'package-lock.json'),
+    packageRoot: repositoryRoot,
+    outputPath: join(repositoryRoot, 'NPM_THIRD_PARTY_NOTICES.txt'),
+    supplementalMaterialFiles: new Map(),
+  },
+  {
+    title: 'STORYOPS AI VROOM RUNTIME — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
+    lockfilePath: join(repositoryRoot, 'infra/vroom/runtime-package/package-lock.json'),
+    packageRoot: join(repositoryRoot, 'infra/vroom/runtime-package'),
+    outputPath: join(repositoryRoot, 'infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt'),
+    supplementalMaterialFiles: new Map([
+      // cookie-signature@1.0.6 declares MIT and ships the complete MIT notice
+      // under the "License" heading in Readme.md rather than in a dedicated
+      // LICENSE file. Capture that exact lock-installed source explicitly.
+      ['cookie-signature@1.0.6', ['Readme.md']],
+    ]),
+  },
+];
 
 function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -47,9 +66,11 @@ function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
-function renderInventory() {
+function renderInventory({ title, lockfilePath, packageRoot, supplementalMaterialFiles }) {
   if (!existsSync(lockfilePath)) {
-    throw new Error('package-lock.json is required to generate the npm inventory.');
+    throw new Error(
+      `${relative(repositoryRoot, lockfilePath)} is required to generate the npm inventory.`,
+    );
   }
 
   const lockfile = JSON.parse(readFileSync(lockfilePath, 'utf8'));
@@ -68,6 +89,7 @@ function renderInventory() {
   const directDevelopment = new Set(Object.keys(rootPackage.devDependencies ?? {}));
   const directOptional = new Set(Object.keys(rootPackage.optionalDependencies ?? {}));
   const packages = new Map();
+  const unmatchedSupplementalPackages = new Set(supplementalMaterialFiles.keys());
   let lockEntryCount = 0;
 
   for (const [lockPath, lockEntry] of Object.entries(lockfile.packages ?? {})) {
@@ -104,11 +126,17 @@ function renderInventory() {
     // is inventoried but host-specific files are deliberately not folded into the
     // committed artifact.
     if (!lockEntry.optional) {
-      const installedDirectory = join(repositoryRoot, lockPath);
+      const installedDirectory = join(packageRoot, lockPath);
       const manifestPath = join(installedDirectory, 'package.json');
       if (!existsSync(manifestPath)) {
         throw new Error(
-          `Run npm ci before generating notices; missing ${relative(repositoryRoot, manifestPath)}.`,
+          [
+            `Install the exact dependency graph before generating notices; missing`,
+            `${relative(repositoryRoot, manifestPath)}.`,
+            packageRoot === repositoryRoot
+              ? 'Run npm ci.'
+              : `Run npm ci --prefix ${relative(repositoryRoot, packageRoot)} --omit=dev --ignore-scripts.`,
+          ].join(' '),
         );
       }
 
@@ -130,13 +158,45 @@ function renderInventory() {
       }
 
       record.installedEvidence.push(lockPath);
-      for (const fileName of readdirSync(installedDirectory).sort(compareText)) {
-        if (!noticeFilePattern.test(fileName)) {
-          continue;
+      const supplementalKey = `${name}@${lockEntry.version}`;
+      const supplementalFiles = supplementalMaterialFiles.get(supplementalKey) ?? [];
+      if (supplementalFiles.length > 0) {
+        unmatchedSupplementalPackages.delete(supplementalKey);
+      }
+      const materialFiles = new Set(
+        readdirSync(installedDirectory).filter((fileName) => noticeFilePattern.test(fileName)),
+      );
+      for (const fileName of supplementalFiles) {
+        materialFiles.add(fileName);
+      }
+      for (const fileName of [...materialFiles].sort(compareText)) {
+        if (
+          fileName.includes('/') ||
+          fileName.includes('\\') ||
+          fileName === '.' ||
+          fileName === '..'
+        ) {
+          throw new Error(`Unsafe supplemental notice path for ${supplementalKey}: ${fileName}`);
         }
 
         const materialPath = join(installedDirectory, fileName);
+        if (!existsSync(materialPath)) {
+          throw new Error(
+            `Supplemental notice source is missing for ${supplementalKey}: ${relative(
+              repositoryRoot,
+              materialPath,
+            )}`,
+          );
+        }
         if (!lstatSync(materialPath).isFile()) {
+          if (supplementalFiles.includes(fileName)) {
+            throw new Error(
+              `Supplemental notice source is not a regular file for ${supplementalKey}: ${relative(
+                repositoryRoot,
+                materialPath,
+              )}`,
+            );
+          }
           continue;
         }
 
@@ -153,6 +213,15 @@ function renderInventory() {
     }
 
     packages.set(key, record);
+  }
+
+  if (unmatchedSupplementalPackages.size > 0) {
+    throw new Error(
+      `Supplemental notice package is absent from ${relative(
+        repositoryRoot,
+        lockfilePath,
+      )}: ${[...unmatchedSupplementalPackages].sort(compareText).join(', ')}`,
+    );
   }
 
   const sortedPackages = [...packages.values()].sort((left, right) => {
@@ -196,7 +265,7 @@ function renderInventory() {
   }
 
   const lines = [
-    'STORYOPS AI — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
+    title,
     '',
     'This file is generated. Do not edit it by hand.',
     'Generator: scripts/generate-npm-notices.mjs',
@@ -205,7 +274,7 @@ function renderInventory() {
     '',
     'SCOPE AND EVIDENCE',
     '',
-    `Lockfile: package-lock.json (lockfileVersion ${lockfile.lockfileVersion})`,
+    `Lockfile: ${relative(repositoryRoot, lockfilePath)} (lockfileVersion ${lockfile.lockfileVersion})`,
     `Root package: ${String(lockfile.name)}@${String(lockfile.version)}`,
     `Locked package paths: ${lockEntryCount}`,
     `Unique package name/version pairs: ${sortedPackages.length}`,
@@ -213,8 +282,12 @@ function renderInventory() {
     `Packages with UNKNOWN declared license metadata: ${unknownLicenseCount}`,
     `Lock entries with UNKNOWN resolved artifact URL: ${unknownResolvedCount}`,
     `Lock entries with UNKNOWN integrity hash: ${unknownIntegrityCount}`,
-    `Installed non-optional packages with no top-level license/notice file: ${packageWithoutMaterialCount}`,
+    `Installed non-optional packages with no captured license/notice material: ${packageWithoutMaterialCount}`,
     `Optional package variants inventoried from lockfile only: ${optionalOnlyPackageCount}`,
+    `Explicit supplemental notice sources: ${[...supplementalMaterialFiles.values()].reduce(
+      (total, files) => total + files.length,
+      0,
+    )}`,
     '',
     'Every package-lock entry is listed below with its exact version and with',
     'the resolved artifact URL and integrity value when the lockfile records',
@@ -222,9 +295,12 @@ function renderInventory() {
     'packages, generation also validates',
     'the installed package name, version, and declared license against the',
     'lockfile and embeds every top-level LICENSE/LICENCE, COPYING, NOTICE, or',
-    'COPYRIGHT file found in that installed package. Embedded UTF-8 text has',
-    'only line endings normalized to LF; each identifier is the SHA-256 of the',
-    'original installed file bytes.',
+    'COPYRIGHT file found in that installed package. A narrowly audited',
+    'supplemental source is included only when a locked package places its',
+    'complete license notice in another shipped file; that exact source path is',
+    'recorded in the inventory. Embedded UTF-8 text has only line endings',
+    'normalized to LF; each identifier is the SHA-256 of the original installed',
+    'file bytes.',
     '',
     'Optional dependencies in this graph are platform-specific build variants.',
     'They are intentionally represented from package-lock.json only so this',
@@ -310,23 +386,26 @@ function renderInventory() {
   return `${lines.join('\n')}\n`;
 }
 
-const generated = renderInventory();
+const inventories = inventoryConfigurations.map((configuration) => ({
+  configuration,
+  generated: renderInventory(configuration),
+}));
 
-if (checkOnly) {
-  if (!existsSync(outputPath)) {
-    console.error('NPM_THIRD_PARTY_NOTICES.txt is missing. Run npm run licenses:generate.');
-    process.exitCode = 1;
-  } else if (readFileSync(outputPath, 'utf8') !== generated) {
-    console.error(
-      'NPM_THIRD_PARTY_NOTICES.txt is stale. Run npm run licenses:generate and commit the result.',
-    );
-    process.exitCode = 1;
+for (const { configuration, generated } of inventories) {
+  const outputName = relative(repositoryRoot, configuration.outputPath);
+
+  if (checkOnly) {
+    if (!existsSync(configuration.outputPath)) {
+      console.error(`${outputName} is missing. Run npm run licenses:generate.`);
+      process.exitCode = 1;
+    } else if (readFileSync(configuration.outputPath, 'utf8') !== generated) {
+      console.error(`${outputName} is stale. Run npm run licenses:generate and commit the result.`);
+      process.exitCode = 1;
+    } else {
+      console.log(`${outputName} matches its locked dependency graph.`);
+    }
   } else {
-    console.log('NPM_THIRD_PARTY_NOTICES.txt matches the locked dependency graph.');
+    writeFileSync(configuration.outputPath, generated);
+    console.log(`Wrote ${outputName} (${Buffer.byteLength(generated)} bytes).`);
   }
-} else {
-  writeFileSync(outputPath, generated);
-  console.log(
-    `Wrote ${relative(repositoryRoot, outputPath)} (${Buffer.byteLength(generated)} bytes).`,
-  );
 }

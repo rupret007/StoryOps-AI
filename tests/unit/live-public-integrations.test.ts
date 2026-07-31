@@ -27,6 +27,7 @@ describe('live public integration adapters', () => {
       .mockResolvedValueOnce(
         jsonResponse({
           properties: {
+            updated: '2026-07-29T12:15:00.000Z',
             periods: [
               {
                 startTime: '2026-07-29T08:00:00-05:00',
@@ -54,6 +55,7 @@ describe('live public integration adapters', () => {
     });
 
     expect(result.office).toBe('FWD');
+    expect(result.issuedAt).toBe('2026-07-29T12:15:00.000Z');
     expect(result.periods[0]).toMatchObject({
       temperatureF: 82,
       precipitationProbability: null,

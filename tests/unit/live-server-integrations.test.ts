@@ -346,6 +346,7 @@ describe('live server integration boundaries', () => {
       companyId: '10000000-0000-4000-8000-000000000001',
       customerId: 'cus_123',
       quoteId: 'quote-1048',
+      checkoutAttempt: 1,
       lines: [
         {
           description: 'Exterior service',
@@ -361,7 +362,59 @@ describe('live server integration boundaries', () => {
     expect(checkout.total.amount).toBe('613.56');
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(new Headers(init.headers).get('idempotency-key')).toBe('checkout:quote-1048:v1');
-    expect(String(init.body)).toContain('line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=61356');
+    const body = new URLSearchParams(String(init.body));
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('61356');
+    expect(body.get('metadata[checkout_purpose]')).toBe('quote_deposit');
+    expect(body.get('metadata[checkout_attempt]')).toBe('1');
+    expect(body.get('payment_intent_data[metadata][checkout_purpose]')).toBe('quote_deposit');
+    expect(body.get('payment_intent_data[metadata][checkout_attempt]')).toBe('1');
+  });
+
+  it('binds Stripe invoice-balance metadata to both Checkout and PaymentIntent', async () => {
+    const fetchMock = vi.fn(async () =>
+      json({
+        id: 'cs_test_invoice',
+        status: 'open',
+        payment_status: 'unpaid',
+        amount_total: 48124,
+        url: 'https://checkout.stripe.test/cs_test_invoice',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new StripePaymentsProvider({
+      secretKey: 'sk_test_redacted',
+      checkoutSuccessUrl: 'https://storyops.example/portal/payment/success',
+      checkoutCancelUrl: 'https://storyops.example/portal/payment/cancel',
+      customerResolver: stripeCustomerResolver,
+      billingValidator: stripeBillingValidator,
+    });
+
+    await provider.createCheckout({
+      companyId: '10000000-0000-4000-8000-000000000001',
+      customerId: '10000000-0000-4000-8000-000000000101',
+      quoteId: '10000000-0000-4000-8000-000000000501',
+      checkoutPurpose: 'invoice_balance',
+      invoiceId: '10000000-0000-4000-8000-000000000701',
+      invoiceVersion: 7,
+      checkoutAttempt: 2,
+      lines: [
+        {
+          description: 'Invoice balance',
+          quantity: 1,
+          unitAmount: { amount: '481.24', currency: 'USD' },
+        },
+      ],
+      idempotencyKey: 'storyops:invoice-balance:invoice:v7:48124',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = new URLSearchParams(String(init.body));
+    expect(body.get('metadata[checkout_purpose]')).toBe('invoice_balance');
+    expect(body.get('metadata[checkout_attempt]')).toBe('2');
+    expect(body.get('metadata[invoice_version]')).toBe('7');
+    expect(body.get('payment_intent_data[metadata][checkout_purpose]')).toBe('invoice_balance');
+    expect(body.get('payment_intent_data[metadata][checkout_attempt]')).toBe('2');
+    expect(body.get('payment_intent_data[metadata][invoice_version]')).toBe('7');
   });
 
   it('maps Google geocode evidence without inventing precision', async () => {
@@ -409,6 +462,68 @@ describe('live server integration boundaries', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://oauth2.googleapis.com/token');
     const [, calendarInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
     expect(new Headers(calendarInit.headers).get('authorization')).toBe('Bearer access-1');
+  });
+
+  it('reads back and verifies the deterministic Google Calendar booking', async () => {
+    const window = {
+      start: '2026-07-30T14:00:00.000Z',
+      end: '2026-07-30T16:00:00.000Z',
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (init?.method === 'POST') return json({ id: 'accepted' });
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      const eventId = decodeURIComponent(url.split('/').at(-1) ?? '');
+      return json({
+        id: eventId,
+        etag: '"calendar-etag-v3"',
+        status: 'confirmed',
+        start: { dateTime: window.start },
+        end: { dateTime: window.end },
+        extendedProperties: {
+          private: {
+            storyops_job_id: '10000000-0000-4000-8000-000000000501',
+            storyops_idempotency_key: 'schedule:job-501:v3',
+            storyops_kind: 'booking',
+            storyops_expires_at: '',
+          },
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new GoogleCalendarProvider({
+      accessToken: 'google-redacted',
+      calendarId: 'calendar@example.com',
+    });
+
+    const request = {
+      calendarId: 'calendar@example.com',
+      title: 'StoryOps job',
+      window,
+      timeZone: 'America/Chicago',
+      jobId: '10000000-0000-4000-8000-000000000501',
+      idempotencyKey: 'schedule:job-501:v3',
+    };
+    const entry = await provider.createBooking(request);
+    expect(entry).toMatchObject({
+      status: 'confirmed',
+      etag: '"calendar-etag-v3"',
+      readBackConfirmed: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/events/storyops');
+
+    await expect(
+      provider.cancelBooking({
+        calendarId: 'calendar@example.com',
+        providerId: entry.providerId,
+        etag: entry.etag,
+        idempotencyKey: request.idempotencyKey,
+      }),
+    ).resolves.toBeUndefined();
+    const [, deleteInit] = fetchMock.mock.calls[3] as unknown as [string, RequestInit];
+    expect(deleteInit.method).toBe('DELETE');
+    expect(new Headers(deleteInit.headers).get('if-match')).toBe('"calendar-etag-v3"');
   });
 
   it('uses a documented HTTP email gateway contract and preserves idempotency', async () => {

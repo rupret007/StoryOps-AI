@@ -129,6 +129,12 @@ There are three separate signals:
 - **Provider health:** each optional integration’s configured mode and a
   bounded, non-mutating check.
 
+Company operational status is a fourth, business-scoped signal. A process and
+its providers may be technically healthy while the company is intentionally
+`paused`; report that as an operational stop, never as application/provider
+failure or permission to bypass the pause. A `setup` company likewise remains
+closed until baseline activation.
+
 The Supabase `integration-health` Edge function requires an active owner or
 dispatcher membership and consumes a durable per-user hourly operation budget
 before active probes. A static sandbox health card, complete environment
@@ -181,17 +187,18 @@ all sensitive evidence.
 
 These are V1 product targets, not contractual promises:
 
-| Signal                                      | Initial target                                    | Alert                                     |
-| ------------------------------------------- | ------------------------------------------------- | ----------------------------------------- |
-| Web availability                            | 99.5% per rolling 30 days                         | 5-minute failure burn plus 30-minute burn |
-| Interactive API p95                         | <1.5 s excluding acknowledged async provider work | >2.5 s for 15 minutes                     |
-| Webhook valid-event durable acknowledgement | 99% <2 s                                          | failure/timeout rate >2% for 5 minutes    |
-| Automation low-risk completion              | 95% <60 s                                         | queue oldest age >5 minutes               |
-| Approval notification                       | 99% <2 minutes                                    | oldest unnotified approval >5 minutes     |
-| Provider indeterminate actions              | 0 unresolved >15 minutes                          | any >15 minutes                           |
-| Offline queued write recovery               | 100% idempotent recovery in test scenario         | any dropped/conflicting mutation          |
-| Logical backup RPO                          | 24 hours                                          | latest verified backup >26 hours          |
-| Restore RTO target                          | 4 hours                                           | quarterly drill exceeds target            |
+| Signal                                      | Initial target                                    | Alert                                       |
+| ------------------------------------------- | ------------------------------------------------- | ------------------------------------------- |
+| Web availability                            | 99.5% per rolling 30 days                         | 5-minute failure burn plus 30-minute burn   |
+| Interactive API p95                         | <1.5 s excluding acknowledged async provider work | >2.5 s for 15 minutes                       |
+| Webhook valid-event durable acknowledgement | 99% <2 s                                          | failure/timeout rate >2% for 5 minutes      |
+| Automation low-risk completion              | 95% <60 s                                         | queue oldest age >5 minutes                 |
+| Approval notification                       | 99% <2 minutes                                    | oldest unnotified approval >5 minutes       |
+| Provider indeterminate actions              | 0 unresolved >15 minutes                          | any >15 minutes                             |
+| Offline queued write recovery               | 100% idempotent recovery in test scenario         | any dropped/conflicting mutation            |
+| Company pause propagation                   | New work denied; accepted truth still reconciles  | any post-pause start or lost reconciliation |
+| Logical backup RPO                          | 24 hours                                          | latest verified backup >26 hours            |
+| Restore RTO target                          | 4 hours                                           | quarterly drill exceeds target              |
 
 Measure sandbox separately from live. Never improve a success rate by treating
 `not_configured`, queued, unknown, or pending approval as success.
@@ -211,6 +218,8 @@ Measure sandbox separately from live. Never improve a success rate by treating
 ### Technical/provider
 
 - request rate, latency, errors, offline queue/recovery;
+- company lifecycle status, latest receipt/readback age, pause/reactivation
+  conflicts, and privacy-safe pending-packet counts;
 - automation runs by agent/disposition/retry and prompt/policy version;
 - tool calls denied/approval-required/prompt-injection flagged;
 - webhook signature failures, replay rejects, duplicate no-ops, processing age;
@@ -234,6 +243,9 @@ incident/trace ID.
 ## Verification commands
 
 ```bash
+npm audit --audit-level=high
+npm run install:vroom-runtime
+npm audit --prefix infra/vroom/runtime-package --audit-level=high
 npm run licenses:check
 npm run lint
 npm run typecheck
@@ -258,11 +270,11 @@ substitutes a public routing endpoint.
 
 ## Operational cadence
 
-| Cadence   | Required review                                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Per shift | Integration health, approvals, failed/unknown provider actions, offline queue, schedule/weather, permit/equipment expiry |
-| Daily     | Backup verified, delivery/bounce/suppression, invoice/payment reconciliation, automation failures, security alerts       |
-| Weekly    | Restore sample metadata/checksums, least-privilege exceptions, price/margin exceptions, incidents/near misses            |
-| Monthly   | Full disposable restore drill rotation, access review, secret age, dependency/security updates, SLO/cost review          |
-| Quarterly | DFW legal/safety source revalidation, full restore drill, disaster/incident exercise, provider scopes/webhooks           |
-| Annually  | Counsel/CPA/insurance/safety sign-off, retention policy, contracts/notices, business-continuity objectives               |
+| Cadence   | Required review                                                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per shift | Company lifecycle/readback, integration health, approvals, failed/unknown provider actions, offline queue, schedule/weather, permit/equipment expiry |
+| Daily     | Backup verified, delivery/bounce/suppression, invoice/payment reconciliation, automation failures, security alerts                                   |
+| Weekly    | Restore sample metadata/checksums, least-privilege exceptions, price/margin exceptions, incidents/near misses                                        |
+| Monthly   | Full disposable restore drill rotation, access review, secret age, dependency/security updates, SLO/cost review                                      |
+| Quarterly | DFW legal/safety source revalidation, full restore drill, disaster/incident exercise, provider scopes/webhooks                                       |
+| Annually  | Counsel/CPA/insurance/safety sign-off, retention policy, contracts/notices, business-continuity objectives                                           |

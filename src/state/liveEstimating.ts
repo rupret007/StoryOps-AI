@@ -1,10 +1,18 @@
 import { z } from 'zod';
+import {
+  estimateScopeEvidenceBundleSchema,
+  type EstimateScopeEvidenceBundle,
+} from '@/domain/estimateScopeEvidence';
+
+export { estimateScopeEvidenceBundleSchema };
+export type { EstimateScopeEvidenceBundle };
 
 const uuidSchema = z.string().uuid();
 
 const priceRuleSchema = z
   .object({
     serviceCode: z.string(),
+    requiredMeasurementKinds: z.array(z.string()).default([]),
     pricingUnit: z.enum(['flat', 'sq_ft', 'linear_ft', 'each', 'hour']),
     allowedAttributeValues: z.record(z.string(), z.array(z.string())),
     addOns: z.array(
@@ -41,10 +49,17 @@ export const liveEstimateContextSchema = z
       z.object({
         id: uuidSchema,
         propertyId: uuidSchema,
-        kind: z.enum(['area_sq_ft', 'length_linear_ft', 'height_ft', 'count', 'stories']),
+        kind: z.enum([
+          'area_sq_ft',
+          'length_linear_ft',
+          'height_ft',
+          'count',
+          'stories',
+          'duration_hours',
+        ]),
         label: z.string(),
         value: z.string(),
-        unit: z.enum(['sq_ft', 'linear_ft', 'ft', 'each', 'story']),
+        unit: z.enum(['sq_ft', 'linear_ft', 'ft', 'each', 'story', 'hour']),
         source: z.enum([
           'field_measured',
           'map',
@@ -69,6 +84,14 @@ export const liveEstimateContextSchema = z
         injectionSignals: z.array(z.string()),
       })
       .nullable(),
+    scopeEvidencePolicies: z.array(
+      z
+        .object({
+          serviceCode: z.string().min(1),
+          policy: z.enum(['photo_required', 'photo_optional', 'not_applicable']),
+        })
+        .strict(),
+    ),
     priceBook: z
       .object({
         id: uuidSchema,
@@ -82,6 +105,26 @@ export const liveEstimateContextSchema = z
             })
             .passthrough(),
         ),
+        packages: z.array(
+          z
+            .object({
+              code: z.string().min(1),
+              name: z.string().min(1),
+              description: z.string().min(1),
+              tier: z.enum(['good', 'better', 'best']),
+              components: z.array(
+                z
+                  .object({
+                    serviceCode: z.string().min(1),
+                    required: z.boolean(),
+                    requiredAddOnCodes: z.array(z.string().min(1)),
+                    optionalAddOnCodes: z.array(z.string().min(1)),
+                  })
+                  .strict(),
+              ),
+            })
+            .strict(),
+        ),
       })
       .passthrough(),
     serviceTerms: z.object({
@@ -93,8 +136,11 @@ export const liveEstimateContextSchema = z
     derivedTravelZone: z
       .object({
         code: z.string(),
-        source: z.enum(['postal_code', 'conservative_default']),
-        postalCode: z.string(),
+        source: z.literal('reviewed_postal_code'),
+        postalCode: z.string().regex(/^\d{5}$/u),
+        mappingReviewedBy: z.string().min(2),
+        mappingReviewedAt: z.string(),
+        mappingReviewReference: z.string().min(5),
       })
       .nullable(),
   })
@@ -106,17 +152,13 @@ export interface LiveEstimateRequest {
   customerId: string;
   propertyId: string;
   leadId?: string;
+  packageCode?: string;
   idempotencyKey: string;
   services: Array<{
     serviceCode: string;
     measurementId: string;
-    attributes: {
-      stories?: string;
-      surface?: string;
-      soil?: string;
-      access?: string;
-      risk?: string;
-    };
+    supportingMeasurementIds?: string[];
+    attributes: Record<string, string>;
     addOns?: Array<{ code: string; measurementId: string }>;
   }>;
   travelZoneCode?: string;

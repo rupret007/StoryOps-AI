@@ -1,11 +1,17 @@
 import { openDB } from 'idb';
+import { companyConfigurationRecordSchema } from '@/domain/companyConfiguration';
 import type { DemoState, SandboxSetupProfile } from './model';
 import { normalizeOfflineQueueAfterHydration } from './offlineFieldQueue';
+import { operatingBaselineStateSchema } from './operatingBaseline';
+import { companyControlStateSchema } from './companyControl';
+import { pilotReleaseEvidenceStateSchema } from '@/core/pilot/releaseEvidence';
+import { recurringDueWorkStateSchema } from '@/core/recurring/dueWork';
 
 const DATABASE_NAME = 'storyops-ai';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'app-state';
-const STATE_KEY = 'current';
+const LEGACY_STATE_KEY = 'current';
+const SANDBOX_STATE_KEY = 'sandbox';
 
 export type PersistenceScope = {
   userId: string;
@@ -17,6 +23,10 @@ type PersistedEnvelope = {
   scope?: PersistenceScope;
   state: DemoState;
 };
+
+function scopedStateKey(scope: PersistenceScope): string {
+  return `supabase:${scope.companyId}:${scope.userId}`;
+}
 
 const getDatabase = () => {
   if (typeof indexedDB === 'undefined') {
@@ -38,7 +48,26 @@ export async function loadPersistedState(
     const databasePromise = getDatabase();
     if (!databasePromise) return undefined;
     const database = await databasePromise;
-    const stored: unknown = await database.get(STORE_NAME, STATE_KEY);
+    const stateKey = expectedScope ? scopedStateKey(expectedScope) : SANDBOX_STATE_KEY;
+    let stored: unknown = await database.get(STORE_NAME, stateKey);
+    if (stored === undefined) {
+      const legacy: unknown = await database.get(STORE_NAME, LEGACY_STATE_KEY);
+      const legacyEnvelope = isPersistedEnvelope(legacy)
+        ? legacy
+        : isCompatibleState(legacy)
+          ? { envelopeVersion: 2 as const, state: legacy }
+          : undefined;
+      const legacyMatches = expectedScope
+        ? legacyEnvelope?.scope?.userId === expectedScope.userId &&
+          legacyEnvelope.scope.companyId === expectedScope.companyId &&
+          legacyEnvelope.state.dataMode === 'supabase'
+        : legacyEnvelope?.state.dataMode === 'sandbox';
+      if (legacyEnvelope && legacyMatches) {
+        stored = legacyEnvelope;
+        await database.put(STORE_NAME, legacyEnvelope, stateKey);
+        await database.delete(STORE_NAME, LEGACY_STATE_KEY);
+      }
+    }
     const envelope = isPersistedEnvelope(stored)
       ? stored
       : isCompatibleState(stored)
@@ -52,13 +81,15 @@ export async function loadPersistedState(
         envelope.scope.companyId !== expectedScope.companyId ||
         state.dataMode !== 'supabase'
       ) {
-        await database.delete(STORE_NAME, STATE_KEY);
         return undefined;
       }
     } else if (state.dataMode !== 'sandbox') {
       return undefined;
     }
     if (isCompatibleState(state)) {
+      const companyControlState = companyControlStateSchema.safeParse(
+        state.companyControlState,
+      ).data;
       return {
         ...state,
         dataMode: state.dataMode === 'supabase' ? 'supabase' : 'sandbox',
@@ -67,13 +98,57 @@ export async function loadPersistedState(
             ? true
             : state.setupComplete === true && isSandboxSetupProfile(state.setupProfile),
         setupProfile: isSandboxSetupProfile(state.setupProfile) ? state.setupProfile : undefined,
+        companyConfiguration: companyConfigurationRecordSchema.safeParse(state.companyConfiguration)
+          .data,
+        operatingBaseline: operatingBaselineStateSchema.safeParse(state.operatingBaseline).data,
+        pilotReleaseEvidence: pilotReleaseEvidenceStateSchema.safeParse(state.pilotReleaseEvidence)
+          .data,
+        recurringDueWork: recurringDueWorkStateSchema.safeParse(state.recurringDueWork).data,
+        companyControlState,
+        companyControlRecovery:
+          state.dataMode === 'supabase' &&
+          state.role === 'owner' &&
+          state.companyControlRecovery === true &&
+          companyControlState !== undefined,
         authStatus:
           state.dataMode === 'supabase' && state.authStatus ? state.authStatus : 'disabled',
         incidents: Array.isArray(state.incidents) ? state.incidents : [],
         remindedInvoiceIds: Array.isArray(state.remindedInvoiceIds) ? state.remindedInvoiceIds : [],
+        customerPortalRequests: Array.isArray(state.customerPortalRequests)
+          ? state.customerPortalRequests
+          : [],
+        customerCommunicationPreferences:
+          state.customerCommunicationPreferences &&
+          typeof state.customerCommunicationPreferences === 'object'
+            ? state.customerCommunicationPreferences
+            : {
+                transactionalSms: false,
+                transactionalEmail: false,
+                marketingSms: false,
+                marketingEmail: false,
+                globalOptOut: false,
+                disclosureVersion: 'customer-portal-consent-v1',
+                version: 0,
+              },
+        customerPortalServiceOptions: Array.isArray(state.customerPortalServiceOptions)
+          ? state.customerPortalServiceOptions
+          : [],
         offlineQueue: normalizeOfflineQueueAfterHydration(
           Array.isArray(state.offlineQueue) ? state.offlineQueue : [],
         ),
+        selectedVisitId: state.visits.some((visit) => visit.id === state.selectedVisitId)
+          ? state.selectedVisitId
+          : state.live?.visit?.id &&
+              state.visits.some((visit) => visit.id === state.live?.visit?.id)
+            ? state.live.visit.id
+            : state.visits[0]?.id,
+        selectedDispatchJobId: state.live?.readyToScheduleJobs?.some(
+          (job) => job.id === state.selectedDispatchJobId,
+        )
+          ? state.selectedDispatchJobId
+          : state.live?.readyToScheduleJobs?.some((job) => job.id === state.live?.dispatchJob?.id)
+            ? state.live?.dispatchJob?.id
+            : state.live?.readyToScheduleJobs?.[0]?.id,
         depositPaid: state.depositPaid === true,
         referralInvited: state.referralInvited === true,
         visits: state.visits.map((visit) => ({
@@ -100,7 +175,6 @@ export async function savePersistedState(state: DemoState): Promise<boolean> {
       state.dataMode === 'supabase' &&
       (!state.live || state.authStatus !== 'signed_in' || !state.setupComplete)
     ) {
-      await database.delete(STORE_NAME, STATE_KEY);
       return true;
     }
     const envelope: PersistedEnvelope = {
@@ -115,7 +189,14 @@ export async function savePersistedState(state: DemoState): Promise<boolean> {
           }
         : {}),
     };
-    await database.put(STORE_NAME, envelope, STATE_KEY);
+    const stateKey =
+      state.dataMode === 'supabase' && state.live
+        ? scopedStateKey({
+            userId: state.live.userId,
+            companyId: state.live.companyId,
+          })
+        : SANDBOX_STATE_KEY;
+    await database.put(STORE_NAME, envelope, stateKey);
     return true;
   } catch {
     // The app remains functional in memory when private browsing blocks IndexedDB.
@@ -123,19 +204,38 @@ export async function savePersistedState(state: DemoState): Promise<boolean> {
   }
 }
 
-export async function clearPersistedState(): Promise<void> {
+export async function clearPersistedState(scope?: PersistenceScope): Promise<void> {
   try {
     const databasePromise = getDatabase();
     if (!databasePromise) return;
     const database = await databasePromise;
-    await database.delete(STORE_NAME, STATE_KEY);
+    if (scope) {
+      await database.delete(STORE_NAME, scopedStateKey(scope));
+      return;
+    }
+    await Promise.all([
+      database.delete(STORE_NAME, SANDBOX_STATE_KEY),
+      database.delete(STORE_NAME, LEGACY_STATE_KEY),
+    ]);
   } catch {
     // Resetting the in-memory state is sufficient when persistence is unavailable.
   }
 }
 
-export async function purgeClientPersistence(): Promise<void> {
-  await clearPersistedState();
+export async function purgeClientPersistence(options?: {
+  preserveScopedAppState?: boolean;
+}): Promise<void> {
+  if (!options?.preserveScopedAppState) {
+    try {
+      const databasePromise = getDatabase();
+      if (databasePromise) {
+        const database = await databasePromise;
+        await database.clear(STORE_NAME);
+      }
+    } catch {
+      // The signed-out in-memory boundary remains authoritative.
+    }
+  }
   if (typeof caches === 'undefined') return;
   try {
     await Promise.all((await caches.keys()).map((cacheName) => caches.delete(cacheName)));
@@ -144,8 +244,19 @@ export async function purgeClientPersistence(): Promise<void> {
   }
 }
 
+export async function removeLiveWorkspacePersistence(scope: PersistenceScope): Promise<void> {
+  await clearPersistedState(scope);
+  await purgeClientPersistence({ preserveScopedAppState: true });
+}
+
 function isSandboxSetupProfile(value: unknown): value is SandboxSetupProfile {
-  const allowedServices = new Set(['pressure-wash-flatwork', 'soft-wash-house', 'gutter-cleaning']);
+  const allowedServices = new Set([
+    'pressure-wash-flatwork',
+    'soft-wash-house',
+    'gutter-cleaning',
+    'roof-washing',
+    'window-cleaning',
+  ]);
   return (
     typeof value === 'object' &&
     value !== null &&

@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 import { supabaseCommand } from '../infra/scripts/common.mjs';
 
 const reset = process.argv.includes('--reset');
+const LOCAL_SUPABASE_NETWORK = 'storyops-ai-supabase-loopback';
 const unknown = process.argv.slice(2).filter((argument) => argument !== '--reset');
 if (unknown.length > 0) {
   console.error(`Unknown option(s): ${unknown.join(', ')}`);
@@ -20,12 +23,52 @@ const sqlContracts = [
   'supabase/tests/live_estimating_security.sql',
   'supabase/tests/post_service_lifecycle.sql',
   'supabase/tests/post_service_outbound_worker.sql',
+  'tests/integration/transactional-delivery-lifecycle.sql',
+  'tests/integration/recurring-due-work.sql',
   'tests/integration/live-setup.sql',
+  'tests/integration/setup-forward-compatibility.sql',
+  'tests/integration/setup-receipt-authority.sql',
+  'tests/integration/company-configuration.sql',
+  'tests/integration/material-sds-registry.sql',
   'tests/integration/approved-action-rpc.sql',
+  'tests/integration/ai-approved-lead-actions.sql',
+  'tests/integration/pricing-unit-persistence.sql',
   'tests/integration/live-lead-scope.sql',
+  'tests/integration/lead-intake-operational-disposition.sql',
   'tests/integration/live-field-completion.sql',
   'tests/integration/live-field-safety.sql',
-  'tests/integration/live-golden-path.sql',
+  'tests/integration/atomic-incident-stop-work.sql',
+  'tests/integration/incident-evidence-media.sql',
+  'tests/integration/field-packet-customer-evidence.sql',
+  'tests/integration/scope-photo-workflow.sql',
+  'tests/integration/estimate-scope-evidence-bundle.sql',
+  'tests/integration/estimate-approval-exact-payload.sql',
+  'tests/integration/customer-portal-requests.sql',
+  'tests/integration/customer-commercial-portal.sql',
+  'tests/integration/payment-allocation-boundary.sql',
+  'tests/integration/deposit-provider-truth.sql',
+  'tests/integration/payment-checkout-retirement.sql',
+  'tests/integration/audit-quote-acceptance-boundary.sql',
+  'tests/integration/active-company-mutation-gate.sql',
+  'tests/integration/active-company-setup-control.sql',
+  'tests/integration/active-company-service-boundaries.sql',
+  'tests/integration/role-offboarding-security.sql',
+  'tests/integration/identity-provisioning.sql',
+  'tests/integration/identity-invitation-provider-authority.sql',
+  'tests/integration/identity-invitation-attempt-authority.sql',
+  'tests/integration/industry-pack-kernel.sql',
+  'tests/integration/scheduling-evidence-boundary.sql',
+  'tests/integration/owner-field-eligibility.sql',
+  'tests/integration/customer-property-atomic.sql',
+  'tests/integration/property-geocode-review.sql',
+  'tests/integration/dispatch-clearance.sql',
+  'tests/integration/private-worker-launch-readiness.sql',
+  'tests/integration/scheduling-reconciliation.sql',
+  'tests/integration/live-profitability-kpis.sql',
+  'tests/integration/live-ai-office-observability.sql',
+  'tests/integration/edge-service-role-boundaries.sql',
+  'tests/integration/fixture-backed-booking-invoice-contract.sql',
+  'tests/integration/pilot-release-evidence.sql',
 ];
 const supabaseCli = supabaseCommand();
 
@@ -130,11 +173,52 @@ function waitForHealthyContainer(containerName, label, timeoutMs = 120_000) {
 
 function startEdgeFunctions() {
   const detached = process.platform !== 'win32';
-  const child = spawn(supabaseCli.command, [...supabaseCli.prefix, 'functions', 'serve'], {
-    cwd: process.cwd(),
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached,
-  });
+  const environmentDirectory = mkdtempSync(join(tmpdir(), 'storyops-edge-env-'));
+  chmodSync(environmentDirectory, 0o700);
+  const environmentFile = join(environmentDirectory, '.env');
+  let child;
+  try {
+    writeFileSync(
+      environmentFile,
+      [
+        'STRIPE_MODE=sandbox',
+        'STRIPE_LIVE_ENABLED=false',
+        'STRIPE_WEBHOOK_SECRET=whsec_storyops_local_contract_only',
+        'POST_SERVICE_WORKER_MODE=manual',
+        'POST_SERVICE_WORKER_TOKEN=storyops-local-post-service-worker-token-v1-6a91',
+        'POST_SERVICE_WORKER_SCHEDULE_INTERVAL_SECONDS=900',
+        'TRANSACTIONAL_OUTBOUND_WORKER_MODE=manual',
+        'TRANSACTIONAL_OUTBOUND_WORKER_TOKEN=storyops-local-transactional-worker-token-v1-4c82',
+        'TRANSACTIONAL_OUTBOUND_WORKER_SCHEDULE_INTERVAL_SECONDS=60',
+        'OUTBOUND_WORKER_QUEUE_ALERT_AFTER_SECONDS=900',
+        'SCOPE_PHOTO_CLEANUP_MODE=manual',
+        'SCOPE_PHOTO_CLEANUP_TOKEN=storyops-local-scope-photo-cleanup-token-v2-4f19',
+        '',
+      ].join('\n'),
+      { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+    );
+    child = spawn(
+      supabaseCli.command,
+      [
+        ...supabaseCli.prefix,
+        'functions',
+        'serve',
+        '--env-file',
+        environmentFile,
+        '--network-id',
+        LOCAL_SUPABASE_NETWORK,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached,
+        env: process.env,
+      },
+    );
+  } catch (error) {
+    rmSync(environmentDirectory, { recursive: true, force: true });
+    throw error;
+  }
   let buffered = '';
   const ready = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -166,7 +250,7 @@ function startEdgeFunctions() {
       }
     });
   });
-  return { child, ready, detached };
+  return { child, ready, detached, environmentDirectory };
 }
 
 function signalEdgeFunctions(child, detached, signal) {
@@ -181,22 +265,28 @@ function signalEdgeFunctions(child, detached, signal) {
   }
 }
 
-async function stopEdgeFunctions(child, detached) {
-  if (child.exitCode === null) signalEdgeFunctions(child, detached, 'SIGINT');
-  await Promise.race([
-    new Promise((resolve) => child.once('exit', resolve)),
-    new Promise((resolve) => setTimeout(resolve, 5_000)),
-  ]);
-  if (child.exitCode === null) {
-    signalEdgeFunctions(child, detached, 'SIGKILL');
-    await Promise.race([
-      new Promise((resolve) => child.once('exit', resolve)),
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
-    ]);
+async function stopEdgeFunctions(child, detached, environmentDirectory) {
+  try {
+    if (child.exitCode === null) {
+      signalEdgeFunctions(child, detached, 'SIGINT');
+      await Promise.race([
+        new Promise((resolve) => child.once('exit', resolve)),
+        new Promise((resolve) => setTimeout(resolve, 5_000)),
+      ]);
+    }
+    if (child.exitCode === null) {
+      signalEdgeFunctions(child, detached, 'SIGKILL');
+      await Promise.race([
+        new Promise((resolve) => child.once('exit', resolve)),
+        new Promise((resolve) => setTimeout(resolve, 2_000)),
+      ]);
+    }
+  } finally {
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+    child.unref();
+    rmSync(environmentDirectory, { recursive: true, force: true });
   }
-  child.stdout?.destroy();
-  child.stderr?.destroy();
-  child.unref();
 }
 
 async function main() {
@@ -205,13 +295,13 @@ async function main() {
   if (reset) {
     process.stdout.write('[local-supabase] rebuilding migrations and synthetic seed\n');
     try {
-      runSupabase(['db', 'reset', '--local']);
+      runSupabase(['db', 'reset', '--local', '--network-id', LOCAL_SUPABASE_NETWORK]);
     } catch {
       process.stderr.write(
         '[local-supabase] direct reset bootstrap failed; rebuilding the explicitly local stack without retaining its database volume\n',
       );
-      runSupabase(['stop', '--no-backup']);
-      runSupabase(['start', '--ignore-health-check']);
+      runSupabase(['stop', '--no-backup', '--network-id', LOCAL_SUPABASE_NETWORK]);
+      runSupabase(['start', '--ignore-health-check', '--network-id', LOCAL_SUPABASE_NETWORK]);
     }
     waitForLocalDatabase();
   }
@@ -228,6 +318,12 @@ async function main() {
     'error',
   ]);
   for (const path of sqlContracts) runSqlContract(path);
+  run(process.execPath, ['tests/integration/payment-allocation-concurrency.mjs']);
+  run(process.execPath, ['tests/integration/active-company-concurrency.mjs']);
+  run(process.execPath, ['tests/integration/active-company-approved-action-concurrency.mjs']);
+  run(process.execPath, ['tests/integration/identity-invitation-attempt-concurrency.mjs']);
+  run(process.execPath, ['tests/integration/field-media-canary-crew-concurrency.mjs']);
+  run(process.execPath, ['tests/integration/live-recovery-dump.mjs']);
 
   const edge = startEdgeFunctions();
   try {
@@ -235,9 +331,15 @@ async function main() {
     process.stdout.write('\n[local-supabase] Edge Functions ready\n');
     run(process.execPath, ['tests/integration/live-estimating-edge.mjs']);
     run(process.execPath, ['tests/integration/post-service-edge.mjs']);
+    run(process.execPath, ['tests/integration/transactional-outbound-edge.mjs']);
+    run(process.execPath, ['tests/integration/scope-photo-cleanup-edge.mjs']);
     run(process.execPath, ['tests/integration/live-offline-media-edge.mjs']);
+    run(process.execPath, ['tests/integration/edge-service-role-canary.mjs']);
+    run(process.execPath, ['tests/integration/scheduling-suggestions-edge.mjs']);
+    run(process.execPath, ['tests/integration/sds-registration-edge.mjs']);
+    run(process.execPath, ['tests/integration/stripe-payment-webhook-edge.mjs']);
   } finally {
-    await stopEdgeFunctions(edge.child, edge.detached);
+    await stopEdgeFunctions(edge.child, edge.detached, edge.environmentDirectory);
   }
   process.stdout.write('\nStoryOps local Supabase release contract passed.\n');
 }

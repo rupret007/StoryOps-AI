@@ -37,7 +37,12 @@ declare
   current_window timestamptz;
   current_used bigint;
 begin
-  if auth.role() <> 'service_role' and current_user <> 'postgres' then
+  if auth.role() is distinct from 'service_role'
+    and not (
+      session_user = 'postgres'
+      and current_setting('role', true) = 'none'
+    )
+  then
     raise exception 'Operation budgets are service-role controlled';
   end if;
   if p_scope is null or length(p_scope) not between 1 and 100 then

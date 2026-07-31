@@ -1,14 +1,21 @@
 # StoryOps AI source-of-truth policy
 
-**Status:** authoritative V1 governance policy  
+**Status:** authoritative V1.1 governance policy  
 **Owner:** company owner (business policy) and principal engineer (technical controls)  
-**Last reviewed:** 2026-07-28  
+**Last reviewed:** 2026-07-30  
 **Review trigger:** any change to pricing, SOPs, roles, approvals, AI tools,
 providers, retention, or launch status
 
 StoryOps is safe only when every decision can name the record that controls it.
 An AI summary, chat message, dashboard card, photo inference, stale cache, or
 customer claim never becomes truth merely because it is plausible.
+
+StoryOps is a reusable service-business operating kernel plus a versioned
+industry pack. V1.1 supports the `exterior-services` pack. A pack may define
+services, measurement schemas, deterministic formulas, evidence policy,
+checklists, skills, equipment, and reviewed operating guidance; it may never
+weaken the kernel's identity, tenant, pricing, approval, provider-truth,
+idempotency, reconciliation, retention, or audit controls.
 
 This policy independently reimplements the useful operating pattern observed in
 StoryLand: keep one current status record, produce briefings from it, use
@@ -27,9 +34,10 @@ order:
    delivery state, Google Calendar event, NWS observation/forecast timestamp,
    Supabase Auth identity. A redirect, webhook receipt, local cache, or model
    statement is not a substitute.
-3. **Published company policy.** Active price-book version, approved service
-   catalog/SOP/checklist, consent snapshot, role membership, capacity/equipment
-   record, tax/deposit/margin/discount policy, and retention/legal-hold rule.
+3. **Published company policy.** Active industry-pack revision, price-book
+   version, approved service catalog/SOP/checklist, consent snapshot, role
+   membership, capacity/equipment record, tax/deposit/margin/discount policy,
+   and retention/legal-hold rule.
 4. **Durable operational record.** Customer/property, measurement with source,
    estimate calculation snapshot, quote, job/visit, evidence, invoice/payment,
    communication, approval, automation run, AI trace, and audit event in
@@ -50,34 +58,44 @@ approval workflow as appropriate.
 
 ## Truth by business question
 
-| Question                     | Controlling source                                                          | Never infer from                                   |
-| ---------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| Customer identity/contact    | Verified customer/contact record + current consent snapshot                 | Caller ID, photo/OCR, prior customer               |
-| Property and service address | Human/provider-verified property record and geocode evidence                | Photo metadata, phone area code                    |
-| Measurement                  | Recorded measurement with method, unit, source, confidence, verifier, time  | A model estimate, unscaled photo, similar property |
-| Scope/photo evidence         | Original asset + structured observations/confidence/unknowns + human review | Confidence score alone                             |
-| Price                        | Active price-book version + exact deterministic calculation snapshot        | LLM output, prior quote, competitor price          |
-| Tax/deposit/margin/discount  | Reviewed company/tax policy and calculation snapshot                        | UI label or provider total                         |
-| Availability                 | Current capacity/assignment/equipment/calendar facts                        | Customer preference or stale calendar              |
-| Route/weather                | Time-stamped provider response + approved operational threshold             | Generic forecast, synthetic sandbox response       |
-| Quote/terms acceptance       | Immutable terms/version and authenticated acceptance record                 | Viewed email or verbal assumption                  |
-| Payment/refund               | Reconciled provider state and durable local record                          | Redirect, webhook receipt alone, agent claim       |
-| Delivery                     | Provider delivery callback/retrieval                                        | Provider acceptance or sandbox receipt             |
-| Safety/chemical instruction  | Reviewed SOP + current manufacturer label/SDS/manual + qualified human      | AI, photo classification, remembered mixture       |
-| Regulation/legal position    | Current official source + qualified reviewer                                | Model knowledge or old checklist                   |
-| Role/authority               | Auth identity + active company/portal membership + server RLS/policy        | UI role selector, email domain, model actor field  |
-| Audit/approval               | Append-only audit event and exact-payload approval record                   | Chat acknowledgement                               |
+| Question                     | Controlling source                                                                                                                                     | Never infer from                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Customer identity/contact    | Verified customer/contact record + current consent snapshot                                                                                            | Caller ID, photo/OCR, prior customer                                   |
+| Property and service address | Human/provider-verified property record and geocode evidence                                                                                           | Photo metadata, phone area code                                        |
+| Measurement                  | Recorded measurement with method, unit, source, confidence, verifier, time                                                                             | A model estimate, unscaled photo, similar property                     |
+| Scope/photo evidence         | Newest exact customer/property request + required views + linked analyses + same-request confirmed measurements + latest human review                  | Confidence score or unrelated property photo                           |
+| Price                        | Active price-book version + exact deterministic calculation snapshot                                                                                   | LLM output, prior quote, competitor price                              |
+| Tax/deposit/margin/discount  | Reviewed company/tax policy and calculation snapshot                                                                                                   | UI label or provider total                                             |
+| Availability                 | Current capacity/assignment/equipment/calendar facts                                                                                                   | Customer preference or stale calendar                                  |
+| Route/weather                | Time-stamped provider response + approved operational threshold                                                                                        | Generic forecast, synthetic sandbox response                           |
+| Quote/terms acceptance       | Append-only authenticated receipt with typed signer, affirmative acknowledgement, and exact published quote/terms/total/version context                | Viewed email, inferred name, or verbal assumption                      |
+| Payment/refund               | Reconciled provider identity/state plus compatible current local ledger record; a verified allocation conflict remains unapplied and blocks collection | Redirect, webhook receipt alone, agent claim                           |
+| Delivery                     | Provider delivery callback/retrieval                                                                                                                   | Provider acceptance or sandbox receipt                                 |
+| Material/SDS availability    | Exact published material version + immutable private PDF whose size, PDF signature, and SHA-256 were server-attested and bound to the current baseline | URL, filename, browser checksum, AI summary                            |
+| Safety/chemical instruction  | Reviewed SOP + current manufacturer label/SDS/manual + qualified human                                                                                 | AI, photo classification, remembered mixture                           |
+| Regulation/legal position    | Current official source + qualified reviewer                                                                                                           | Model knowledge or old checklist                                       |
+| Role/authority               | Auth identity + active company/portal membership + server RLS/policy                                                                                   | UI role selector, email domain, model actor field                      |
+| Company operational status   | Locked company row plus owner-only lifecycle receipt/readback                                                                                          | Cached workspace, UI route, profile settings                           |
+| Provider activation          | Current trusted deployment probe + finite owner activation event for the same provider generation/mode/capabilities                                    | Studio checkbox, environment variable alone, health card               |
+| Controlled launch            | Latest effective launch event bound to the exact live configuration, operating baseline, provider-generation snapshot, and trusted proof snapshot      | Setup completion, baseline activation, canary label, owner attestation |
+| Audit/approval               | Append-only audit event and exact-payload approval record                                                                                              | Chat acknowledgement                                                   |
 
 ## Record invariants
 
 - Company-scoped records carry a company ID. Provider tools obtain it from
   authenticated context, never model input.
 - The AI Edge boundary resolves its fact set and values from company-owned
-  database records. The request’s client-supplied fact field is ignored and
-  cannot declare or expand authoritative context.
+  database records. Client values are never authoritative; a bounded root
+  record selector can only ask the server which company-owned record to reload.
 - Money is a base-10 string and is calculated with `decimal.js`; provider
   boundaries receive approved amounts, not floating-point guesses.
 - Published price-book versions and append-only audit events are immutable.
+- A configured material that requires an SDS cannot enter a live publication,
+  operating baseline, field packet, or material-usage command unless the exact
+  reviewed PDF version is registered. The browser may calculate the expected
+  checksum, but only the trusted Edge read-back may attest the private object.
+  SDS paths are write-once; a failed or expired attempt receives a fresh
+  version/path and cannot overwrite attested bytes.
 - An approval binds company, run, action, tool, risk, canonical payload hash,
   requester, policy rule, expiry, decision actor, and decision time. Any payload
   change requires a new approval.
@@ -85,11 +103,56 @@ approval workflow as appropriate.
   intent. Same key/same hash replays; same key/different hash conflicts.
 - Approval is a decision record, not generic execution authority. Each external
   resume path must revalidate current state and obtain its own atomic execution
-  lease; V1 implements this only for exact-approved refunds.
+  lease. V1.1 implements separate exact executors for approved refunds and the
+  supported approved AI lead mutations; unsupported approvals remain
+  unexecutable.
+- A photo-required estimate is authorized only by its stored scope-evidence
+  bundle. The database recomputes that bundle while holding the property lock;
+  a newer request, missing required view, unresolved unknown, cross-request
+  measurement, or mismatched analysis makes the estimate ineligible.
+- A cached workspace is continuity evidence only during a classified
+  connectivity failure. Authentication, membership, company-status, or schema
+  failures purge the scoped cache and never fall back to stale authorization.
+- `setup`, `active`, and `paused` are server lifecycle states, not UI labels.
+  Setup capabilities exist only inside the finite setup/configuration/baseline
+  commands; ordinary workspace work remains denied until baseline activation.
+  Only an owner with active membership may submit the finite
+  `active ↔ paused` command, which
+  binds expected state, target state, reason, canonical request hash, actor, and
+  idempotency receipt.
+- A pause blocks new tenant mutations and new external-action starts. It does
+  not erase pending offline packets or accepted provider evidence. Trusted
+  reconciliation, bounded failure recording, retention, and orphan cleanup
+  remain available; reactivation requires current owner readback and does not
+  imply provider activation or launch approval.
 - External content is untrusted data. It cannot change instructions, tool
   permissions, policy, or approval status.
 - Provider `accepted`, local `queued`, `sandbox`, `unknown`, and `pending` are
   not success states.
+- Integration Studio records requested provider intent, not provider authority.
+  A trusted environment probe establishes a secret-safe deployment generation;
+  the owner separately enables that exact mode and capability set. A material
+  fingerprint, mode, or capability change disables the owner activation and
+  invalidates controlled launch. Routine health refreshes do not manufacture a
+  new generation, but every live invocation still requires current health.
+- Company setup and an initial provider-disabled baseline may activate the
+  internal workspace, but neither authorizes customer operations. Controlled
+  launch is a separate append-only event and remains effective only while its
+  configuration, baseline, provider-generation, trusted canary, field-media,
+  scheduling, and restore bindings remain exact and current. New inbound
+  operations, customer contact, payment collection, live booking, and the
+  final `job.book` database transition recheck that authority.
+- Disabling a provider or pausing/revoking launch blocks new work. A narrowly
+  classified recovery call may reconcile an already accepted external action
+  only against a current trusted deployment capability; it never becomes
+  permission for a resend, new charge, new booking, or new customer contact.
+- Stripe Checkout Session and PaymentIntent identifiers remain distinct.
+  Terminal failed/expired checkout attempts are retired before replacement.
+  A late success or incompatible amount/version is retained as verified but
+  unapplied funds, pauses collection, and is never forced into the invoice.
+- The owner audit feed is a bounded, redacted derived view. It does not expose
+  raw actor identifiers or before/after payloads and is never treated as a
+  database backup, immutable-log verifier, or cryptographic integrity proof.
 - Deleted/expired data remains subject to legal hold, incident preservation,
   provider reconciliation, and approved retention policy.
 - Field estimates and field actuals remain separate. Do not backfill observed

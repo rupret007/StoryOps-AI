@@ -58,6 +58,20 @@ describe('live estimate idempotency reservation', () => {
     expect(sequence).toBe(3);
   });
 
+  it('treats the published package identity as a material pricing input', () => {
+    let sequence = 0;
+    const keyFactory = () => `estimate:key-${++sequence}`;
+    const custom = reserveLiveEstimateIdempotencyKey(undefined, baseIntent, keyFactory);
+    const packaged = reserveLiveEstimateIdempotencyKey(
+      custom,
+      { ...baseIntent, packageCode: 'ESSENTIAL_CARE' },
+      keyFactory,
+    );
+
+    expect(packaged.intentFingerprint).not.toBe(custom.intentFingerprint);
+    expect(packaged.idempotencyKey).not.toBe(custom.idempotencyKey);
+  });
+
   it('invalidates a confirmed quote when intent or selected lead context changes', () => {
     const confirmed = reserveLiveEstimateIdempotencyKey(undefined, baseIntent, () => 'estimate:a');
     const changed = reserveLiveEstimateIdempotencyKey(

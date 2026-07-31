@@ -109,6 +109,8 @@ $$;
 
 \echo '5/9 an existing non-pristine setup company fails closed'
 reset role;
+select set_config('request.jwt.claims', '{}', true);
+select set_config('request.jwt.claim.sub', '', true);
 insert into public.companies(id, name, timezone, currency, status, settings)
 values (
   '97900000-0000-4000-8000-000000000001',
@@ -142,6 +144,16 @@ values (
   'vault://existing-provider',
   '{}'::jsonb,
   array['send']
+);
+select set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-4000-8000-000000000102',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000102","role":"authenticated","app_metadata":{"storyops_bootstrap_company_id":"98000000-0000-4000-8000-000000000001"}}',
+  true
 );
 set local role authenticated;
 do $$
@@ -226,6 +238,8 @@ begin
 end;
 $$;
 reset role;
+select set_config('request.jwt.claims', '{}', true);
+select set_config('request.jwt.claim.sub', '', true);
 insert into public.company_memberships(company_id, user_id, role, active)
 values (
   '97900000-0000-4000-8000-000000000001',
@@ -237,6 +251,16 @@ update public.company_memberships
 set active = false
 where company_id = '97900000-0000-4000-8000-000000000001'
   and user_id = '10000000-0000-4000-8000-000000000102';
+select set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-4000-8000-000000000102',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000102","role":"authenticated","app_metadata":{"storyops_bootstrap_company_id":"98000000-0000-4000-8000-000000000001"}}',
+  true
+);
 set local role authenticated;
 
 \echo '6/9 invalid services fail before any company record is created'
@@ -270,6 +294,9 @@ begin
 end;
 $$;
 reset role;
+select set_config('request.jwt.claims', '{}', true);
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claim.role', '', true);
 do $$
 begin
   if exists (
@@ -280,9 +307,50 @@ begin
   end if;
 end;
 $$;
+insert into public.companies(id, name, timezone, currency, status, settings)
+values (
+  '98000000-0000-4000-8000-000000000001',
+  'North Texas Exterior Care',
+  'America/Chicago',
+  'USD',
+  'setup',
+  '{}'::jsonb
+);
+insert into public.company_memberships(company_id, user_id, role, active)
+values (
+  '98000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000102',
+  'owner',
+  true
+);
+do $$
+begin
+  if (
+    select count(*)
+    from public.integration_connections connection
+    where connection.company_id = '98000000-0000-4000-8000-000000000001'
+      and connection.provider = 'supabase_auth'
+      and connection.mode = 'disabled'
+      and connection.status = 'disabled'
+      and not connection.owner_enabled
+  ) <> 1 then
+    raise exception 'Migration 51 did not seed the pristine setup identity provider';
+  end if;
+end;
+$$;
+select set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-4000-8000-000000000102',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000102","role":"authenticated","app_metadata":{"storyops_bootstrap_company_id":"98000000-0000-4000-8000-000000000001"}}',
+  true
+);
 set local role authenticated;
 
-\echo '7/9 exact setup provisions only review-required drafts and disabled providers'
+\echo '7/9 a pre-created pristine setup scope installs all templates and eleven disabled providers'
 do $$
 declare
   receipt jsonb;
@@ -303,7 +371,8 @@ begin
     or receipt ->> 'companyStatus' <> 'setup'
     or not (receipt ->> 'requiresLaunchReview')::boolean
     or (receipt ->> 'serviceCount')::integer <> 2
-    or (receipt ->> 'integrationsDisabled')::integer <> 10
+    or (receipt ->> 'availableServiceCount')::integer <> 5
+    or (receipt ->> 'integrationsDisabled')::integer <> 11
   then
     raise exception 'Setup receipt is incomplete: %', receipt;
   end if;
@@ -328,8 +397,26 @@ begin
     from public.service_catalog service
     where service.company_id = '98000000-0000-4000-8000-000000000001'
       and not service.active
-  ) <> 2 then
-    raise exception 'Selected service catalog drafts are incorrect';
+  ) <> 5 or (
+    select array_agg(service.code order by service.code)
+    from public.service_catalog service
+    where service.company_id = '98000000-0000-4000-8000-000000000001'
+      and not service.active
+  ) is distinct from array[
+    'gutter-cleaning',
+    'pressure-wash-flatwork',
+    'roof-washing',
+    'soft-wash-house',
+    'window-cleaning'
+  ]::text[] then
+    raise exception 'The complete inactive service template catalog is incorrect';
+  end if;
+  if (
+    select company.settings -> 'enabledServiceCodes'
+    from public.companies company
+    where company.id = '98000000-0000-4000-8000-000000000001'
+  ) is distinct from '["pressure-wash-flatwork","gutter-cleaning"]'::jsonb then
+    raise exception 'Selected initial service scope was not retained separately';
   end if;
   if exists (
     select 1
@@ -370,7 +457,7 @@ begin
     where integration.company_id = '98000000-0000-4000-8000-000000000001'
       and integration.mode = 'disabled'
       and integration.status = 'disabled'
-  ) <> 10 then
+  ) <> 11 then
     raise exception 'Every setup integration must be disabled';
   end if;
   if (
@@ -386,6 +473,7 @@ begin
     'quickbooks_export',
     'signed_storage_targets',
     'stripe',
+    'supabase_auth',
     'twilio',
     'vroom'
   ]::text[] then
@@ -404,12 +492,12 @@ end;
 $$;
 set local role authenticated;
 
-\echo '8/9 setup replay is idempotent and workspace scope resolves'
+\echo '8/9 setup replay is idempotent while the operational workspace stays closed'
 do $$
 declare
   receipt jsonb;
   setup_state jsonb;
-  workspace jsonb;
+  workspace_blocked boolean := false;
 begin
   receipt := public.complete_storyops_setup(
     '98000000-0000-4000-8000-000000000001',
@@ -422,7 +510,9 @@ begin
     array['pressure-wash-flatwork', 'gutter-cleaning'],
     true
   );
-  if not (receipt ->> 'replayed')::boolean then
+  if not (receipt ->> 'replayed')::boolean
+    or (receipt ->> 'integrationsDisabled')::integer <> 11
+  then
     raise exception 'Exact setup replay was not recognized';
   end if;
 
@@ -434,14 +524,20 @@ begin
     raise exception 'Configured setup state is invalid: %', setup_state;
   end if;
 
-  workspace := public.get_storyops_workspace(
-    '98000000-0000-4000-8000-000000000001'
-  );
-  if workspace #>> '{company,name}' <> 'North Texas Exterior Care'
-    or workspace #>> '{company,status}' <> 'setup'
-    or workspace #>> '{session,role}' <> 'owner'
-  then
-    raise exception 'Provisioned workspace is not owner-scoped: %', workspace;
+  begin
+    perform public.get_storyops_workspace(
+      '98000000-0000-4000-8000-000000000001'
+    );
+  exception
+    when others then
+      if position('No active company membership' in sqlerrm) > 0 then
+        workspace_blocked := true;
+      else
+        raise;
+      end if;
+  end;
+  if not workspace_blocked then
+    raise exception 'Setup-only company opened the operational workspace before baseline activation';
   end if;
 end;
 $$;

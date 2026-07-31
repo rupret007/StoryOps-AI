@@ -88,6 +88,26 @@ const client = createClient(url, anonKey, {
 const service = createClient(url, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
+// Test-only bootstrap after the SQL scheduling/dispatch contracts. This media
+// canary does not exercise departure; it starts at the first active on-site
+// field state and therefore never bypasses or disables the en_route guard.
+execFileSync(
+  'docker',
+  [
+    'exec',
+    'supabase_db_storyops-ai',
+    'psql',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-U',
+    'postgres',
+    '-d',
+    'postgres',
+    '-c',
+    `update public.visits set status = 'on_site' where id = '${visitId}'`,
+  ],
+  { stdio: ['ignore', 'ignore', 'pipe'] },
+);
 const assetId = randomUUID();
 const commandId = randomUUID();
 const minimalPngBase64 =
@@ -175,26 +195,6 @@ try {
   assert.equal(startingWorkspaceError, null, startingWorkspaceError?.message);
   let activeVisit = startingWorkspace.visits.find((item) => item.id === visitId);
   assert.ok(activeVisit, 'Assigned visit must be visible to the technician.');
-  if (activeVisit.status === 'confirmed') {
-    const { data: enRoute, error: enRouteError } = await executeCommand(
-      client,
-      'visit.transition',
-      activeVisit.version,
-      { entityId: visitId, status: 'en_route' },
-    );
-    assert.equal(enRouteError, null, enRouteError?.message);
-    activeVisit = { ...activeVisit, status: 'en_route', version: enRoute.version };
-  }
-  if (activeVisit.status === 'en_route') {
-    const { data: onSite, error: onSiteError } = await executeCommand(
-      client,
-      'visit.transition',
-      activeVisit.version,
-      { entityId: visitId, status: 'on_site' },
-    );
-    assert.equal(onSiteError, null, onSiteError?.message);
-    activeVisit = { ...activeVisit, status: 'on_site', version: onSite.version };
-  }
   assert.equal(activeVisit.status, 'on_site', 'Release canary requires an active assigned visit.');
 
   const { error: tamperedUploadError } = await client.storage

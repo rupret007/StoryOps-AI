@@ -29,6 +29,7 @@
     "src/core/integrations/**/*.ts",
     "src/core/policy/**/*.ts",
     "src/core/pricing/**/*.ts",
+    "src/core/scopePhotos/**/*.ts",
     "src/domain/**/*.ts"
   ]
 }

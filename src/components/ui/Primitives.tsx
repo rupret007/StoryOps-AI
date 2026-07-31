@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import { forwardRef } from 'react';
+import { Children, cloneElement, forwardRef, isValidElement, useId } from 'react';
 import { LoaderCircle } from 'lucide-react';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'dark';
@@ -157,16 +157,54 @@ export function Field({
   children: ReactNode;
   htmlFor?: string;
 }) {
+  const generatedId = `field-${useId().replaceAll(':', '')}`;
+  const childArray = Children.toArray(children);
+  const onlyChild = childArray.length === 1 ? childArray[0] : undefined;
+  const controlElement =
+    isValidElement<{
+      id?: string;
+      'aria-describedby'?: string;
+      'aria-invalid'?: ComponentPropsWithoutRef<'input'>['aria-invalid'];
+    }>(onlyChild) &&
+    typeof onlyChild.type === 'string' &&
+    ['input', 'select', 'textarea'].includes(onlyChild.type)
+      ? onlyChild
+      : undefined;
+  const controlId = htmlFor ?? controlElement?.props.id ?? generatedId;
+  const hintId = `${controlId}-hint`;
+  const errorId = `${controlId}-error`;
+  const descriptionId = error ? errorId : hint ? hintId : undefined;
+  const describedBy = controlElement
+    ? Array.from(
+        new Set(
+          [controlElement.props['aria-describedby'], descriptionId]
+            .flatMap((value) => value?.split(/\s+/u) ?? [])
+            .filter(Boolean),
+        ),
+      ).join(' ') || undefined
+    : undefined;
+  const describedControl = controlElement
+    ? cloneElement(controlElement, {
+        id: controlElement.props.id ?? controlId,
+        'aria-describedby': describedBy,
+        'aria-invalid': error ? true : controlElement.props['aria-invalid'],
+      })
+    : children;
+
   return (
     <div className="field">
-      <label htmlFor={htmlFor}>{label}</label>
-      {children}
+      <label htmlFor={controlId}>{label}</label>
+      {describedControl}
       {error ? (
-        <span className="field__error" role="alert">
+        <span id={errorId} className="field__error" role="alert">
           {error}
         </span>
       ) : (
-        hint && <span className="field__hint">{hint}</span>
+        hint && (
+          <span id={hintId} className="field__hint">
+            {hint}
+          </span>
+        )
       )}
     </div>
   );

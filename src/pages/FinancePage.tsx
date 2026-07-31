@@ -12,8 +12,9 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
-import { Badge, Button, Card, Metric, PageHeader } from '@/components/ui/Primitives';
+import { Badge, Button, Card, Field, Metric, PageHeader } from '@/components/ui/Primitives';
 import { downloadText, rowsToCsv } from '@/utils/download';
 import {
   hasPostServiceReconciliationRequired,
@@ -337,6 +338,8 @@ export function FinancePage() {
 function LiveFinancePage() {
   const { state, actions, can } = useStoryOps();
   const [filter, setFilter] = useState<'all' | 'open' | 'past_due'>('all');
+  const [allocationNotes, setAllocationNotes] = useState<Record<string, string>>({});
+  const [resolvingConflictId, setResolvingConflictId] = useState<string>();
   const reviewStatus = state.live?.postServiceReviewStatus;
   const referralStatus = state.live?.postServiceReferralStatus;
   const hasAcceptedReconciliationExhaustion =
@@ -348,6 +351,7 @@ function LiveFinancePage() {
   const postServiceInvoice = state.invoices.find(
     (invoice) => invoice.id === state.live?.postServiceInvoice?.id,
   );
+  const paymentAllocationConflicts = state.live?.paymentAllocationConflicts ?? [];
   const visibleInvoices = state.invoices.filter(
     (invoice) =>
       filter === 'all' ||
@@ -387,6 +391,24 @@ function LiveFinancePage() {
       ]),
       'text/csv;charset=utf-8',
     );
+  };
+  const resolveExactAllocation = async (conflictId: string) => {
+    setResolvingConflictId(conflictId);
+    try {
+      const resolved = await actions.resolvePaymentAllocation({
+        conflictId,
+        resolutionNote: allocationNotes[conflictId] ?? '',
+      });
+      if (resolved) {
+        setAllocationNotes((current) => {
+          const next = { ...current };
+          delete next[conflictId];
+          return next;
+        });
+      }
+    } finally {
+      setResolvingConflictId(undefined);
+    }
   };
 
   return (
@@ -448,6 +470,117 @@ function LiveFinancePage() {
           tone="plum"
         />
       </section>
+
+      {paymentAllocationConflicts.length > 0 && (
+        <Card className="section-card">
+          <div className="section-card__header">
+            <div>
+              <h2>Verified funds awaiting allocation</h2>
+              <p className="section-card__subtitle">
+                Collection is held until the owner reconciles the exact provider charge and ledger.
+              </p>
+            </div>
+            <Badge tone="warning">{paymentAllocationConflicts.length} open</Badge>
+          </div>
+          <div className="approval-list">
+            {paymentAllocationConflicts.map((conflict) => {
+              const approval = conflict.approvalRequestId
+                ? state.approvals.find((candidate) => candidate.id === conflict.approvalRequestId)
+                : undefined;
+              const note = allocationNotes[conflict.id] ?? '';
+              const exactResolution =
+                conflict.canApplyExactCurrentBalance &&
+                conflict.resolutionAction === 'payment.allocation.apply_exact_current_balance';
+              const approvedExactResolution =
+                exactResolution &&
+                approval?.status === 'approved' &&
+                approval.actionType === conflict.resolutionAction &&
+                !approval.consumedAt;
+              const noteError =
+                note.length > 0 && note.trim().length < 5
+                  ? 'Record at least 5 characters of reconciliation evidence.'
+                  : undefined;
+              return (
+                <div className="payment-allocation-row" key={conflict.id}>
+                  <div className="approval-row">
+                    <span>
+                      <strong>
+                        {conflict.invoiceNumber} · {conflict.conflictCode.replaceAll('_', ' ')}
+                      </strong>
+                      <small>
+                        Provider verified ${conflict.verifiedAmount}; intended $
+                        {conflict.intendedAmount}; invoice balance at event $
+                        {conflict.invoiceBalanceAtEvent}. PaymentIntent {conflict.providerPaymentId}
+                        .
+                      </small>
+                      <small>{conflict.nextAction}</small>
+                    </span>
+                    <span>
+                      <Badge tone="warning">collection hold</Badge>
+                      <Badge tone={exactResolution ? 'info' : 'danger'}>
+                        {exactResolution ? 'exact resolver available' : 'manual/provider work only'}
+                      </Badge>
+                      {conflict.approvalRequestId && (
+                        <code>{conflict.approvalRequestId.slice(0, 8)}</code>
+                      )}
+                    </span>
+                  </div>
+                  {exactResolution && (
+                    <div className="payment-allocation-resolution">
+                      {approval?.status !== 'approved' ? (
+                        <p>
+                          {approval?.status === 'rejected'
+                            ? 'The exact allocation approval was rejected. The collection hold remains.'
+                            : 'Approve the exact current-balance action before applying provider-verified funds.'}
+                        </p>
+                      ) : (
+                        <>
+                          <Field
+                            label="Owner reconciliation note"
+                            htmlFor={`payment-allocation-note-${conflict.id}`}
+                            hint="Record what you verified in Stripe and the invoice ledger. This note is retained with the resolution."
+                            error={noteError}
+                          >
+                            <textarea
+                              className="textarea"
+                              id={`payment-allocation-note-${conflict.id}`}
+                              maxLength={2_000}
+                              value={note}
+                              onChange={(event) =>
+                                setAllocationNotes((current) => ({
+                                  ...current,
+                                  [conflict.id]: event.target.value,
+                                }))
+                              }
+                            />
+                          </Field>
+                          <Button
+                            disabled={
+                              !approvedExactResolution ||
+                              !can('payments.manage') ||
+                              !state.serverVerifiedAt ||
+                              note.trim().length < 5
+                            }
+                            loading={resolvingConflictId === conflict.id}
+                            onClick={() => void resolveExactAllocation(conflict.id)}
+                          >
+                            Apply verified funds to current invoice
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="page-footer-actions">
+            <Link className="button button--secondary button--md" to="/approvals">
+              Review high-risk approvals
+            </Link>
+          </div>
+        </Card>
+      )}
 
       <Card className="projection-warning">
         <CircleDollarSign size={18} />

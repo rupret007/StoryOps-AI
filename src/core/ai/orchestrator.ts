@@ -13,13 +13,19 @@ import {
   officeRunRequestSchema,
   type ActionDisposition,
   type ActionProposal,
+  type OfficeAgentOutput,
   type OfficeRunRequest,
   type OfficeRunResult,
   type StructuredModel,
 } from './contracts.ts';
+import { groundOfficeAgentOutput } from './grounding.ts';
 import { executeIdempotently, type IdempotencyStore } from './idempotency.ts';
 import { DefaultOfficePolicyEvaluator, type OfficePolicyEvaluator } from './policy.ts';
 import { withRetry } from './retry.ts';
+import {
+  SCHEDULING_PREREQUISITE_POLICY_RULE,
+  evaluateSchedulingPrerequisites,
+} from './schedulingPrerequisites.ts';
 import { buildGuardedModelInput, validateEvidenceSources } from './security.ts';
 import { NoopAiTraceSink, type AiTraceEvent, type AiTraceSink } from './tracing.ts';
 import { ToolExecutionError, type OfficeToolRegistry } from './tools.ts';
@@ -98,7 +104,9 @@ export class OfficeOrchestrator {
       attributes: { actorRole: request.actor.role },
     });
 
-    const guarded = buildGuardedModelInput(request);
+    const guarded = buildGuardedModelInput(request, {
+      provider: this.dependencies.model.provider,
+    });
     if (guarded.injectionSignals.length > 0) {
       await this.trace({
         type: 'guardrail.flagged',
@@ -116,15 +124,45 @@ export class OfficeOrchestrator {
       runId: request.runId,
       agent: request.agent,
       at: this.now().toISOString(),
-      attributes: { provider: this.dependencies.model.provider },
+      attributes: {
+        provider: this.dependencies.model.provider,
+        dataPolicyId: guarded.dataPolicyId,
+        redactionCount: guarded.redactionSignals.length,
+      },
     });
 
     let rawOutput: unknown;
     try {
+      const toolPolicyMetadata = this.dependencies.tools
+        .list()
+        .filter((tool) => definition.allowedTools.has(tool.name))
+        .map(
+          ({
+            name,
+            description,
+            risk,
+            sideEffect,
+            reversible,
+            supportsIdempotency,
+            autoExecute,
+          }) => ({
+            name,
+            description,
+            risk,
+            sideEffect,
+            reversible,
+            supportsIdempotency,
+            autoExecute,
+          }),
+        );
       rawOutput = await this.dependencies.model.generate({
         runId: request.runId,
         agent: request.agent,
-        systemInstructions: definition.instructions,
+        systemInstructions: [
+          definition.instructions,
+          'Authoritative tool policy metadata (use these values in proposed actions):',
+          JSON.stringify(toolPolicyMetadata),
+        ].join('\n\n'),
         input: guarded.input,
       });
     } catch (error) {
@@ -156,8 +194,9 @@ export class OfficeOrchestrator {
         'INVALID_MODEL_OUTPUT',
       );
     }
-    const output = parsedOutput.data;
-    this.validateModelClaims(output, request);
+    const modelOutput = parsedOutput.data;
+    this.validateModelClaims(modelOutput, request);
+    const output = groundOfficeAgentOutput(modelOutput, request);
 
     await this.trace({
       type: 'model.completed',
@@ -168,6 +207,8 @@ export class OfficeOrchestrator {
       attributes: {
         proposedActionCount: output.proposedActions.length,
         confidence: output.confidence,
+        narrativePolicy: output.narrativePolicy.schemaVersion,
+        automaticSendAllowed: output.narrativePolicy.automaticSendAllowed,
       },
     });
 
@@ -210,7 +251,7 @@ export class OfficeOrchestrator {
     return result;
   }
 
-  private validateModelClaims(output: OfficeRunResult['output'], request: OfficeRunRequest): void {
+  private validateModelClaims(output: OfficeAgentOutput, request: OfficeRunRequest): void {
     const actionIds = new Set<string>();
     for (const evidence of output.evidence) {
       if (!validateEvidenceSources(evidence.sourceFactIds, request)) {
@@ -249,6 +290,35 @@ export class OfficeOrchestrator {
         status: 'denied',
         reason: `${request.agent} does not have the ${proposal.toolName} capability.`,
         policyRule: 'AI-001-least-privilege',
+      };
+    }
+
+    const schedulingPrerequisites = evaluateSchedulingPrerequisites({
+      request,
+      proposal,
+      now: this.now(),
+    });
+    if (schedulingPrerequisites.required && !schedulingPrerequisites.eligible) {
+      await this.trace({
+        type: 'policy.evaluated',
+        traceId,
+        runId: request.runId,
+        agent: request.agent,
+        actionId: proposal.actionId,
+        toolName: proposal.toolName,
+        risk: proposal.risk,
+        at: this.now().toISOString(),
+        attributes: {
+          outcome: 'deny',
+          rule: SCHEDULING_PREREQUISITE_POLICY_RULE,
+          reason: schedulingPrerequisites.reason,
+        },
+      });
+      return {
+        actionId: proposal.actionId,
+        status: 'denied',
+        reason: schedulingPrerequisites.reason,
+        policyRule: SCHEDULING_PREREQUISITE_POLICY_RULE,
       };
     }
 
@@ -455,6 +525,14 @@ export class OfficeOrchestrator {
           proposal: options.proposal,
           now: this.now(),
         });
+        const schedulingPrerequisites = evaluateSchedulingPrerequisites({
+          request: parsedRequest,
+          proposal: options.proposal,
+          now: this.now(),
+        });
+        if (schedulingPrerequisites.required && !schedulingPrerequisites.eligible) {
+          throw new AiOfficeError(schedulingPrerequisites.reason, 'POLICY_DENIED');
+        }
         const disposition = await this.executeProposal(
           parsedRequest,
           options.proposal,

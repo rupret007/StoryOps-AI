@@ -1,25 +1,62 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import type { Permission } from '@/domain';
 import { AppShell } from '@/components/AppShell';
 import { Navigate, useLocation } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
 import { AccessDeniedPage } from '@/pages/AccessDeniedPage';
-import { AiOfficePage } from '@/pages/AiOfficePage';
-import { ApprovalsPage } from '@/pages/ApprovalsPage';
-import { AuditPage } from '@/pages/AuditPage';
-import { CustomersPage } from '@/pages/CustomersPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { DispatchPage } from '@/pages/DispatchPage';
-import { EstimatePage } from '@/pages/EstimatePage';
-import { FieldPage } from '@/pages/FieldPage';
-import { FinancePage } from '@/pages/FinancePage';
-import { IntegrationsPage } from '@/pages/IntegrationsPage';
-import { LiveSignInPage } from '@/pages/LiveSignInPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { OperationsPage } from '@/pages/OperationsPage';
-import { PipelinePage } from '@/pages/PipelinePage';
-import { PortalPage } from '@/pages/PortalPage';
-import { SetupPage } from '@/pages/SetupPage';
+
+const AiOfficePage = lazy(async () => ({
+  default: (await import('@/pages/AiOfficePage')).AiOfficePage,
+}));
+const ApprovalsPage = lazy(async () => ({
+  default: (await import('@/pages/ApprovalsPage')).ApprovalsPage,
+}));
+const AuditPage = lazy(async () => ({
+  default: (await import('@/pages/AuditPage')).AuditPage,
+}));
+const CompanyControlPage = lazy(async () => ({
+  default: (await import('@/pages/CompanyControlPage')).CompanyControlPage,
+}));
+const CustomersPage = lazy(async () => ({
+  default: (await import('@/pages/CustomersPage')).CustomersPage,
+}));
+const DashboardPage = lazy(async () => ({
+  default: (await import('@/pages/DashboardPage')).DashboardPage,
+}));
+const DispatchPage = lazy(async () => ({
+  default: (await import('@/pages/DispatchPage')).DispatchPage,
+}));
+const EstimatePage = lazy(async () => ({
+  default: (await import('@/pages/EstimatePage')).EstimatePage,
+}));
+const FieldPage = lazy(async () => ({
+  default: (await import('@/pages/FieldPage')).FieldPage,
+}));
+const FinancePage = lazy(async () => ({
+  default: (await import('@/pages/FinancePage')).FinancePage,
+}));
+const IdentityProvisioningPage = lazy(async () => ({
+  default: (await import('@/pages/IdentityProvisioningPage')).IdentityProvisioningPage,
+}));
+const IntegrationsPage = lazy(async () => ({
+  default: (await import('@/pages/IntegrationsPage')).IntegrationsPage,
+}));
+const LiveSignInPage = lazy(async () => ({
+  default: (await import('@/pages/LiveSignInPage')).LiveSignInPage,
+}));
+const OperationsPage = lazy(async () => ({
+  default: (await import('@/pages/OperationsPage')).OperationsPage,
+}));
+const PipelinePage = lazy(async () => ({
+  default: (await import('@/pages/PipelinePage')).PipelinePage,
+}));
+const PortalPage = lazy(async () => ({
+  default: (await import('@/pages/PortalPage')).PortalPage,
+}));
+const SetupPage = lazy(async () => ({
+  default: (await import('@/pages/SetupPage')).SetupPage,
+}));
 
 function RequirePermission({
   permission,
@@ -41,12 +78,16 @@ function HomeRoute() {
   return <DashboardPage />;
 }
 
-export function App() {
-  const { state } = useStoryOps();
+function AppRoutes() {
+  const { state, can } = useStoryOps();
   const location = useLocation();
 
   if (state.dataMode === 'supabase' && state.authStatus !== 'signed_in') {
     return <LiveSignInPage />;
+  }
+
+  if (state.companyControlRecovery) {
+    return <CompanyControlPage />;
   }
 
   if (state.hydrated && !state.setupComplete && location.pathname !== '/setup') {
@@ -54,6 +95,13 @@ export function App() {
   }
 
   if (location.pathname === '/setup') {
+    if (state.setupComplete && !can('company.manage')) {
+      return (
+        <AppShell>
+          <AccessDeniedPage permission="company.manage" />
+        </AppShell>
+      );
+    }
     return <SetupPage />;
   }
   if (location.pathname === '/portal') return <PortalPage />;
@@ -126,6 +174,20 @@ export function App() {
         </RequirePermission>
       );
       break;
+    case '/access':
+      page = (
+        <RequirePermission permission="members.manage">
+          <IdentityProvisioningPage />
+        </RequirePermission>
+      );
+      break;
+    case '/company-control':
+      page = (
+        <RequirePermission permission="company.manage">
+          <CompanyControlPage />
+        </RequirePermission>
+      );
+      break;
     case '/audit':
       page = (
         <RequirePermission permission="ai_traces.read">
@@ -144,4 +206,18 @@ export function App() {
   }
 
   return <AppShell>{page}</AppShell>;
+}
+
+export function App() {
+  return (
+    <Suspense
+      fallback={
+        <main className="route-loading" aria-live="polite" aria-busy="true">
+          Loading workspace…
+        </main>
+      }
+    >
+      <AppRoutes />
+    </Suspense>
+  );
 }

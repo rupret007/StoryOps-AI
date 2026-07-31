@@ -8,6 +8,7 @@ import { createSandboxIntegrationSuite } from '../../../src/core/integrations/sa
 import { createSandboxOfficeToolRegistry } from '../../../src/core/integrations/officeTools.ts';
 import { IntegrationError } from '../../../src/core/integrations/contracts.ts';
 import { SupabaseStripeBillingValidator } from '../../../src/core/integrations/stripeBillingValidator.ts';
+import { registerServerRecordTools } from '../_shared/server-record-tools.ts';
 import {
   HttpError,
   corsHeaders,
@@ -15,10 +16,12 @@ import {
   jsonResponse,
   readTextBody,
 } from '../_shared/http.ts';
+import { assertProviderInvocation } from '../_shared/provider-authorization.ts';
 import {
   ApprovedActionContractError,
   approvedActionRequestSchema,
   approvedToolAgent,
+  parseApprovedLeadPayload,
   parseAndRevalidatePersistedApproval,
   parseApprovedRefundOutput,
   parseApprovedRefundPayload,
@@ -122,6 +125,42 @@ function claimHttpError(message: string): HttpError {
       'INVALID_IDEMPOTENCY_KEY',
       'The idempotency key is invalid.',
     ],
+    [
+      'APPROVED_LEAD_OWNER_REQUIRED',
+      403,
+      'OWNER_REQUIRED',
+      'Only an active owner may execute an approved lead action.',
+    ],
+    [
+      'APPROVED_LEAD_NOT_FOUND',
+      404,
+      'APPROVAL_NOT_FOUND',
+      'The approved lead action was not found.',
+    ],
+    [
+      'APPROVED_LEAD_NOT_EXECUTABLE',
+      409,
+      'APPROVAL_NOT_APPROVED',
+      'The approved lead action is no longer executable.',
+    ],
+    [
+      'APPROVED_LEAD_PAYLOAD_MISMATCH',
+      409,
+      'APPROVAL_MISMATCH',
+      'The approved lead payload no longer matches the owner decision.',
+    ],
+    [
+      'APPROVED_LEAD_SERVICE_NOT_ACTIVE',
+      422,
+      'SERVICE_CODE_NOT_APPROVED',
+      'A requested service is no longer active in the company catalog.',
+    ],
+    [
+      'APPROVED_LEAD_TRANSITION_CONFLICT',
+      409,
+      'AUTHORITATIVE_STATE_MISMATCH',
+      'The lead changed after approval and the transition was not applied.',
+    ],
   ];
   const mapping = mappings.find(([needle]) => message.includes(needle));
   return mapping
@@ -211,13 +250,13 @@ Deno.serve(async (request) => {
     companyId = parsedRequest.data.companyId;
     approvalId = parsedRequest.data.approvalId;
 
-    const { data: membership, error: membershipError } = await serviceClient
-      .from('company_memberships')
-      .select('role')
-      .eq('company_id', companyId)
-      .eq('user_id', user.id)
-      .eq('active', true)
-      .maybeSingle();
+    const { data: membership, error: membershipError } = await serviceClient.rpc(
+      'load_storyops_edge_actor',
+      {
+        p_company_id: companyId,
+        p_actor_user_id: user.id,
+      },
+    );
     if (membershipError) {
       throw new HttpError(
         'Company membership could not be verified.',
@@ -233,14 +272,14 @@ Deno.serve(async (request) => {
       );
     }
 
-    const { data: approvalData, error: approvalError } = await serviceClient
-      .from('approval_requests')
-      .select(
-        'id,company_id,reason,risk_level,status,expires_at,consumed_at,action_type,action_payload',
-      )
-      .eq('company_id', companyId)
-      .eq('id', approvalId)
-      .maybeSingle();
+    const { data: approvalData, error: approvalError } = await serviceClient.rpc(
+      'load_storyops_ai_approval',
+      {
+        p_company_id: companyId,
+        p_actor_user_id: user.id,
+        p_approval_id: approvalId,
+      },
+    );
     if (approvalError) {
       throw new HttpError('Approval state could not be loaded.', 503, 'APPROVAL_UNAVAILABLE');
     }
@@ -260,10 +299,8 @@ Deno.serve(async (request) => {
     }
 
     let agent: OfficeAgentName;
-    let refundPayload: ApprovedRefundPayload;
     try {
       agent = approvedToolAgent(approval.toolName);
-      refundPayload = parseApprovedRefundPayload(approval.exactPayload);
     } catch (error) {
       if (error instanceof ApprovedActionContractError) throw contractHttpError(error);
       throw error;
@@ -272,19 +309,57 @@ Deno.serve(async (request) => {
     // Build a no-network registry for metadata verification before claiming.
     // The actual provider suite is constructed only after the atomic claim.
     const metadataRegistry = createSandboxOfficeToolRegistry(createSandboxIntegrationSuite());
+    registerServerRecordTools(metadataRegistry, {
+      readClient: serviceClient,
+      commandClient: serviceClient,
+    });
     const metadata = metadataRegistry.metadata(approval.toolName);
+    const approvedLeadToolName =
+      approval.toolName === 'records.create_lead' || approval.toolName === 'records.update_lead'
+        ? approval.toolName
+        : undefined;
     if (
       !metadata ||
-      metadata.sideEffect !== 'external_write' ||
       !metadata.supportsIdempotency ||
       riskRank(approval.risk) < riskRank(metadata.risk) ||
-      !agentCanUseTool(agent, approval.toolName)
+      !agentCanUseTool(agent, approval.toolName) ||
+      (approvedLeadToolName
+        ? metadata.sideEffect !== 'internal_write' || metadata.reversible || metadata.autoExecute
+        : metadata.sideEffect !== 'external_write')
     ) {
       throw new HttpError(
         'The approved action is not a registered idempotent tool for this specialist.',
         422,
         'UNSUPPORTED_TOOL',
       );
+    }
+
+    if (approvedLeadToolName) {
+      try {
+        parseApprovedLeadPayload(approvedLeadToolName, approval.exactPayload);
+      } catch (error) {
+        if (error instanceof ApprovedActionContractError) throw contractHttpError(error);
+        throw error;
+      }
+      const { data: internalResult, error: internalError } = await serviceClient.rpc(
+        'execute_ai_approved_lead_action',
+        {
+          p_company_id: approval.companyId,
+          p_approval_request_id: approval.approvalId,
+          p_actor_user_id: user.id,
+          p_payload_hash: approval.payloadHash,
+        },
+      );
+      if (internalError) throw claimHttpError(internalError.message);
+      return jsonResponse(internalResult);
+    }
+
+    let refundPayload: ApprovedRefundPayload;
+    try {
+      refundPayload = parseApprovedRefundPayload(approval.exactPayload);
+    } catch (error) {
+      if (error instanceof ApprovedActionContractError) throw contractHttpError(error);
+      throw error;
     }
     const environment = Deno.env.toObject();
     if (!isLiveProviderEnabled(environment, 'STRIPE_LIVE_ENABLED', 'STRIPE_MODE')) {
@@ -294,6 +369,12 @@ Deno.serve(async (request) => {
         'LIVE_PROVIDER_REQUIRED',
       );
     }
+    await assertProviderInvocation(serviceClient, {
+      companyId: approval.companyId,
+      provider: 'stripe',
+      capability: 'payments',
+      operationClass: 'recovery',
+    });
 
     const { data: claimData, error: claimError } = await serviceClient.rpc(
       'claim_ai_approved_action',
@@ -347,27 +428,17 @@ Deno.serve(async (request) => {
     // explicitly keeps sandbox execution grounded in the same database facts.
     await new SupabaseStripeBillingValidator(serviceClient).validateRefund(providerRequest);
 
-    const providerRegistry = createSandboxOfficeToolRegistry(
-      createServerIntegrationSuite(environment),
-    );
+    const providerSuite = createServerIntegrationSuite(environment);
     const output = await withRetry(
-      () =>
-        providerRegistry.execute(approval.toolName, approval.exactPayload, {
-          companyId: approval.companyId,
-          runId: approval.runId,
-          actionId: approval.actionId,
-          agent,
-          actor: { id: user.id, role: 'owner' },
-          idempotencyKey: claim.provider_idempotency_key as string,
-          approvalId: approval.approvalId,
-          signal: request.signal,
-        }),
+      () => providerSuite.payments.refund(providerRequest, request.signal),
       {
         maxAttempts: 3,
         baseDelayMs: 100,
         maxDelayMs: 1_000,
         jitterRatio: 0.2,
-        shouldRetry: (error) => error instanceof ToolExecutionError && error.retryable,
+        shouldRetry: (error) =>
+          (error instanceof ToolExecutionError && error.retryable) ||
+          (error instanceof IntegrationError && error.retryable),
       },
     );
     providerMayHaveCompleted = true;

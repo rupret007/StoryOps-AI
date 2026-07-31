@@ -123,6 +123,9 @@ export const signedLeadIntakeSchema = z
 export type SignedLeadIntake = z.infer<typeof signedLeadIntakeSchema>;
 export type IntakeSource = SignedLeadIntake['source'] | 'sms' | 'phone';
 export type IntakeCommunicationChannel = 'sms' | 'email' | 'voice' | 'chat';
+export type TwilioMissedCallStatus = 'no-answer' | 'busy' | 'failed' | 'canceled';
+export type IntakeHandoffReason =
+  'explicit_human_request' | 'legal_uncertainty' | 'safety_uncertainty' | 'emergency_uncertainty';
 
 export type NormalizedIntakeConsent = {
   channel: ContactChannel;
@@ -137,7 +140,8 @@ export type NormalizedLeadIntake = {
   companyId: string;
   provider: 'storyops_web' | 'storyops_chat' | 'storyops_email' | 'twilio';
   providerEventId: string;
-  eventType: 'inbound_web' | 'inbound_chat' | 'inbound_email' | 'inbound_sms' | 'inbound_voice';
+  eventType: 'inbound_web' | 'inbound_chat' | 'inbound_email' | 'inbound_message' | 'inbound_voice';
+  consentSignal: 'opt_out' | 'opt_in' | 'none';
   source: IntakeSource;
   occurredAt: string;
   displayName: string;
@@ -153,7 +157,73 @@ export type NormalizedLeadIntake = {
     subject?: string;
   };
   consent: NormalizedIntakeConsent[];
+  operationalSignals: {
+    missedCallStatus?: TwilioMissedCallStatus;
+    handoffReasons: IntakeHandoffReason[];
+  };
 };
+
+const twilioMissedCallSuffixes: Readonly<Record<TwilioMissedCallStatus, string>> = {
+  'no-answer': 'MCRNOANSWER',
+  busy: 'MCRBUSY',
+  failed: 'MCRFAILED',
+  canceled: 'MCRCANCELED',
+};
+
+function twilioMissedCallStatus(value: string | undefined): TwilioMissedCallStatus | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'no-answer' ||
+    normalized === 'busy' ||
+    normalized === 'failed' ||
+    normalized === 'canceled'
+    ? normalized
+    : undefined;
+}
+
+/**
+ * This classifier is intentionally finite, deterministic, and content-only.
+ * It never interprets instructions in the message or grants the sender any
+ * tool authority. The database independently recomputes these reasons before
+ * it creates an owner action.
+ */
+export function classifyIntakeHandoffReasons(
+  message: string,
+  consentSignal: NormalizedLeadIntake['consentSignal'] = 'none',
+): IntakeHandoffReason[] {
+  if (consentSignal !== 'none') return [];
+  const normalized = message.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim();
+  const reasons: IntakeHandoffReason[] = [];
+  if (
+    /\b(?:speak|talk|connect|transfer|chat)\b.{0,48}\b(?:human|person|representative|agent|owner|manager)\b/u.test(
+      normalized,
+    ) ||
+    /\b(?:real person|live agent|human help|call me|have someone call|need a person)\b/u.test(
+      normalized,
+    )
+  ) {
+    reasons.push('explicit_human_request');
+  }
+  if (
+    /\b(?:legal|lawyer|attorney|lawsuit|sue|suing|liability|claim adjuster)\b/u.test(normalized)
+  ) {
+    reasons.push('legal_uncertainty');
+  }
+  if (
+    /\b(?:unsafe|safety|injury|injured|chemical burn|chemical exposure|bleach exposure|poison|electrocution|property damage)\b/u.test(
+      normalized,
+    )
+  ) {
+    reasons.push('safety_uncertainty');
+  }
+  if (
+    /\b(?:911|emergency|ambulance|fire department|medical emergency|life threatening)\b/u.test(
+      normalized,
+    )
+  ) {
+    reasons.push('emergency_uncertainty');
+  }
+  return reasons;
+}
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
@@ -331,6 +401,7 @@ export function normalizeSignedLeadIntake(
     provider: `storyops_${input.source}`,
     providerEventId: input.eventId,
     eventType: `inbound_${input.source}`,
+    consentSignal: 'none',
     source: input.source,
     occurredAt: input.occurredAt ?? receivedAt.toISOString(),
     displayName,
@@ -348,6 +419,9 @@ export function normalizeSignedLeadIntake(
       ...(input.message.subject ? { subject: input.message.subject.trim() } : {}),
     },
     consent,
+    operationalSignals: {
+      handoffReasons: classifyIntakeHandoffReasons(input.message.body),
+    },
   };
 }
 
@@ -392,7 +466,7 @@ function twilioKeywordConsent(body: string, messageId: string): NormalizedIntake
     classification === 'opt_out'
       ? 'withdrawn'
       : classification === 'opt_in'
-        ? 'granted'
+        ? 'unknown'
         : 'unknown';
   return (['transactional', 'marketing'] as const).map((purpose) => ({
     channel: 'sms',
@@ -449,11 +523,13 @@ export function normalizeTwilioLeadIntake(
         false,
       );
     }
+    const consentSignal = classifyConsentKeyword(body);
     return {
       companyId,
       provider: 'twilio',
-      providerEventId: messageId,
-      eventType: 'inbound_sms',
+      providerEventId: `${messageId}:inbound_message`,
+      eventType: 'inbound_message',
+      consentSignal,
       source: 'sms',
       occurredAt: receivedAt.toISOString(),
       displayName: from,
@@ -467,6 +543,9 @@ export function normalizeTwilioLeadIntake(
         body,
       },
       consent: twilioKeywordConsent(body, messageId),
+      operationalSignals: {
+        handoffReasons: classifyIntakeHandoffReasons(body, consentSignal),
+      },
     };
   }
 
@@ -479,15 +558,31 @@ export function normalizeTwilioLeadIntake(
       false,
     );
   }
+  const missedCallStatus = twilioMissedCallStatus(form.CallStatus);
+  const missedCallSuffix = missedCallStatus
+    ? twilioMissedCallSuffixes[missedCallStatus]
+    : undefined;
+  if (missedCallSuffix && callId.length + missedCallSuffix.length > 255) {
+    throw new IntegrationError(
+      'Twilio CallSid is too long for a collision-safe missed-call event key.',
+      'twilio',
+      'INVALID_INTAKE',
+      false,
+    );
+  }
   const speech = (form.SpeechResult ?? form.TranscriptionText)?.trim();
-  const body = speech
-    ? speech.slice(0, LEAD_INTAKE_MAX_MESSAGE_CHARACTERS)
-    : '[Inbound voice call; no transcript supplied by Twilio]';
+  const body = missedCallStatus
+    ? `[Missed inbound voice call; terminal provider status ${missedCallStatus}; transcript intentionally not used]`
+    : speech
+      ? speech.slice(0, LEAD_INTAKE_MAX_MESSAGE_CHARACTERS)
+      : '[Inbound voice call; no transcript supplied by Twilio]';
+  const providerEventId = missedCallSuffix ? `${callId}${missedCallSuffix}` : callId;
   return {
     companyId,
     provider: 'twilio',
-    providerEventId: callId,
+    providerEventId,
     eventType: 'inbound_voice',
+    consentSignal: 'none',
     source: 'phone',
     occurredAt: receivedAt.toISOString(),
     displayName: from,
@@ -504,6 +599,10 @@ export function normalizeTwilioLeadIntake(
       'voice',
       `Inbound Twilio call ${callId}; no consent assertion supplied.`,
     ),
+    operationalSignals: {
+      ...(missedCallStatus ? { missedCallStatus } : {}),
+      handoffReasons: missedCallStatus ? [] : classifyIntakeHandoffReasons(body),
+    },
   };
 }
 
@@ -537,6 +636,8 @@ export function intakeReceiptPayload(event: NormalizedLeadIntake): Record<string
       purpose,
       status,
     })),
+    consentSignal: event.consentSignal,
+    operationalSignals: event.operationalSignals,
   };
 }
 

@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Activity,
   BadgeDollarSign,
@@ -15,13 +23,16 @@ import {
   FileCheck2,
   Gauge,
   Inbox,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
+  Power,
   Search,
   Settings2,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserRound,
   Wifi,
   X,
@@ -39,6 +50,7 @@ interface NavItem {
   icon: LucideIcon;
   permission?: Permission;
   badge?: 'approvals' | 'inbox';
+  liveOnly?: boolean;
 }
 
 const primaryNav: NavItem[] = [
@@ -61,13 +73,50 @@ const officeNav: NavItem[] = [
   },
   { to: '/operations', label: 'Operations', icon: ClipboardCheck, permission: 'catalog.read' },
   {
+    to: '/setup',
+    label: 'Company setup',
+    icon: Gauge,
+    permission: 'company.manage',
+  },
+  {
+    to: '/company-control',
+    label: 'Company control',
+    icon: Power,
+    permission: 'company.manage',
+    liveOnly: true,
+  },
+  {
     to: '/integrations',
     label: 'Integrations',
     icon: Settings2,
     permission: 'company.manage',
   },
+  {
+    to: '/access',
+    label: 'Team & portal access',
+    icon: KeyRound,
+    permission: 'members.manage',
+    liveOnly: true,
+  },
   { to: '/audit', label: 'Audit trail', icon: Activity, permission: 'ai_traces.read' },
 ];
+
+const mobileQuickNav: NavItem[] = [
+  { to: '/', label: 'Home', icon: Gauge, permission: 'analytics.read' },
+  { to: '/pipeline', label: 'Pipeline', icon: Inbox, permission: 'customers.read' },
+  { to: '/field', label: 'Field', icon: BriefcaseBusiness, permission: 'jobs.read' },
+  { to: '/approvals', label: 'Approve', icon: ShieldCheck, permission: 'approvals.read' },
+  { to: '/portal', label: 'Portal', icon: UserRound, permission: 'portal.self.read' },
+];
+
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 const sandboxSearchItems = (estimateTotal: string) => [
   {
@@ -112,6 +161,62 @@ const roleLabels: Record<AppRole, string> = {
   customer: 'Customer',
 };
 
+function useDialogKeyboard(
+  dialogRef: RefObject<HTMLElement | null>,
+  onClose: () => void,
+  initialFocusRef?: RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusableElements = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (element) => element.getAttribute('aria-hidden') !== 'true',
+      );
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    (initialFocusRef?.current ?? focusableElements()[0] ?? dialog).focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const elements = focusableElements();
+      if (elements.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements.at(-1);
+      if (!first || !last) return;
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey && (activeElement === first || !dialog.contains(activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (activeElement === last || !dialog.contains(activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [dialogRef, initialFocusRef, onClose]);
+}
+
 function Brand() {
   return (
     <div className="brand">
@@ -136,7 +241,11 @@ function Sidebar() {
   const renderNav = (items: NavItem[]) => (
     <ul className="nav-list">
       {items
-        .filter((item) => !item.permission || can(item.permission))
+        .filter(
+          (item) =>
+            (!item.permission || can(item.permission)) &&
+            (!item.liveOnly || state.dataMode === 'supabase'),
+        )
         .map(({ to, label, icon: Icon, badge }) => (
           <li key={to}>
             <NavLink className="nav-link" to={to} end={to === '/'}>
@@ -171,12 +280,18 @@ function Sidebar() {
         <div className="ai-status-card">
           <div className="ai-status-card__top">
             <span className="pulse-dot" aria-hidden="true" />
-            {state.dataMode === 'supabase' ? 'Live workspace connected' : 'AI office on duty'}
+            {state.dataMode === 'supabase'
+              ? !state.online
+                ? 'Authenticated workspace offline'
+                : state.serverVerifiedAt
+                  ? 'Authenticated server verified'
+                  : 'Network available · server not verified'
+              : 'AI office ready · manual runs'}
           </div>
           <p>
             {state.dataMode === 'supabase'
-              ? `Live role-scoped workspace · ${state.integrations.length} provider records`
-              : '8 agents · policy v1.0 · sandbox providers healthy'}
+              ? `Authenticated role-scoped workspace · ${state.integrations.length} provider records`
+              : '8 specialists · policy v1.0 · sandbox adapters ready'}
           </p>
         </div>
         <div className="workspace-switcher">
@@ -201,10 +316,12 @@ function Topbar({
   onSearch,
   onNotifications,
   notificationsOpen,
+  searchButtonRef,
 }: {
-  onSearch(): void;
+  onSearch(returnTarget?: HTMLElement): void;
   onNotifications(): void;
   notificationsOpen: boolean;
+  searchButtonRef: RefObject<HTMLButtonElement | null>;
 }) {
   const { state, actions } = useStoryOps();
   const navigate = useNavigate();
@@ -214,6 +331,29 @@ function Topbar({
     state.dataMode === 'supabase' && state.live?.serverTime
       ? new Date(state.live.serverTime)
       : undefined;
+  const queuedChanges = state.offlineQueue.filter(
+    (item) => item.status === 'queued' || item.status === 'syncing',
+  ).length;
+  const failedChanges = state.offlineQueue.filter((item) => item.status === 'failed').length;
+  const queueSummary = `${queuedChanges} queued · ${failedChanges} failed`;
+  const connectivityLabel =
+    state.dataMode === 'sandbox'
+      ? state.online
+        ? 'Local sandbox · network available'
+        : 'Local sandbox · browser offline'
+      : !state.online
+        ? `Browser offline · ${queueSummary}`
+        : !state.serverVerifiedAt
+          ? `Network available · server not verified · ${queueSummary}`
+          : `Server verified · ${queueSummary}`;
+  const connectivityTitle =
+    state.dataMode === 'sandbox'
+      ? 'Local fixtures are stored on this device; browser network availability does not verify a server.'
+      : state.serverVerifiedAt
+        ? `The authenticated server was last verified at ${state.serverVerifiedAt}.`
+        : state.online
+          ? 'The browser network is available, but StoryOps has not verified the authenticated server.'
+          : 'The browser reports no network connection.';
 
   const changeRole = (role: AppRole) => {
     actions.setRole(role);
@@ -221,6 +361,17 @@ function Topbar({
       navigate('/portal');
     } else if (location.pathname === '/portal') {
       navigate('/');
+    }
+  };
+
+  const restartSandboxRehearsal = () => {
+    if (
+      window.confirm(
+        'Restart the local sandbox rehearsal? This clears the local profile and every synthetic fixture on this device. No provider, customer, or payment record is affected.',
+      )
+    ) {
+      actions.resetDemo();
+      navigate('/setup');
     }
   };
 
@@ -235,7 +386,7 @@ function Topbar({
                 day: 'numeric',
                 timeZone: state.live?.companyTimezone,
               }).format(workspaceDate)
-            : 'Tuesday, July 28'}
+            : 'Sandbox scenario · Tuesday, July 28'}
         </strong>
         {workspaceDate
           ? `${state.live?.companyTimezone} · ${new Intl.DateTimeFormat('en-US', {
@@ -243,35 +394,50 @@ function Topbar({
               minute: '2-digit',
               timeZone: state.live?.companyTimezone,
             }).format(workspaceDate)}`
-          : 'DFW · 9:28 AM'}
+          : 'DFW fixture · 9:28 AM'}
       </div>
-      <button className="command-trigger" type="button" onClick={onSearch}>
+      <button
+        ref={searchButtonRef}
+        className="command-trigger"
+        type="button"
+        aria-label="Search StoryOps"
+        aria-haspopup="dialog"
+        onClick={(event) => onSearch(event.currentTarget)}
+      >
         <Search size={16} aria-hidden="true" />
         <span className="command-trigger__hint">Search customers, jobs, invoices…</span>
         <kbd>⌘ K</kbd>
       </button>
       <div className="topbar__actions">
         <span
-          className={`offline-indicator ${state.online ? '' : 'offline-indicator--offline'}`}
-          title={
-            state.online
-              ? state.dataMode === 'supabase'
-                ? 'Connected to the authenticated Supabase repository'
-                : 'Connected to the sandbox repository'
-              : 'Changes are queued on this device'
-          }
+          className={`offline-indicator ${
+            !state.online ||
+            (state.dataMode === 'supabase' &&
+              (!state.serverVerifiedAt || queuedChanges > 0 || failedChanges > 0))
+              ? 'offline-indicator--offline'
+              : ''
+          }`}
+          aria-label={connectivityLabel}
+          title={connectivityTitle}
         >
           {state.online ? <Wifi size={13} /> : <CloudOff size={13} />}
-          <span>{state.online ? 'Synced' : `Offline · ${state.offlineQueue.length} queued`}</span>
+          <span>{connectivityLabel}</span>
         </span>
         {state.dataMode === 'sandbox' ? (
           <>
+            <button
+              className="button button--secondary button--sm topbar__sandbox-restart"
+              type="button"
+              onClick={restartSandboxRehearsal}
+            >
+              Restart rehearsal
+            </button>
             <label className="sr-only" htmlFor="role-switcher">
               Preview role
             </label>
             <select
               id="role-switcher"
-              className="role-switcher"
+              className="role-switcher topbar__role-switcher"
               value={state.role}
               onChange={(event) => changeRole(event.target.value as AppRole)}
               aria-label="Preview role"
@@ -284,17 +450,33 @@ function Topbar({
           </>
         ) : (
           <>
-            <span className="role-switcher" aria-label={`Server role: ${roleLabels[state.role]}`}>
+            <span
+              className="role-switcher topbar__role-switcher"
+              aria-label={`Server role: ${roleLabels[state.role]}`}
+            >
               {roleLabels[state.role]}
             </span>
             <button
-              className="icon-button"
+              className="icon-button topbar__sign-out"
               type="button"
               aria-label="Sign out"
-              title="Sign out"
+              title={
+                state.offlineQueue.length > 0
+                  ? 'Sync queued field changes before signing out'
+                  : 'Sign out'
+              }
               onClick={() => void actions.signOut()}
             >
               <LogOut size={16} />
+            </button>
+            <button
+              className="icon-button topbar__clear-device"
+              type="button"
+              aria-label="Clear synced StoryOps data from this device"
+              title="Clear this device and sign out"
+              onClick={() => void actions.clearThisDevice()}
+            >
+              <Trash2 size={16} />
             </button>
           </>
         )}
@@ -313,42 +495,235 @@ function Topbar({
   );
 }
 
-function MobileNav() {
+function MobileNav({
+  menuOpen,
+  menuButtonRef,
+  onMenuOpen,
+}: {
+  menuOpen: boolean;
+  menuButtonRef: RefObject<HTMLButtonElement | null>;
+  onMenuOpen(): void;
+}) {
   const { can } = useStoryOps();
-  const items = [
-    { to: '/', label: 'Home', icon: Gauge, permission: 'analytics.read' as Permission },
-    { to: '/pipeline', label: 'Pipeline', icon: Inbox, permission: 'customers.read' as Permission },
-    {
-      to: '/field',
-      label: 'Field',
-      icon: BriefcaseBusiness,
-      permission: 'jobs.read' as Permission,
-    },
-    {
-      to: '/approvals',
-      label: 'Approve',
-      icon: ShieldCheck,
-      permission: 'approvals.read' as Permission,
-    },
-    {
-      to: '/operations',
-      label: 'More',
-      icon: Menu,
-      permission: 'catalog.read' as Permission,
-    },
-  ];
 
   return (
     <nav className="mobile-nav" aria-label="Mobile navigation">
-      {items
-        .filter(({ permission }) => can(permission))
+      {mobileQuickNav
+        .filter(({ permission }) => !permission || can(permission))
+        .slice(0, 4)
         .map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} end={to === '/'}>
             <Icon size={18} aria-hidden="true" />
             <span>{label}</span>
           </NavLink>
         ))}
+      <button
+        ref={menuButtonRef}
+        type="button"
+        aria-label="Open navigation menu"
+        aria-haspopup="dialog"
+        aria-expanded={menuOpen}
+        aria-controls="mobile-navigation-menu"
+        onClick={onMenuOpen}
+      >
+        <Menu size={18} aria-hidden="true" />
+        <span>Menu</span>
+      </button>
     </nav>
+  );
+}
+
+function MobileMenu({ onClose }: { onClose(): void }) {
+  const { state, actions, can } = useStoryOps();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const pendingApprovals = state.approvals.filter((item) => item.status === 'pending').length;
+  const newLeads = state.leads.filter((lead) => lead.stage === 'new').length;
+  const companyName = state.live?.companyName ?? state.setupProfile?.businessName ?? 'StoryOps';
+
+  useDialogKeyboard(dialogRef, onClose, closeButtonRef);
+
+  const changeRole = (role: AppRole) => {
+    actions.setRole(role);
+    onClose();
+    if (role === 'customer') {
+      navigate('/portal');
+    } else if (location.pathname === '/portal') {
+      navigate('/');
+    }
+  };
+
+  const restartSandboxRehearsal = () => {
+    if (
+      window.confirm(
+        'Restart the local sandbox rehearsal? This clears the local profile and every synthetic fixture on this device. No provider, customer, or payment record is affected.',
+      )
+    ) {
+      actions.resetDemo();
+      onClose();
+      navigate('/setup');
+    }
+  };
+
+  const renderNav = (items: NavItem[]) => (
+    <ul className="mobile-menu__links">
+      {items
+        .filter(
+          (item) =>
+            (!item.permission || can(item.permission)) &&
+            (!item.liveOnly || state.dataMode === 'supabase'),
+        )
+        .map(({ to, label, icon: Icon, badge }) => (
+          <li key={to}>
+            <NavLink to={to} end={to === '/'} onClick={onClose}>
+              <Icon size={18} strokeWidth={1.9} aria-hidden="true" />
+              <span>{label}</span>
+              {badge === 'approvals' && pendingApprovals > 0 && (
+                <span className="nav-link__badge" aria-label={`${pendingApprovals} pending`}>
+                  {pendingApprovals}
+                </span>
+              )}
+              {badge === 'inbox' && newLeads > 0 && (
+                <span className="nav-link__badge" aria-label={`${newLeads} new`}>
+                  {newLeads}
+                </span>
+              )}
+            </NavLink>
+          </li>
+        ))}
+    </ul>
+  );
+
+  const currentRecordNav: NavItem[] = [
+    ...(can('portal.self.read')
+      ? [{ to: '/portal', label: 'Customer portal', icon: UserRound } satisfies NavItem]
+      : []),
+    ...(state.estimate.id && can('estimates.read')
+      ? [
+          {
+            to: `/estimates/${encodeURIComponent(state.estimate.id)}`,
+            label: `Estimate ${state.estimate.estimateNumber}`,
+            icon: FileCheck2,
+          } satisfies NavItem,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="mobile-menu-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        ref={dialogRef}
+        id="mobile-navigation-menu"
+        className="mobile-menu"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mobile-navigation-title"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="mobile-menu__header">
+          <div>
+            <p className="eyebrow">Navigation</p>
+            <h2 id="mobile-navigation-title">StoryOps workspace</h2>
+          </div>
+          <button
+            ref={closeButtonRef}
+            className="icon-button"
+            type="button"
+            aria-label="Close navigation menu"
+            onClick={onClose}
+          >
+            <X size={17} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="mobile-menu__workspace">
+          <Avatar name={roleLabels[state.role]} size="sm" />
+          <span>
+            <strong>{companyName}</strong>
+            <small>
+              {state.dataMode === 'supabase'
+                ? `${roleLabels[state.role]} authenticated membership`
+                : `${roleLabels[state.role]} sandbox preview`}
+            </small>
+          </span>
+        </div>
+
+        <nav aria-label="All available destinations">
+          <section className="mobile-menu__section">
+            <h3>Workspace</h3>
+            {renderNav(primaryNav)}
+          </section>
+          <section className="mobile-menu__section">
+            <h3>Back office</h3>
+            {renderNav(officeNav)}
+          </section>
+          {currentRecordNav.length > 0 && (
+            <section className="mobile-menu__section">
+              <h3>Current records</h3>
+              {renderNav(currentRecordNav)}
+            </section>
+          )}
+        </nav>
+
+        <footer className="mobile-menu__footer">
+          {state.dataMode === 'sandbox' ? (
+            <>
+              <p>
+                Role preview changes only this local synthetic rehearsal. It does not grant a server
+                role or contact a customer.
+              </p>
+              <label htmlFor="mobile-role-switcher">Preview role</label>
+              <select
+                id="mobile-role-switcher"
+                className="role-switcher"
+                value={state.role}
+                onChange={(event) => changeRole(event.target.value as AppRole)}
+              >
+                <option value="owner">Owner</option>
+                <option value="dispatcher">Dispatcher</option>
+                <option value="technician">Technician</option>
+                <option value="customer">Customer</option>
+              </select>
+              <Button variant="secondary" size="sm" onClick={restartSandboxRehearsal}>
+                Restart local sandbox rehearsal
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>
+                Signed in with the {roleLabels[state.role]} membership. Signing out does not clear
+                queued field data from this device.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<LogOut size={16} aria-hidden="true" />}
+                onClick={() => {
+                  onClose();
+                  void actions.signOut();
+                }}
+              >
+                Sign out of StoryOps
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Trash2 size={16} aria-hidden="true" />}
+                onClick={() => {
+                  onClose();
+                  void actions.clearThisDevice();
+                }}
+              >
+                Clear this device and sign out
+              </Button>
+            </>
+          )}
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -356,6 +731,8 @@ function CommandPalette({ onClose }: { onClose(): void }) {
   const [query, setQuery] = useState('');
   const { state } = useStoryOps();
   const navigate = useNavigate();
+  const dialogRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const items = useMemo(() => {
     if (state.dataMode === 'sandbox') return sandboxSearchItems(state.estimate.total);
     return [
@@ -406,27 +783,23 @@ function CommandPalette({ onClose }: { onClose(): void }) {
       : items;
   }, [items, query]);
 
-  useEffect(() => {
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [onClose]);
+  useDialogKeyboard(dialogRef, onClose, searchInputRef);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="command-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Search StoryOps"
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="command-modal__input">
           <Search size={18} aria-hidden="true" />
           <input
-            autoFocus
+            ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search customers, jobs, estimates, invoices…"
@@ -549,42 +922,103 @@ function ToastRegion() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsPath, setNotificationsPath] = useState('/');
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const searchReturnFocusRef = useRef<HTMLElement | null>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuReturnFocusRef = useRef<HTMLElement | null>(null);
   const location = useLocation();
   const showNotifications = notificationsOpen && notificationsPath === location.pathname;
+  const modalOpen = searchOpen || mobileMenuOpen;
+
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
+  const openSearch = useCallback((returnTarget?: HTMLElement) => {
+    searchReturnFocusRef.current =
+      returnTarget ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : searchButtonRef.current);
+    setMobileMenuOpen(false);
+    setNotificationsOpen(false);
+    setSearchOpen(true);
+  }, []);
+
+  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
+  const openMobileMenu = useCallback(() => {
+    mobileMenuReturnFocusRef.current = mobileMenuButtonRef.current;
+    setSearchOpen(false);
+    setNotificationsOpen(false);
+    setMobileMenuOpen(true);
+  }, []);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setSearchOpen(true);
+        openSearch();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [openSearch]);
+
+  useEffect(() => {
+    if (searchOpen || !searchReturnFocusRef.current) return;
+    const returnTarget = searchReturnFocusRef.current;
+    searchReturnFocusRef.current = null;
+    const timer = window.setTimeout(() => {
+      if (returnTarget.isConnected) returnTarget.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (mobileMenuOpen || !mobileMenuReturnFocusRef.current) return;
+    const returnTarget = mobileMenuReturnFocusRef.current;
+    mobileMenuReturnFocusRef.current = null;
+    const timer = window.setTimeout(() => {
+      if (returnTarget.isConnected) returnTarget.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [mobileMenuOpen]);
 
   return (
     <div className="app app-shell">
-      <Sidebar />
-      <div className="main-column">
-        <Topbar
-          onSearch={() => setSearchOpen(true)}
-          onNotifications={() => {
-            setNotificationsPath(location.pathname);
-            setNotificationsOpen((open) =>
-              notificationsPath === location.pathname ? !open : true,
-            );
-          }}
-          notificationsOpen={showNotifications}
+      <div
+        className="app-shell__chrome"
+        inert={modalOpen}
+        aria-hidden={modalOpen ? true : undefined}
+      >
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
+        <Sidebar />
+        <div className="main-column">
+          <Topbar
+            onSearch={openSearch}
+            onNotifications={() => {
+              setNotificationsPath(location.pathname);
+              setNotificationsOpen((open) =>
+                notificationsPath === location.pathname ? !open : true,
+              );
+            }}
+            notificationsOpen={showNotifications}
+            searchButtonRef={searchButtonRef}
+          />
+          {showNotifications && <NotificationPanel onClose={() => setNotificationsOpen(false)} />}
+          <main id="main-content">{children}</main>
+        </div>
+        <MobileNav
+          menuOpen={mobileMenuOpen}
+          menuButtonRef={mobileMenuButtonRef}
+          onMenuOpen={openMobileMenu}
         />
-        {showNotifications && <NotificationPanel onClose={() => setNotificationsOpen(false)} />}
-        <main id="main-content">{children}</main>
+        <ToastRegion />
       </div>
-      <MobileNav />
-      <ToastRegion />
-      {searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} />}
+      {mobileMenuOpen && <MobileMenu onClose={closeMobileMenu} />}
+      {searchOpen && <CommandPalette onClose={closeSearch} />}
     </div>
   );
 }

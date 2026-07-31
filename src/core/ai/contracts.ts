@@ -144,27 +144,128 @@ export const actionProposalSchema = z
 
 export type ActionProposal = z.infer<typeof actionProposalSchema>;
 
-export const agentEvidenceSchema = z.object({
-  claim: z.string().min(1).max(2_000),
-  sourceFactIds: z.array(z.string().min(1)).min(1).max(100),
-  confidence: z.number().min(0).max(1),
-});
+export const agentEvidenceSchema = z
+  .object({
+    claim: z.string().min(1).max(1_800),
+    sourceFactIds: z.array(z.string().min(1)).min(1).max(100),
+    confidence: z.number().min(0).max(1),
+  })
+  .strict();
 
 export type AgentEvidence = z.infer<typeof agentEvidenceSchema>;
 
 export const officeAgentOutputSchema = z
   .object({
-    summary: z.string().min(1).max(8_000),
+    summary: z.string().min(1).max(7_800),
     confidence: z.number().min(0).max(1),
     evidence: z.array(agentEvidenceSchema).max(100),
-    unknowns: z.array(z.string().min(1).max(1_000)).max(100),
+    unknowns: z.array(z.string().min(1).max(900)).max(100),
     proposedActions: z.array(actionProposalSchema).max(25),
-    customerDraft: z.string().max(8_000).optional(),
+    customerDraft: z.string().max(7_800).nullable(),
     ownerAttention: z.boolean(),
   })
   .strict();
 
 export type OfficeAgentOutput = z.infer<typeof officeAgentOutputSchema>;
+
+export const aiNarrativePolicySchema = z
+  .object({
+    schemaVersion: z.literal('storyops-ai-narrative-policy-v1'),
+    summaryAuthority: z.literal('non_authoritative_ai_advisory'),
+    evidenceAuthority: z.literal('non_authoritative_ai_rationale'),
+    unknownsAuthority: z.literal('non_authoritative_ai_reported_unknown'),
+    customerDraftAuthority: z.literal('non_authoritative_unsent_draft'),
+    automaticSendAllowed: z.literal(false),
+    authoritativeSources: z.tuple([
+      z.literal('server_resolved_facts'),
+      z.literal('deterministic_action_dispositions'),
+    ]),
+  })
+  .strict();
+
+export type AiNarrativePolicy = z.infer<typeof aiNarrativePolicySchema>;
+
+export const AI_NARRATIVE_POLICY: AiNarrativePolicy = {
+  schemaVersion: 'storyops-ai-narrative-policy-v1',
+  summaryAuthority: 'non_authoritative_ai_advisory',
+  evidenceAuthority: 'non_authoritative_ai_rationale',
+  unknownsAuthority: 'non_authoritative_ai_reported_unknown',
+  customerDraftAuthority: 'non_authoritative_unsent_draft',
+  automaticSendAllowed: false,
+  authoritativeSources: ['server_resolved_facts', 'deterministic_action_dispositions'],
+};
+Object.freeze(AI_NARRATIVE_POLICY.authoritativeSources);
+Object.freeze(AI_NARRATIVE_POLICY);
+
+const persistedAgentEvidenceSchema = agentEvidenceSchema
+  .extend({
+    claim: z.string().min(1).max(2_000),
+  })
+  .strict();
+
+export const officeRunOutputSchema = officeAgentOutputSchema
+  .extend({
+    summary: z.string().min(1).max(8_000),
+    evidence: z.array(persistedAgentEvidenceSchema).max(100),
+    unknowns: z.array(z.string().min(1).max(1_000)).max(100),
+    customerDraft: z.string().max(8_000).nullable(),
+    narrativePolicy: aiNarrativePolicySchema,
+  })
+  .strict();
+
+export type OfficeRunOutput = z.infer<typeof officeRunOutputSchema>;
+
+export const openAiActionProposalSchema = actionProposalSchema
+  .omit({ payload: true })
+  .extend({
+    payloadJson: z.string().min(2).max(16_000),
+  })
+  .strict();
+
+export const openAiOfficeAgentOutputSchema = officeAgentOutputSchema
+  .omit({ proposedActions: true })
+  .extend({
+    proposedActions: z.array(openAiActionProposalSchema).max(25),
+  })
+  .strict();
+
+const unsafeJsonKeys = new Set(['__proto__', 'constructor', 'prototype']);
+
+function assertSafeJsonKeys(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) assertSafeJsonKeys(item);
+    return;
+  }
+  if (value === null || typeof value !== 'object') return;
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (unsafeJsonKeys.has(key)) {
+      throw new Error('OpenAI action payload contains a reserved object key.');
+    }
+    assertSafeJsonKeys(nested);
+  }
+}
+
+export function decodeOpenAiOfficeAgentOutput(value: unknown): OfficeAgentOutput {
+  const parsed = openAiOfficeAgentOutputSchema.parse(value);
+  const proposedActions = parsed.proposedActions.map(({ payloadJson, ...proposal }) => {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(payloadJson);
+    } catch {
+      throw new Error('OpenAI action payloadJson must contain valid JSON.');
+    }
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('OpenAI action payloadJson must encode one JSON object.');
+    }
+    assertSafeJsonKeys(payload);
+    const strictPayload = z.record(z.string(), jsonValueSchema).parse(payload);
+    return { ...proposal, payload: strictPayload };
+  });
+  return officeAgentOutputSchema.parse({
+    ...parsed,
+    proposedActions,
+  });
+}
 
 export type StructuredGenerationRequest = {
   runId: string;
@@ -211,7 +312,7 @@ export type OfficeRunResult = {
   runId: string;
   agent: OfficeAgentName;
   modelProvider: string;
-  output: OfficeAgentOutput;
+  output: OfficeRunOutput;
   actions: ActionDisposition[];
   injectionSignals: string[];
   completedAt: string;

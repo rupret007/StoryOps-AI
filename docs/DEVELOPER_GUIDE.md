@@ -100,6 +100,9 @@ overwrite evidence. Use a new `--report` filename when a stable path is needed.
 Individual gates:
 
 ```bash
+npm audit --audit-level=high
+npm run install:vroom-runtime
+npm audit --prefix infra/vroom/runtime-package --audit-level=high
 npm run licenses:check
 npm run lint
 npm run typecheck
@@ -126,8 +129,10 @@ server as full proof. Preserve failing traces/screenshots/videos.
 Start/reset/lint the pinned local stack:
 
 ```bash
-npx --yes supabase@2.110.0 start
-npx --yes supabase@2.110.0 db reset --local
+npm run setup:app -- --skip-install --with-supabase
+npx --yes supabase@2.110.0 db reset \
+  --local \
+  --network-id storyops-ai-supabase-loopback
 npx --yes supabase@2.110.0 db lint \
   --local \
   --schema public \
@@ -138,8 +143,16 @@ npx --yes supabase@2.110.0 db lint \
 Stop it with:
 
 ```bash
-npx --yes supabase@2.110.0 stop
+npx --yes supabase@2.110.0 stop \
+  --no-backup \
+  --network-id storyops-ai-supabase-loopback
 ```
+
+The setup boundary creates and validates a bridge whose published ports bind
+to loopback, then inspects every project container. Do not replace it with a
+plain `supabase start`; a loopback API URL alone does not prove Docker listener
+isolation. Also do not print `supabase status -o env/json` in logs because it
+contains local signing and service-role credentials.
 
 Migration rules:
 
@@ -229,7 +242,11 @@ or price-book data.
 4. Add it only to the specialist allowlists that need it.
 5. Define authoritative risk, reversibility, idempotency, retryability, and
    approval category outside the model.
-6. Add structured-output/evidence validation and trace redaction.
+6. Add structured-output validation, protected-claim semantic grounding, and
+   trace redaction. Merely checking that a cited fact ID exists is not
+   grounding: bind each factual claim class to the matching fact domain and
+   exact asserted values. Keep summary/draft prose non-authoritative and
+   customer drafts structurally blocked from automatic send.
 7. Test success, malformed output, nonexistent source ID, injection, wrong
    specialist, wrong role/company, approval/mismatch/expiry/replay, transient
    retry, and indeterminate provider state.
@@ -317,7 +334,9 @@ secrets.
 - Keep base images, GitHub Actions, Supabase CLI, VROOM/VROOM Express, and npm
   dependencies pinned. Update `THIRD_PARTY.md` with every upstream change.
 - Preserve `LICENSE.atomic-crm.md`, `NOTICE.md`,
-  `NPM_THIRD_PARTY_NOTICES.txt`, and the exact pins in `THIRD_PARTY.md`.
+  `NPM_THIRD_PARTY_NOTICES.txt`, the VROOM runtime inventory at
+  `infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt`, and the exact pins
+  in `THIRD_PARTY.md`.
 - StoryOps AI has no root-project distribution license selected. Do not add a
   package/container license claim or distribute the project until the owner
   records that manual YELLOW decision.

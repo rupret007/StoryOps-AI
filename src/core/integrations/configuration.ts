@@ -110,6 +110,17 @@ const providerRequirements: readonly ProviderRequirement[] = [
     ],
   },
   {
+    provider: 'supabase_auth',
+    capability: 'identity_invitation',
+    enableFlag: 'STORYOPS_IDENTITY_INVITE_LIVE_ENABLED',
+    modeSetting: 'STORYOPS_IDENTITY_INVITE_MODE',
+    required: [
+      'STORYOPS_IDENTITY_INVITE_REDIRECT_URL',
+      'SUPABASE_URL',
+      'SUPABASE_SERVICE_ROLE_KEY',
+    ],
+  },
+  {
     provider: 'stripe',
     capability: 'payments',
     enableFlag: 'STRIPE_LIVE_ENABLED',
@@ -188,8 +199,12 @@ export function assessIntegrationEnvironment(
   return providerRequirements.map((requirement) => {
     const acceptedAlternativeNames = requirement.requiredAny?.flat() ?? [];
     const allEnvironmentNames = [...requirement.required, ...acceptedAlternativeNames];
+    const activationEnvironment =
+      requirement.provider === 'supabase_auth' && environment[requirement.modeSetting] === undefined
+        ? { ...environment, [requirement.modeSetting]: 'disabled' }
+        : environment;
     const activation = resolveLiveProviderActivation(
-      environment,
+      activationEnvironment,
       requirement.enableFlag,
       requirement.modeSetting,
     );

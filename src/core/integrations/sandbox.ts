@@ -6,8 +6,10 @@ import type {
   AccountingProvider,
   CalendarAvailability,
   CalendarAvailabilityRequest,
+  CalendarBookingState,
   CalendarEntry,
   CalendarProvider,
+  CancelCalendarEntryRequest,
   CheckoutLine,
   CreateCalendarEntryRequest,
   CreateCheckoutRequest,
@@ -24,6 +26,7 @@ import type {
   ProviderMoney,
   ProviderReceipt,
   QuickBooksInvoiceExportRequest,
+  ReadCalendarBookingRequest,
   RefundRequest,
   RoutePlan,
   RoutingProvider,
@@ -457,6 +460,62 @@ export class SandboxCalendarProvider extends SandboxProvider implements Calendar
     return this.createEntry('booking', request);
   }
 
+  async readBooking(request: ReadCalendarBookingRequest): Promise<CalendarBookingState> {
+    const entry = this.entries.get(request.providerId);
+    if (!entry) {
+      return {
+        provider: this.provider,
+        providerId: request.providerId,
+        mode: this.mode,
+        status: 'absent',
+        idempotencyKey: request.idempotencyKey,
+        observedAt: this.now().toISOString(),
+        readBackConfirmed: true,
+      };
+    }
+    if (
+      entry.kind !== 'booking' ||
+      entry.idempotencyKey !== request.idempotencyKey ||
+      Date.parse(entry.window.start) !== Date.parse(request.window.start) ||
+      Date.parse(entry.window.end) !== Date.parse(request.window.end)
+    ) {
+      throw new IntegrationError(
+        'Sandbox calendar read-back does not match the exact booking.',
+        this.provider,
+        'RECONCILIATION_CONFLICT',
+        false,
+      );
+    }
+    return {
+      provider: this.provider,
+      providerId: entry.providerId,
+      mode: this.mode,
+      status: entry.status === 'cancelled' ? 'cancelled' : 'confirmed',
+      idempotencyKey: entry.idempotencyKey,
+      etag: entry.etag,
+      observedAt: this.now().toISOString(),
+      readBackConfirmed: true,
+    };
+  }
+
+  async cancelBooking(request: CancelCalendarEntryRequest): Promise<void> {
+    const entry = this.entries.get(request.providerId);
+    if (!entry) return;
+    if (
+      entry.kind !== 'booking' ||
+      entry.etag !== request.etag ||
+      entry.idempotencyKey !== request.idempotencyKey
+    ) {
+      throw new IntegrationError(
+        'Sandbox calendar cancellation does not match the exact booking.',
+        this.provider,
+        'RECONCILIATION_CONFLICT',
+        false,
+      );
+    }
+    this.entries.delete(request.providerId);
+  }
+
   private async createEntry(
     kind: 'hold' | 'booking',
     request: CreateCalendarEntryRequest,
@@ -494,6 +553,9 @@ export class SandboxCalendarProvider extends SandboxProvider implements Calendar
           window: request.window,
           expiresAt,
           idempotencyKey: request.idempotencyKey,
+          etag: `sandbox-${providerId}`,
+          reconciledAt: this.now().toISOString(),
+          readBackConfirmed: true,
         };
         this.entries.set(providerId, entry);
         return entry;
@@ -549,6 +611,7 @@ export class SandboxWeatherProvider extends SandboxProvider implements WeatherPr
         },
       ],
       alerts: [],
+      issuedAt: this.now().toISOString(),
       observedAt: this.now().toISOString(),
       unknowns: ['Sandbox mode does not fabricate weather. Recheck NWS before dispatch.'],
     };

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
 import { Badge, Button, Card, EmptyState, PageHeader } from '@/components/ui/Primitives';
 
@@ -20,6 +21,18 @@ const reasonIcon = {
   campaign_send: Megaphone,
   other: ShieldCheck,
 };
+
+const executableApprovedActionTypes = new Set([
+  'payments.refund',
+  'records.create_lead',
+  'records.update_lead',
+]);
+
+function executeActionLabel(actionType?: string): string {
+  if (actionType === 'records.create_lead') return 'Create approved lead';
+  if (actionType === 'records.update_lead') return 'Apply approved lead status';
+  return 'Execute approved refund';
+}
 
 export function ApprovalsPage() {
   const { state, actions } = useStoryOps();
@@ -75,17 +88,56 @@ export function ApprovalsPage() {
                 <div>
                   <div className="approval-detail-card__title-row">
                     <h2>{approval.title}</h2>
-                    <Badge tone={approval.risk === 'high' ? 'danger' : 'warning'}>
+                    <Badge
+                      tone={
+                        approval.risk === 'high' || approval.risk === 'critical'
+                          ? 'danger'
+                          : 'warning'
+                      }
+                    >
                       {approval.risk} risk
                     </Badge>
                   </div>
                   <p>{approval.summary}</p>
                 </div>
               </div>
+              {(approval.blockingFlags?.length ?? 0) > 0 && (
+                <section
+                  className="approval-blockers"
+                  aria-label={`Blocking reasons for ${approval.title}`}
+                >
+                  <h3>Every blocking reason</h3>
+                  <ul>
+                    {approval.blockingFlags?.map((flag) => (
+                      <li key={`${flag.reason}:${flag.summary}`}>
+                        <div>
+                          <code>{flag.reason}</code>
+                          <Badge
+                            tone={
+                              flag.riskLevel === 'high' || flag.riskLevel === 'critical'
+                                ? 'danger'
+                                : 'warning'
+                            }
+                          >
+                            {flag.riskLevel}
+                          </Badge>
+                        </div>
+                        <p>{flag.summary}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               <div className="approval-payload">
                 <div>
                   <span>Exact payload</span>
-                  <code>{approval.payloadPreview}</code>
+                  <pre>
+                    <code>{approval.payloadPreview}</code>
+                  </pre>
+                </div>
+                <div>
+                  <span>SHA-256 payload hash</span>
+                  <code>{approval.payloadHash ?? 'No executable payload hash'}</code>
                 </div>
                 <div>
                   <span>Entity</span>
@@ -125,7 +177,7 @@ export function ApprovalsPage() {
                     </Badge>
                     {state.dataMode === 'supabase' &&
                       approval.status === 'approved' &&
-                      approval.actionType === 'payments.refund' &&
+                      executableApprovedActionTypes.has(approval.actionType ?? '') &&
                       (approval.consumedAt ? (
                         <Badge tone="positive">Executed exactly once</Badge>
                       ) : (
@@ -134,9 +186,26 @@ export function ApprovalsPage() {
                           onClick={() => actions.executeApprovedAction(approval.id)}
                           icon={<Check size={14} />}
                         >
-                          Execute approved refund
+                          {executeActionLabel(approval.actionType)}
                         </Button>
                       ))}
+                    {state.dataMode === 'supabase' &&
+                      approval.status === 'approved' &&
+                      approval.actionType === 'payment.allocation.apply_exact_current_balance' &&
+                      (approval.consumedAt ? (
+                        <Badge tone="positive">Applied exactly once</Badge>
+                      ) : (
+                        <Link className="button button--dark button--md" to="/finance">
+                          Verify note & apply in Finance
+                        </Link>
+                      ))}
+                    {state.dataMode === 'supabase' &&
+                      approval.status === 'approved' &&
+                      approval.actionType === 'payment.allocation.review_manual' && (
+                        <Badge tone="warning">
+                          No automatic resolver · provider/accounting work required
+                        </Badge>
+                      )}
                   </div>
                 )}
               </div>

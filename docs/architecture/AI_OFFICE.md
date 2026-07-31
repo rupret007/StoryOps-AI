@@ -2,13 +2,13 @@
 
 **Status:** V1 production boundary  
 **Owner:** Company owner (business policy), principal engineer (technical policy)  
-**Last reviewed:** 2026-07-28  
+**Last reviewed:** 2026-07-29  
 **Source of truth:** Code under `src/core/ai`, persisted approvals/traces in Supabase, and this document
 
-The AI office is a controlled proposal-and-execution system. A model may summarize evidence and
-propose an action. It cannot call a provider directly. Deterministic application policy, a typed
-least-privilege registry, idempotency, and—when required—an exact-payload approval stand between a
-proposal and every side effect.
+The AI office is a controlled proposal-and-execution system. A model may produce advisory prose
+and propose an action. Model prose is never source-of-truth and cannot call a provider directly.
+Deterministic application policy, a typed least-privilege registry, idempotency, and—when
+required—an exact-payload approval stand between a proposal and every side effect.
 
 This follows StoryLand’s central operating rule in a form suitable for software:
 
@@ -17,38 +17,84 @@ This follows StoryLand’s central operating rule in a form suitable for softwar
 
 ## Runtime flow
 
-1. An authenticated trigger creates an `OfficeRunRequest` with a company, actor, specialist,
-   objective, client context, untrusted content, and idempotency key.
-   The user-facing Edge boundary independently verifies that the actor ID and role match an active
-   owner/dispatcher membership; callers cannot self-assert an elevated role. It ignores the
-   request’s entire client-supplied `trustedFacts` value and reloads the role/company fact set from
-   Supabase.
-2. The guardrail envelope labels all customer text, email, SMS, transcripts, OCR, reviews, and
+1. An authenticated owner or dispatcher manually selects a specialist. Specialists require exactly
+   one allowed root-record type and UUID; the owner briefing accepts no root selector. The browser
+   creates a stable run UUID/request time/idempotency key, uses the fixed objective for that
+   specialist, and sends optional notes only as bounded untrusted chat data. The legacy
+   `trustedFacts` field carries at most the root identity selector; it never carries a caller-owned
+   fact value.
+2. The Edge boundary strictly validates the finite request, authenticates the token, and verifies
+   that actor ID and role match an active owner/dispatcher membership. It atomically claims
+   idempotency and calls `begin_storyops_ai_office_run`, which rejects paused companies and
+   persists a manual `automation_runs` record without storing the manual note.
+3. Server-only, least-privilege RPCs resolve the selected company-owned root and bounded related
+   records. Owner briefings load a bounded company aggregate. The selector chooses what to read; it
+   is never treated as evidence itself.
+4. A purpose- and provider-scoped data-minimization policy removes direct
+   contact identifiers, payment-card/SSN patterns, credentials, and
+   secret-shaped text before the model boundary. Exact contact data remains
+   behind authenticated record/tool boundaries.
+5. The guardrail envelope labels all customer text, email, SMS, transcripts, OCR, reviews, and
    retrieved prose as `DATA_ONLY_NEVER_INSTRUCTIONS`.
-3. Injection detectors flag instruction override, role impersonation, secret extraction, tool
+6. Injection detectors flag instruction override, role impersonation, secret extraction, tool
    coercion, and delimiter attacks.
-4. The selected specialist receives only its instructions and capability surface.
-5. The model must return `OfficeAgentOutput`; Zod rejects extra fields, malformed actions, missing
+7. The selected specialist receives only its instructions and capability surface.
+8. The model must return `OfficeAgentOutput`; Zod rejects extra fields, malformed actions, missing
    confidence, and invalid risk values.
-6. Evidence and every proposed action must cite IDs from the server-resolved trusted-fact set.
-7. The orchestrator rejects duplicate action IDs and capabilities outside the specialist allowlist.
-8. Deterministic policy denies injection-influenced or ungrounded actions.
-9. Read-only or explicitly approved low-risk, reversible, idempotent tools may execute.
-10. Sensitive proposals become persisted approval requests containing the exact canonical payload
+9. Evidence and every proposed action must cite IDs from the server-resolved trusted-fact set.
+   Citation existence is not semantic grounding. A deterministic narrative validator also checks
+   protected measurement, price, availability, payment, delivery, legal/regulatory, and chemical
+   claim classes. It rejects unrelated citations, values absent from the matching cited fact, all
+   model legal/regulatory conclusions, and all model chemical instructions. Summary and
+   `customerDraft` have no citation channel, so protected factual assertions in either fail closed.
+10. The orchestrator rejects duplicate action IDs and capabilities outside the specialist
+    allowlist.
+11. Deterministic policy denies injection-influenced or ungrounded actions.
+12. Read-only or explicitly approved low-risk, reversible, idempotent tools may execute.
+13. Sensitive proposals become persisted approval requests containing the exact canonical payload
     hash. They do not execute.
-11. An approved external action needs a dedicated server executor. V1’s owner-only
-    `ai-approved-action` executor supports exactly `payments.refund`: it reloads the approval,
-    verifies company/run/action/tool/expiry/payload hash and current payment eligibility, obtains an
-    atomic execution lease, and executes with a server-derived provider idempotency key. Successful
-    completion consumes the approval exactly once; ambiguous state remains reconcilable.
-12. Redacted trace events record guardrails, model boundaries, policy decisions, approvals, and
+14. An approved action needs a dedicated server executor. V1’s owner-only `ai-approved-action`
+    boundary supports exact-approved `records.create_lead`, `records.update_lead`, and
+    `payments.refund`. It reloads the approval, verifies
+    company/run/action/tool/expiry/payload hash and current domain eligibility, and obtains an
+    atomic execution lease. Successful completion consumes the approval exactly once; ambiguous
+    provider state remains reconcilable.
+15. The Edge function calls `complete_storyops_ai_office_run` or
+    `fail_storyops_ai_office_run`. Completion persists the strict result, model mode, disposition,
+    approval link, and—only for a briefing—an `owner_briefings` row.
+16. The browser accepts the response only when strict Zod and company/actor/run/agent identity
+    checks pass, then calls actor-bound `get_storyops_ai_office_recent` and requires the durable
+    readback to match. Every newly persisted result includes
+    `storyops-ai-narrative-policy-v1`: summary is non-authoritative advisory, evidence prose is
+    non-authoritative rationale, unknowns are non-authoritative AI-reported unknowns,
+    `customerDraft` is an unsent non-authoritative draft, and `automaticSendAllowed` is the literal
+    `false`. A compatibility parser applies that same conservative classification when reading a
+    pre-policy durable result.
+17. The live page labels AI prose and rationale as non-authoritative, labels referenced IDs as
+    pointers to server records rather than evidence, labels drafts as unsent/human-review-required,
+    and separates deterministic action dispositions.
+18. Redacted trace events record guardrails, model boundaries, policy decisions, approvals, and
     tool results.
+
+AI Office has no scheduler in V1. A run exists only after an owner or dispatcher presses a manual
+run control or invokes the same authenticated manual command. The UI and read model explicitly
+report `schedulerConfigured: false`.
 
 OpenAI’s Agents SDK describes an agent as a focused unit containing instructions, tools,
 guardrails, handoffs, and structured output. It also distinguishes local application context from
 model-visible conversation context. StoryOps uses that separation and keeps authenticated runtime
 state outside model input unless it was loaded from an authoritative record. See the official
 [agent definitions guide](https://developers.openai.com/api/docs/guides/agents/define-agents).
+
+Both server adapters submit one strict structured-output schema. Every field is required,
+`additionalProperties` is false, and the absence of customer-facing copy is represented by the
+required nullable `customerDraft` field rather than an optional field. This follows OpenAI's
+[strict-mode contract](https://developers.openai.com/api/docs/guides/function-calling#strict-mode)
+and is enforced by a runtime schema-conversion unit test, preventing the SDK from silently falling
+back to best-effort output. Because strict schemas cannot expose an arbitrary-key object, a proposed
+tool payload crosses the model boundary as bounded `payloadJson`; the server rejects malformed,
+non-object, or reserved-key JSON, decodes it, and then applies the exact per-tool Zod schema and
+policy checks before any execution.
 
 ## Specialist roster
 
@@ -68,15 +114,34 @@ even if a model emits a syntactically valid tool name.
 
 ## Structured output contract
 
-Every specialist returns:
+Every specialist model returns:
 
-- a bounded summary;
+- a bounded advisory summary;
 - overall confidence from 0 to 1;
-- evidence claims, each with one or more trusted fact IDs and its own confidence;
+- non-authoritative rationale entries, each with one or more trusted fact IDs and its own
+  confidence;
 - explicit unknowns;
 - zero or more action proposals;
-- an optional customer-facing draft; and
+- an optional unsent customer-facing draft; and
 - an owner-attention flag.
+
+The orchestrator—not the model—adds the fixed narrative-policy object before serialization and
+persistence. `customerDraft` is data, not a send command; no specialist has an outbound customer
+send capability. Customer contact remains in the consent-aware deterministic outbox workflow.
+It also prepends an explicit non-authoritative/unsent marker to each persisted summary, rationale,
+reported unknown, and draft so a downstream projection such as an owner-briefing section cannot
+shed the classification by omitting adjacent metadata. Valid source IDs alone never make model
+prose authoritative.
+
+The semantic checker is deliberately finite and fail-closed for the protected high-impact claim
+classes above. It binds quantities only to whitelisted measurement/price fields, status words only
+to whitelisted status fields, and availability only to bounded status/window fields; IDs,
+timestamps, versions, confidence values, and other coincidental numbers do not satisfy a claim.
+Payment claims additionally require a database, provider, or deterministic-calculation source.
+Unparsed number words and relative dates fail closed. Natural-language detection cannot prove
+arbitrary prose true. Prose outside that finite vocabulary therefore remains explicitly advisory
+and must be verified in the referenced source record; it cannot become an action disposition,
+price, payment/delivery receipt, or provider send.
 
 Every action proposal contains a stable action ID, typed tool name, purpose, JSON-only payload,
 risk, reversibility declaration, and source fact IDs. Tool input schemas validate the payload again
@@ -97,6 +162,11 @@ StoryOps assumes every external text field can be hostile. Defense is layered:
 
 - external content is structurally separated and explicitly marked as inert data;
 - common injection signals are detected before model execution;
+- the model envelope omits actor IDs and redacts email, phone, SSN,
+  payment-card, credential, and secret-shaped text from objectives, trusted
+  facts, and untrusted content;
+- every model-start trace records the applicable minimization-policy ID and
+  redaction count without recording the removed values;
 - secrets and authorization-shaped fields are redacted from trace attributes;
 - the model has no provider credentials or direct provider tools;
 - every action must cite trusted facts;
@@ -151,6 +221,11 @@ AI runs use `company + scope + idempotency key` and a canonical request hash. A 
 request returns the stored result. Reusing a key with a different payload is a conflict. Concurrent
 in-memory calls coalesce; Supabase Edge uses atomic `claim_idempotency_key` /
 `complete_idempotency_key` RPCs for cross-instance persistence.
+
+The durable run uses the same UUID and key. A failed exact retry may return the run to `running`
+with an incremented attempt, while a completed durable run repairs an uncertain idempotency
+response without rerunning the model. The client retains the same UUID and request time while a
+manual retry is unresolved.
 
 Before a live model run, the Edge boundary consumes durable per-user hourly and per-company daily
 run windows plus a daily company token reservation. Integration health and outbound communications
@@ -220,9 +295,11 @@ Use `docs/runbooks/AI_OFFICE_RUNBOOK.md` for operating cadence and
 
 - The deterministic application orchestrator is authoritative; the Agents SDK is used as the
   server-side structured model adapter, not as an autonomous provider-execution loop.
-- Approval decisions are durable owner-only commands. Persisted external resume is intentionally
-  limited to authenticated, exact-approved Stripe refunds; no generic “execute any approval”
-  endpoint exists.
+- Approval decisions are durable owner-only commands. Persisted approved execution is intentionally
+  limited to exact-approved lead creation/update and Stripe refunds; no generic “execute any
+  approval” endpoint exists.
+- AI Office is manual-triggered. No recurring, overnight, cron, or provider scheduler is implemented
+  or claimed.
 - Chemical selection/instruction, legal conclusions, emergency response, regulatory filing, and
   bank/vendor execution remain human work.
 - Sandbox geocodes are deliberately low-confidence synthetic coordinates and must never be used for

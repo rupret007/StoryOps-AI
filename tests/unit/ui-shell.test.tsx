@@ -4,6 +4,8 @@ import { App } from '@/App';
 import { MemoryRouter } from '@/router';
 import { StoryOpsProvider } from '@/state/StoryOpsProvider';
 
+const lazyRouteTimeout = { timeout: 10_000 };
+
 function renderApp(path = '/') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -16,7 +18,11 @@ function renderApp(path = '/') {
 
 async function completeSandboxSetup() {
   expect(
-    await screen.findByRole('heading', { name: 'Tell StoryOps who it works for.' }),
+    await screen.findByRole(
+      'heading',
+      { name: 'Tell StoryOps who it works for.' },
+      lazyRouteTimeout,
+    ),
   ).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -25,7 +31,7 @@ async function completeSandboxSetup() {
   );
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   fireEvent.click(screen.getByRole('button', { name: 'Create sandbox profile' }));
-  await screen.findByText('AI office on duty');
+  await screen.findByText('AI office ready · manual runs', {}, lazyRouteTimeout);
 }
 
 describe('StoryOps application shell', () => {
@@ -37,8 +43,12 @@ describe('StoryOps application shell', () => {
     renderApp('/');
     await completeSandboxSetup();
     expect(screen.getByText('Good morning, Jeff.')).toBeVisible();
-    expect(screen.getByText('AI office on duty')).toBeVisible();
-    expect(screen.getByText(/sandbox providers healthy/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
+      'href',
+      '#main-content',
+    );
+    expect(screen.getByText('AI office ready · manual runs')).toBeVisible();
+    expect(screen.getByText(/sandbox adapters ready/)).toBeVisible();
     expect(screen.getByText(/Synthetic sandbox workspace/)).toBeVisible();
     expect(screen.getByText('Not dispatch evidence', { exact: true })).toBeVisible();
     expect(screen.queryByText('NWS sandbox checked')).not.toBeInTheDocument();
@@ -46,17 +56,17 @@ describe('StoryOps application shell', () => {
     await act(async () => {
       await Promise.resolve();
     });
-  });
+  }, 15_000);
 
   it('enforces route permissions when previewing the technician role', async () => {
     renderApp('/');
     await completeSandboxSetup();
-    const role = await screen.findByLabelText('Preview role');
+    const role = await screen.findByLabelText('Preview role', {}, lazyRouteTimeout);
     fireEvent.change(role, { target: { value: 'technician' } });
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Today’s active visit' })).toBeVisible();
-    });
-  });
+      expect(screen.getByRole('heading', { name: 'Selected field visit' })).toBeVisible();
+    }, lazyRouteTimeout);
+  }, 15_000);
 
   it('fails closed to authenticated sign-in when live configuration is incomplete', async () => {
     vi.stubEnv('VITE_STORYOPS_DATA_MODE', 'supabase');
@@ -66,9 +76,11 @@ describe('StoryOps application shell', () => {
 
     renderApp('/');
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to your workspace' })).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to your workspace' }, lazyRouteTimeout),
+    ).toBeVisible();
     expect(screen.getByRole('alert')).toHaveTextContent(/VITE_SUPABASE_URL/u);
     expect(screen.queryByText('Good morning, Jeff.')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Preview role')).not.toBeInTheDocument();
-  });
+  }, 15_000);
 });

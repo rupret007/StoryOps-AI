@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Calculator,
+  CalendarCheck2,
   Camera,
   CheckCircle2,
   ChevronRight,
@@ -26,6 +27,10 @@ import {
   type LiveEstimateReceipt,
 } from '@/state/liveEstimating';
 import { Badge, Button, Card, Field, PageHeader } from '@/components/ui/Primitives';
+import { ScopePhotoCapturePanel } from '@/components/ScopePhotoCapturePanel';
+import { customerFacingQuoteStatus } from '@/utils/quoteStatus';
+import type { RecurringDueWorkItem } from '@/core/recurring/dueWork';
+import { deriveSandboxPricingPresentation } from '@/data/sandboxPricingPresentation';
 
 const formatMoney = (amount: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(amount));
@@ -37,14 +42,88 @@ type LiveServiceSelection = {
   addOns: Record<string, { enabled: boolean; measurementId: string }>;
 };
 
+export function resolveRecurringEstimateWorkItem(
+  workItems: readonly RecurringDueWorkItem[] | undefined,
+  requestedWorkItemId: string | null,
+): RecurringDueWorkItem | undefined {
+  if (!requestedWorkItemId) return undefined;
+  return workItems?.find((item) => item.id === requestedWorkItemId);
+}
+
+export function resolveLiveEstimateIdentity(input: {
+  requestedRecurringWorkItemId: string | null;
+  recurringWorkItems: readonly RecurringDueWorkItem[] | undefined;
+  requestedLeadId: string;
+  leads: ReadonlyArray<{ id: string; customerId?: string; propertyId?: string }>;
+}): {
+  recurringWorkItem?: RecurringDueWorkItem;
+  leadId?: string;
+  customerId?: string;
+  propertyId?: string;
+} {
+  const recurringWorkItem = resolveRecurringEstimateWorkItem(
+    input.recurringWorkItems,
+    input.requestedRecurringWorkItemId,
+  );
+  if (input.requestedRecurringWorkItemId) {
+    return recurringWorkItem
+      ? {
+          recurringWorkItem,
+          customerId: recurringWorkItem.customerId,
+          propertyId: recurringWorkItem.propertyId,
+        }
+      : {};
+  }
+  const lead = input.leads.find((candidate) => candidate.id === input.requestedLeadId);
+  return {
+    leadId: lead?.id,
+    customerId: lead?.customerId,
+    propertyId: lead?.propertyId,
+  };
+}
+
 const measurementKindForUnit = (unit: string) =>
-  unit === 'sq_ft'
-    ? 'area_sq_ft'
-    : unit === 'linear_ft'
-      ? 'length_linear_ft'
-      : unit === 'each'
-        ? 'count'
-        : undefined;
+  unit === 'flat'
+    ? 'count'
+    : unit === 'sq_ft'
+      ? 'area_sq_ft'
+      : unit === 'linear_ft'
+        ? 'length_linear_ft'
+        : unit === 'each'
+          ? 'count'
+          : unit === 'hour'
+            ? 'duration_hours'
+            : undefined;
+
+const measurementMatchesRule = (
+  measurementKind: string,
+  pricingUnit: string,
+  requiredMeasurementKinds: readonly string[],
+) => {
+  const unitKind = measurementKindForUnit(pricingUnit);
+  return (
+    unitKind !== undefined &&
+    measurementKind === unitKind &&
+    (requiredMeasurementKinds.length === 0 || requiredMeasurementKinds.includes(measurementKind))
+  );
+};
+
+const supportingMeasurementsForRule = (
+  measurements: LiveEstimateContext['measurements'],
+  serviceCode: string,
+  primaryMeasurementId: string,
+  requiredMeasurementKinds: readonly string[],
+) => {
+  const primary = measurements.find((measurement) => measurement.id === primaryMeasurementId);
+  return requiredMeasurementKinds.flatMap((requiredKind) => {
+    if (primary?.kind === requiredKind && primary.serviceCodes.includes(serviceCode)) return [];
+    const evidence = measurements.find(
+      (measurement) =>
+        measurement.kind === requiredKind && measurement.serviceCodes.includes(serviceCode),
+    );
+    return evidence ? [evidence] : [];
+  });
+};
 
 const displayCode = (value: string) =>
   value
@@ -60,6 +139,19 @@ export function EstimatePage() {
   const pending = estimate.status === 'pending_approval';
   const approved = estimate.status === 'approved' || estimate.status === 'quoted';
   const quoted = estimate.status === 'quoted';
+  const pricing = deriveSandboxPricingPresentation(state.companyConfiguration?.published);
+  const drivewayRule = pricing.serviceRules.find(
+    (rule) => rule.serviceCode === 'pressure-wash-flatwork' && rule.enabled,
+  );
+  const gutterRule = pricing.serviceRules.find(
+    (rule) => rule.serviceCode === 'gutter-cleaning' && rule.enabled,
+  );
+  const downspoutRule = gutterRule?.addOns.find((addOn) => addOn.code === 'DOWNSPOUT_FLUSH');
+  const automaticDiscountLimit = Number(pricing.automaticDiscountLimit.replace('%', ''));
+  const marginFloor = Number(pricing.marginFloor.replace('%', ''));
+  const selectedZoneIsPublished = pricing.travelZones.some(
+    (zone) => zone.code === estimate.travelZone,
+  );
 
   if (state.dataMode === 'supabase') return <LiveEstimatePage />;
 
@@ -78,7 +170,7 @@ export function EstimatePage() {
               {pending
                 ? 'Owner approval pending'
                 : quoted
-                  ? 'Quote sent'
+                  ? 'Published to portal'
                   : approved
                     ? 'Within policy'
                     : 'Draft'}
@@ -149,8 +241,8 @@ export function EstimatePage() {
               <div>
                 <strong>Unknown retained: {estimate.photoEvidence.unknowns[0]}</strong>
                 <p>
-                  The estimate uses the customer-confirmed 188 linear feet, not an AI-derived
-                  measurement. Technician must verify access at arrival.
+                  The estimate uses the customer-confirmed {estimate.gutterLinearFt} linear feet,
+                  not an AI-derived measurement. Technician must verify access at arrival.
                 </p>
               </div>
             </div>
@@ -160,17 +252,20 @@ export function EstimatePage() {
             <div className="section-card__header">
               <div>
                 <h2>Measurements & service rules</h2>
-                <p className="section-card__subtitle">{estimate.priceBookVersion}</p>
+                <p className="section-card__subtitle">
+                  {pricing.versionLabel} · {pricing.sourceLabel}
+                </p>
               </div>
-              <Badge tone="dark">
-                <LockKeyhole size={11} /> Published
+              <Badge tone={pricing.source === 'published_configuration' ? 'dark' : 'warning'}>
+                <LockKeyhole size={11} />{' '}
+                {pricing.source === 'published_configuration' ? 'Published' : 'Starter fixture'}
               </Badge>
             </div>
             <div className="service-line">
               <div>
                 <strong className="service-line__title">Driveway pressure wash</strong>
                 <span className="service-line__detail">
-                  $110 base + $0.14 / sq ft after 500 · $185 minimum
+                  {drivewayRule?.summary ?? 'Not authorized by the published sandbox catalog.'}
                 </span>
               </div>
               <Field label="Area" htmlFor="driveway-area">
@@ -205,7 +300,13 @@ export function EstimatePage() {
               <div>
                 <strong className="service-line__title">Gutter & downspout cleaning</strong>
                 <span className="service-line__detail">
-                  $155 base + $0.85 / linear ft after 100 · includes 4 flushes
+                  {gutterRule
+                    ? `${gutterRule.summary}${
+                        downspoutRule
+                          ? ` · ${downspoutRule.summary} per explicitly measured downspout`
+                          : ' · DOWNSPOUT_FLUSH is not configured'
+                      }`
+                    : 'Not authorized by the published sandbox catalog.'}
                 </span>
               </div>
               <Field label="Length" htmlFor="gutter-length">
@@ -235,6 +336,21 @@ export function EstimatePage() {
                   <option value="2">2 stories</option>
                   <option value="3">3 stories</option>
                 </select>
+              </Field>
+              <Field label="Downspouts" htmlFor="downspout-count">
+                <div className="unit-input">
+                  <input
+                    id="downspout-count"
+                    className="input"
+                    inputMode="numeric"
+                    value={estimate.downspoutCount}
+                    onChange={(event) =>
+                      actions.updateEstimate('downspoutCount', event.target.value)
+                    }
+                    disabled={!can('estimates.write')}
+                  />
+                  <span>each</span>
+                </div>
               </Field>
               <Badge tone="positive">Confirmed</Badge>
             </div>
@@ -296,9 +412,16 @@ export function EstimatePage() {
                   onChange={(event) => actions.updateEstimate('travelZone', event.target.value)}
                   disabled={!can('estimates.write')}
                 >
-                  <option value="DFW-A">DFW-A · included</option>
-                  <option value="DFW-B">DFW-B · $35</option>
-                  <option value="DFW-C">DFW-C · $75</option>
+                  {!selectedZoneIsPublished && (
+                    <option value={estimate.travelZone} disabled>
+                      {estimate.travelZone} · unavailable in current pricing source
+                    </option>
+                  )}
+                  {pricing.travelZones.map((zone) => (
+                    <option value={zone.code} key={zone.code}>
+                      {zone.code} · {zone.fee} · {zone.boundary}
+                    </option>
+                  ))}
                 </select>
               </Field>
             </div>
@@ -306,13 +429,14 @@ export function EstimatePage() {
               <Field
                 label="Discount"
                 htmlFor="discount"
-                hint="Above 10% creates an exact-payload owner approval."
+                hint={`Above ${pricing.automaticDiscountLimit} creates an exact-payload owner approval.`}
               >
                 <div className="unit-input unit-input--small">
                   <input
                     id="discount"
                     className="input"
                     inputMode="decimal"
+                    aria-describedby="discount-hint"
                     value={estimate.discountPercent}
                     onChange={(event) =>
                       actions.updateEstimate('discountPercent', event.target.value)
@@ -322,7 +446,7 @@ export function EstimatePage() {
                   <span>%</span>
                 </div>
               </Field>
-              {Number(estimate.discountPercent) > 10 && (
+              {Number(estimate.discountPercent) > automaticDiscountLimit && (
                 <Badge tone="warning">
                   <ShieldCheck size={11} /> Approval threshold exceeded
                 </Badge>
@@ -358,13 +482,13 @@ export function EstimatePage() {
                 <strong>−{formatMoney(estimate.discount)}</strong>
               </div>
               <div className="money-row">
-                <span>Sales tax · 8.25%</span>
+                <span>Sales tax · {pricing.taxRule}</span>
                 <strong>{formatMoney(estimate.tax)}</strong>
               </div>
             </div>
             <div className="estimate-facts">
               <div>
-                <span>Deposit</span>
+                <span>Deposit · {pricing.deposit} rule</span>
                 <strong>{formatMoney(estimate.deposit)}</strong>
               </div>
               <div>
@@ -380,21 +504,30 @@ export function EstimatePage() {
             </div>
             <div className={`policy-check ${pending ? 'policy-check--warning' : ''}`}>
               <div className="policy-check__row">
-                {Number(estimate.discountPercent) <= 10 ? (
+                {Number(estimate.discountPercent) <= automaticDiscountLimit ? (
                   <CheckCircle2 size={14} />
                 ) : (
                   <AlertTriangle size={14} />
                 )}
-                Discount {Number(estimate.discountPercent) <= 10 ? 'within' : 'above'} 10% auto
-                limit
+                Discount{' '}
+                {Number(estimate.discountPercent) <= automaticDiscountLimit ? 'within' : 'above'}{' '}
+                {pricing.automaticDiscountLimit} auto limit
               </div>
               <div className="policy-check__row">
                 <CheckCircle2 size={14} />
-                Margin {estimate.marginPercent}% above 42% floor
+                Margin {estimate.marginPercent}%{' '}
+                {Number(estimate.marginPercent) >= marginFloor ? 'above' : 'below'}{' '}
+                {pricing.marginFloor} floor
               </div>
               <div className="policy-check__row">
-                <CheckCircle2 size={14} />
-                Published price book and human-verified scope
+                {pricing.source === 'published_configuration' ? (
+                  <CheckCircle2 size={14} />
+                ) : (
+                  <AlertTriangle size={14} />
+                )}
+                {pricing.source === 'published_configuration'
+                  ? 'Published company configuration and human-verified scope'
+                  : 'Starter fixture only; publish the company configuration before rehearsal'}
               </div>
             </div>
 
@@ -416,7 +549,7 @@ export function EstimatePage() {
                 onClick={() => actions.sendQuote()}
                 icon={<Send size={17} />}
               >
-                Send quote & deposit link
+                Publish quote to portal
               </Button>
             )}
             {quoted && (
@@ -491,7 +624,8 @@ export function EstimatePage() {
               <ShieldCheck size={17} />
               <p>
                 Service Terms v2026.07. Additional work or pricing requires a separately accepted
-                change. Deposit due at acceptance: {formatMoney(estimate.deposit)}.
+                change. Deposit due at acceptance: {formatMoney(estimate.deposit)} (
+                {pricing.deposit} configured rule).
               </p>
             </div>
             <Button variant="secondary" onClick={() => window.print()}>
@@ -507,12 +641,23 @@ export function EstimatePage() {
 function LiveEstimatePage() {
   const { state, actions, can } = useStoryOps();
   const [searchParams] = useSearchParams();
-  const requestedLeadId = searchParams.get('lead') ?? state.selectedLeadId;
-  const selectedLead = state.leads.find((lead) => lead.id === requestedLeadId);
-  const requestedCustomerId = selectedLead?.customerId;
-  const requestedPropertyId = selectedLead?.propertyId;
-  const scopeMissing = !selectedLead || !requestedCustomerId || !requestedPropertyId;
-  const contextRequestKey = `${requestedLeadId}:${requestedCustomerId ?? ''}:${requestedPropertyId ?? ''}`;
+  const requestedRecurringWorkItemId = searchParams.get('recurringWorkItem');
+  const requestedLeadId = requestedRecurringWorkItemId
+    ? ''
+    : (searchParams.get('lead') ?? state.selectedLeadId);
+  const identity = resolveLiveEstimateIdentity({
+    requestedRecurringWorkItemId,
+    recurringWorkItems: state.recurringDueWork?.workItems,
+    requestedLeadId,
+    leads: state.leads,
+  });
+  const recurringWorkItem = identity.recurringWorkItem;
+  const selectedLead = state.leads.find((lead) => lead.id === identity.leadId);
+  const requestedCustomerId = identity.customerId;
+  const requestedPropertyId = identity.propertyId;
+  const scopeMissing =
+    (!selectedLead && !recurringWorkItem) || !requestedCustomerId || !requestedPropertyId;
+  const contextRequestKey = `${requestedLeadId}:${recurringWorkItem?.id ?? ''}:${requestedCustomerId ?? ''}:${requestedPropertyId ?? ''}`;
   const [contextLoad, setContextLoad] = useState<{
     requestKey: string;
     status: 'loading' | 'ready' | 'error';
@@ -531,7 +676,11 @@ function LiveEstimatePage() {
   const [serviceSelections, setServiceSelections] = useState<Record<string, LiveServiceSelection>>(
     {},
   );
+  const [selectedPackageCode, setSelectedPackageCode] = useState<string>();
   const [discountPercent, setDiscountPercent] = useState('0');
+  const [contextRefreshRevision, setContextRefreshRevision] = useState(0);
+  const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
+  const [deliveryChannel, setDeliveryChannel] = useState<'sms' | 'email'>('email');
 
   useEffect(() => {
     if (scopeMissing) return;
@@ -560,13 +709,15 @@ function LiveEstimatePage() {
     return () => {
       active = false;
     };
-  }, [actions, contextRequestKey, requestedPropertyId, scopeMissing]);
+  }, [actions, contextRefreshRevision, contextRequestKey, requestedPropertyId, scopeMissing]);
 
   const activeContextLoad = contextLoad.requestKey === contextRequestKey ? contextLoad : undefined;
   const context = activeContextLoad?.context;
   const loading = !scopeMissing && (!activeContextLoad || activeContextLoad.status === 'loading');
   const contextError = scopeMissing
-    ? 'Select a qualified lead with an exact server-linked customer and property before estimating.'
+    ? requestedRecurringWorkItemId
+      ? 'The requested recurring work item is not present in this current role-scoped workspace.'
+      : 'Select a qualified lead with an exact server-linked customer and property before estimating.'
     : (activeContextLoad?.error ?? operationError);
   const property = context?.properties.find((item) => item.id === requestedPropertyId);
   const customer = context?.customers.find(
@@ -575,8 +726,38 @@ function LiveEstimatePage() {
   const measurements =
     context?.measurements.filter((item) => item.propertyId === property?.id) ?? [];
   const serviceRules = context?.priceBook.serviceRules ?? [];
+  const packages = context?.priceBook.packages ?? [];
+  const selectedPackage = packages.find(
+    (servicePackage) => servicePackage.code === selectedPackageCode,
+  );
+  const selectedPackageComponents = new Map(
+    selectedPackage?.components.map((component) => [component.serviceCode, component]) ?? [],
+  );
   const enabledRules = serviceRules.filter((rule) => serviceSelections[rule.serviceCode]?.enabled);
+  const enabledScopePolicies = enabledRules.map(
+    (rule) =>
+      context?.scopeEvidencePolicies.find((item) => item.serviceCode === rule.serviceCode)
+        ?.policy ?? 'photo_required',
+  );
+  const selectedPhotoRequired = enabledScopePolicies.includes('photo_required');
+  const selectedPhotoOptional =
+    !selectedPhotoRequired && enabledScopePolicies.includes('photo_optional');
+  const selectedPhotoNotApplicable =
+    enabledScopePolicies.length > 0 &&
+    enabledScopePolicies.every((policy) => policy === 'not_applicable');
+  const packageSelectionComplete =
+    !selectedPackage ||
+    selectedPackage.components.every((component) => {
+      const selection = serviceSelections[component.serviceCode];
+      return (
+        (!component.required || selection?.enabled === true) &&
+        component.requiredAddOnCodes.every(
+          (addOnCode) => selection?.addOns[addOnCode]?.enabled === true,
+        )
+      );
+    });
   const selectionComplete =
+    packageSelectionComplete &&
     enabledRules.length > 0 &&
     enabledRules.every((rule) => {
       const selection = serviceSelections[rule.serviceCode];
@@ -586,8 +767,27 @@ function LiveEstimatePage() {
       );
       if (
         !selectedMeasurement ||
-        selectedMeasurement.kind !== measurementKindForUnit(rule.pricingUnit) ||
+        !measurementMatchesRule(
+          selectedMeasurement.kind,
+          rule.pricingUnit,
+          rule.requiredMeasurementKinds,
+        ) ||
         !selectedMeasurement.serviceCodes.includes(rule.serviceCode)
+      ) {
+        return false;
+      }
+      const supportingMeasurements = supportingMeasurementsForRule(
+        measurements,
+        rule.serviceCode,
+        selection.measurementId,
+        rule.requiredMeasurementKinds,
+      );
+      if (
+        rule.requiredMeasurementKinds.some(
+          (kind) =>
+            selectedMeasurement.kind !== kind &&
+            !supportingMeasurements.some((measurement) => measurement.kind === kind),
+        )
       ) {
         return false;
       }
@@ -620,6 +820,12 @@ function LiveEstimatePage() {
         return {
           serviceCode: rule.serviceCode,
           measurementId: selection.measurementId,
+          supportingMeasurementIds: supportingMeasurementsForRule(
+            measurements,
+            rule.serviceCode,
+            selection.measurementId,
+            rule.requiredMeasurementKinds,
+          ).map((measurement) => measurement.id),
           attributes: Object.fromEntries(
             Object.entries(selection.attributes).filter(([, value]) => Boolean(value)),
           ),
@@ -633,11 +839,16 @@ function LiveEstimatePage() {
       })
     : [];
   const draftIntent: LiveEstimateIntent | undefined =
-    selectedLead && customer && property && context?.derivedTravelZone && selectionComplete
+    (selectedLead || recurringWorkItem) &&
+    customer &&
+    property &&
+    context?.derivedTravelZone &&
+    selectionComplete
       ? {
           customerId: customer.id,
           propertyId: property.id,
-          leadId: selectedLead.id,
+          ...(selectedLead ? { leadId: selectedLead.id } : {}),
+          ...(selectedPackage ? { packageCode: selectedPackage.code } : {}),
           services: draftServices,
           travelZoneCode: context.derivedTravelZone.code,
           discount:
@@ -662,10 +873,18 @@ function LiveEstimatePage() {
   })
     ? confirmedEstimate?.receipt
     : undefined;
-  const canCalculate = Boolean(can('estimates.write') && state.online && draftIntent);
+  const canCalculate = Boolean(
+    can('estimates.write') && state.online && state.serverVerifiedAt && draftIntent,
+  );
   const quoteMatchesReceipt = Boolean(receipt && state.live?.quote?.id === receipt.quoteId);
   const quoteStatus = quoteMatchesReceipt ? state.live?.quoteStatus : undefined;
   const hasEstimate = Boolean(receipt);
+  const openQuoteChangeRequests =
+    state.live?.customerQuoteChangeRequests?.filter(
+      (request) =>
+        (!requestedCustomerId || request.customerId === requestedCustomerId) &&
+        (!requestedPropertyId || request.propertyId === requestedPropertyId),
+    ) ?? [];
 
   const address = property?.serviceAddress;
   const formattedAddress = address
@@ -702,6 +921,22 @@ function LiveEstimatePage() {
         intentFingerprint: reservation.intentFingerprint,
         receipt: nextReceipt,
       });
+      if (
+        recurringWorkItem &&
+        recurringWorkItem.status === 'fresh_estimate_required' &&
+        !recurringWorkItem.estimateCreated
+      ) {
+        const association = await actions.attachRecurringDueEstimate({
+          workItemId: recurringWorkItem.id,
+          workItemVersion: recurringWorkItem.version,
+          estimateId: nextReceipt.estimateId,
+        });
+        if (!association) {
+          setOperationError(
+            'The estimate was persisted, but the recurring work-item association still needs retry and server reconciliation.',
+          );
+        }
+      }
       estimateReservation.current = undefined;
     } catch (error) {
       setOperationError(
@@ -715,15 +950,17 @@ function LiveEstimatePage() {
 
   return (
     <div className="page">
-      <Link className="back-link" to="/pipeline">
-        <ArrowLeft size={14} /> Back to pipeline
+      <Link className="back-link" to={recurringWorkItem ? '/operations' : '/pipeline'}>
+        <ArrowLeft size={14} /> {recurringWorkItem ? 'Back to recurring work' : 'Back to pipeline'}
       </Link>
       <PageHeader
         eyebrow="Authenticated deterministic estimating"
         title={
-          selectedLead
-            ? `Build ${selectedLead.name}'s estimate`
-            : 'Build from verified property evidence'
+          recurringWorkItem
+            ? `Fresh estimate for ${recurringWorkItem.customerName}`
+            : selectedLead
+              ? `Build ${selectedLead.name}'s estimate`
+              : 'Build from verified property evidence'
         }
         description="Quantities come from current human-verified measurements. The server derives travel, loads approved terms and the published price book, calculates with Decimal, and persists one atomic snapshot."
         actions={
@@ -733,12 +970,108 @@ function LiveEstimatePage() {
                 ? `Terms ${context.serviceTerms.versionLabel} reviewed`
                 : 'Terms gate checking'}
             </Badge>
-            <Button variant="secondary" onClick={() => void actions.reloadLiveWorkspace()}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void actions.reloadLiveWorkspace();
+                setContextRefreshRevision((current) => current + 1);
+              }}
+            >
               Refresh workspace
             </Button>
           </>
         }
       />
+
+      {recurringWorkItem && (
+        <Card className="projection-warning">
+          <CalendarCheck2 size={18} />
+          <div>
+            <strong>
+              Recurring due work · {recurringWorkItem.propertyName} · due{' '}
+              {recurringWorkItem.planDueDate}
+            </strong>
+            <p>
+              Suggested services: {recurringWorkItem.serviceCodes.join(', ')}. No service is
+              auto-selected and no historical price is copied. Use only current verified
+              measurements and the published price book.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {openQuoteChangeRequests.map((request) => {
+        const replacement =
+          state.live?.quote &&
+          state.live.quote.id !== request.quoteId &&
+          ['sent', 'viewed', 'accepted'].includes(state.live.quoteStatus ?? '')
+            ? state.live.quote
+            : undefined;
+        const resolutionNote = resolutionNotes[request.id] ?? '';
+        return (
+          <Card className="projection-warning" key={request.id}>
+            <AlertTriangle size={18} />
+            <div>
+              <strong>
+                Customer requested changes to {request.quoteNumber} v{request.quoteVersion}
+              </strong>
+              <p>
+                Services: {request.requestedServiceCodes.join(', ') || 'none'} · add-ons:{' '}
+                {request.requestedAddOnCodes.join(', ') || 'none'}
+              </p>
+              {request.requestNotes && <p>Customer note: {request.requestNotes}</p>}
+              <p>{request.nextAction}</p>
+              <Field label="Resolution note" htmlFor={`quote-change-resolution-${request.id}`}>
+                <textarea
+                  className="input"
+                  id={`quote-change-resolution-${request.id}`}
+                  value={resolutionNote}
+                  maxLength={2000}
+                  onChange={(event) =>
+                    setResolutionNotes((current) => ({
+                      ...current,
+                      [request.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="Record the replacement context or cancellation reason."
+                />
+              </Field>
+              <div className="record-dialog__actions">
+                <Button
+                  disabled={!replacement}
+                  onClick={() => {
+                    if (!replacement) return;
+                    void actions.resolveQuoteChangeRequest({
+                      requestId: request.id,
+                      requestVersion: request.version,
+                      disposition: 'replacement_published',
+                      replacementQuoteId: replacement.id,
+                      replacementQuoteVersion: replacement.version,
+                      resolutionNote,
+                    });
+                  }}
+                >
+                  Link current published replacement
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!resolutionNote.trim()}
+                  onClick={() =>
+                    void actions.resolveQuoteChangeRequest({
+                      requestId: request.id,
+                      requestVersion: request.version,
+                      disposition: 'cancelled',
+                      resolutionNote,
+                    })
+                  }
+                >
+                  Close with reason
+                </Button>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
 
       {loading ? (
         <Card className="section-card">
@@ -766,10 +1099,77 @@ function LiveEstimatePage() {
             <Card className="estimate-section">
               <div className="section-card__header">
                 <div>
+                  <h2>Good / better / best comparison</h2>
+                  <p className="section-card__subtitle">
+                    Packages select published scope rules only; every quantity and add-on still
+                    needs explicit evidence.
+                  </p>
+                </div>
+                <Badge tone={selectedPackage ? 'accent' : 'neutral'}>
+                  {selectedPackage ? selectedPackage.name : 'Custom scope'}
+                </Badge>
+              </div>
+              <div className="package-comparison" aria-label="Published service packages">
+                {packages.map((servicePackage) => (
+                  <button
+                    className={`package-option${
+                      selectedPackageCode === servicePackage.code ? ' package-option--selected' : ''
+                    }`}
+                    key={servicePackage.code}
+                    type="button"
+                    aria-pressed={selectedPackageCode === servicePackage.code}
+                    onClick={() => {
+                      setSelectedPackageCode(servicePackage.code);
+                      setServiceSelections(
+                        Object.fromEntries(
+                          servicePackage.components.map((component) => [
+                            component.serviceCode,
+                            {
+                              enabled: component.required,
+                              measurementId: '',
+                              attributes: {},
+                              addOns: Object.fromEntries(
+                                component.requiredAddOnCodes.map((addOnCode) => [
+                                  addOnCode,
+                                  { enabled: true, measurementId: '' },
+                                ]),
+                              ),
+                            },
+                          ]),
+                        ),
+                      );
+                    }}
+                  >
+                    <Badge tone={servicePackage.tier === 'best' ? 'accent' : 'neutral'}>
+                      {servicePackage.tier}
+                    </Badge>
+                    <strong>{servicePackage.name}</strong>
+                    <span>{servicePackage.description}</span>
+                    <small>
+                      {servicePackage.components.filter((component) => component.required).length}{' '}
+                      required service
+                      {servicePackage.components.filter((component) => component.required)
+                        .length === 1
+                        ? ''
+                        : 's'}
+                    </small>
+                  </button>
+                ))}
+              </div>
+              <Button variant="secondary" onClick={() => setSelectedPackageCode(undefined)}>
+                Use current selections as a custom quote
+              </Button>
+            </Card>
+
+            <Card className="estimate-section">
+              <div className="section-card__header">
+                <div>
                   <h2>Customer & property</h2>
                   <p className="section-card__subtitle">
-                    Selected lead {selectedLead?.id.slice(0, 8) ?? 'unavailable'} · exact
-                    company-owned chain
+                    {recurringWorkItem
+                      ? `Recurring work ${recurringWorkItem.id.slice(0, 8)}`
+                      : `Selected lead ${selectedLead?.id.slice(0, 8) ?? 'unavailable'}`}{' '}
+                    · exact company-owned chain
                   </p>
                 </div>
                 <Badge tone="positive">Authenticated</Badge>
@@ -793,6 +1193,17 @@ function LiveEstimatePage() {
                 </Link>
               </div>
             </Card>
+
+            {customer && property && (
+              <ScopePhotoCapturePanel
+                key={property.id}
+                propertyId={property.id}
+                customerId={customer.id}
+                role={state.role}
+                serviceCodes={serviceRules.map((rule) => rule.serviceCode)}
+                onEvidenceChanged={() => setContextRefreshRevision((current) => current + 1)}
+              />
+            )}
 
             <Card className="estimate-section">
               <div className="section-card__header">
@@ -839,9 +1250,28 @@ function LiveEstimatePage() {
                   const measurementKind = measurementKindForUnit(rule.pricingUnit);
                   const eligibleMeasurements = measurements.filter(
                     (measurement) =>
-                      measurement.kind === measurementKind &&
-                      measurement.serviceCodes.includes(rule.serviceCode),
+                      measurementMatchesRule(
+                        measurement.kind,
+                        rule.pricingUnit,
+                        rule.requiredMeasurementKinds,
+                      ) && measurement.serviceCodes.includes(rule.serviceCode),
                   );
+                  const selectedSupportingMeasurements = supportingMeasurementsForRule(
+                    measurements,
+                    rule.serviceCode,
+                    selection.measurementId,
+                    rule.requiredMeasurementKinds,
+                  );
+                  const missingRequiredMeasurementKinds = rule.requiredMeasurementKinds.filter(
+                    (kind) =>
+                      !measurements.some(
+                        (measurement) =>
+                          measurement.kind === kind &&
+                          measurement.serviceCodes.includes(rule.serviceCode),
+                      ),
+                  );
+                  const packageComponent = selectedPackageComponents.get(rule.serviceCode);
+                  const serviceOutsidePackage = Boolean(selectedPackage && !packageComponent);
                   return (
                     <div className="service-line" key={rule.serviceCode}>
                       <div>
@@ -850,7 +1280,12 @@ function LiveEstimatePage() {
                             id={`service-${rule.serviceCode}`}
                             type="checkbox"
                             checked={selection.enabled}
-                            disabled={!measurementKind || eligibleMeasurements.length === 0}
+                            disabled={
+                              !measurementKind ||
+                              eligibleMeasurements.length === 0 ||
+                              serviceOutsidePackage ||
+                              packageComponent?.required === true
+                            }
                             onChange={(event) =>
                               setServiceSelections((current) => ({
                                 ...current,
@@ -865,10 +1300,27 @@ function LiveEstimatePage() {
                         </label>
                         <span className="service-line__detail">
                           {eligibleMeasurements.length > 0
-                            ? `${eligibleMeasurements.length} applicable measurement${eligibleMeasurements.length === 1 ? '' : 's'}`
+                            ? serviceOutsidePackage
+                              ? 'Not included in the selected published package'
+                              : `${eligibleMeasurements.length} applicable measurement${eligibleMeasurements.length === 1 ? '' : 's'}`
                             : 'No service-tagged evidence; pricing is blocked'}
                         </span>
                       </div>
+                      {selection.enabled && rule.requiredMeasurementKinds.length > 1 ? (
+                        <p className="section-card__subtitle" role="status">
+                          Supporting evidence:{' '}
+                          {missingRequiredMeasurementKinds.length > 0
+                            ? `missing ${missingRequiredMeasurementKinds.join(', ')}`
+                            : selectedSupportingMeasurements.length > 0
+                              ? selectedSupportingMeasurements
+                                  .map(
+                                    (measurement) =>
+                                      `${measurement.label} (${measurement.value} ${measurement.unit})`,
+                                  )
+                                  .join(', ')
+                              : 'covered by the priced measurement'}
+                        </p>
+                      ) : null}
                       <Field
                         label="Verified measurement"
                         htmlFor={`measurement-${rule.serviceCode}`}
@@ -940,6 +1392,12 @@ function LiveEstimatePage() {
                             measurement.kind === measurementKindForUnit(addOn.unit) &&
                             measurement.addOnCodes.includes(addOn.code),
                         );
+                        const requiredByPackage =
+                          packageComponent?.requiredAddOnCodes.includes(addOn.code) === true;
+                        const allowedByPackage =
+                          !selectedPackage ||
+                          requiredByPackage ||
+                          packageComponent?.optionalAddOnCodes.includes(addOn.code) === true;
                         return (
                           <div key={addOn.code}>
                             <label className="check-row" htmlFor={`addon-${addOn.code}`}>
@@ -947,7 +1405,12 @@ function LiveEstimatePage() {
                                 id={`addon-${addOn.code}`}
                                 type="checkbox"
                                 checked={addOnSelection.enabled}
-                                disabled={!selection.enabled || addOnMeasurements.length === 0}
+                                disabled={
+                                  !selection.enabled ||
+                                  addOnMeasurements.length === 0 ||
+                                  !allowedByPackage ||
+                                  requiredByPackage
+                                }
                                 onChange={(event) =>
                                   setServiceSelections((current) => ({
                                     ...current,
@@ -964,7 +1427,9 @@ function LiveEstimatePage() {
                                   }))
                                 }
                               />
-                              <strong>Add {addOn.name}</strong>
+                              <strong>
+                                {requiredByPackage ? 'Required' : 'Add'} {addOn.name}
+                              </strong>
                             </label>
                             {addOnSelection.enabled && (
                               <select
@@ -1032,18 +1497,42 @@ function LiveEstimatePage() {
               </div>
             </Card>
 
-            <Card className={context?.photoEvidence ? 'estimate-section' : 'projection-warning'}>
-              {context?.photoEvidence ? <Camera size={18} /> : <AlertTriangle size={18} />}
+            <Card
+              className={
+                context?.photoEvidence || selectedPhotoNotApplicable || selectedPhotoOptional
+                  ? 'estimate-section'
+                  : 'projection-warning'
+              }
+            >
+              {context?.photoEvidence ? (
+                <Camera size={18} />
+              ) : selectedPhotoNotApplicable || selectedPhotoOptional ? (
+                <CheckCircle2 size={18} />
+              ) : (
+                <AlertTriangle size={18} />
+              )}
               <div>
                 <strong>
                   {context?.photoEvidence
                     ? `Scope photo disposition: ${context.photoEvidence.disposition.replaceAll('_', ' ')}`
-                    : 'No current scope-photo analysis'}
+                    : selectedPhotoNotApplicable
+                      ? 'Photo scope evidence is not required'
+                      : selectedPhotoOptional
+                        ? 'Optional photo scope evidence was not supplied'
+                        : selectedPhotoRequired
+                          ? 'Required scope-photo analysis is missing'
+                          : 'Select a service to evaluate its scope-evidence policy'}
                 </strong>
                 <p>
                   {context?.photoEvidence
                     ? `${Math.round(Number(context.photoEvidence.confidence) * 100)}% confidence; unknowns remain explicit.`
-                    : 'Quantities remain human verified, but policy will route this estimate to owner approval for uncertain scope.'}
+                    : selectedPhotoNotApplicable
+                      ? 'This industry-pack service uses current human-verified measurements and its own review triggers.'
+                      : selectedPhotoOptional
+                        ? 'Current human-verified measurements remain eligible; supplied concerning evidence would still require review.'
+                        : selectedPhotoRequired
+                          ? 'Policy will keep the quote pending until usable photo evidence is reviewed.'
+                          : 'The selected service controls whether photo evidence is required, optional, or not applicable.'}
                 </p>
               </div>
             </Card>
@@ -1120,16 +1609,75 @@ function LiveEstimatePage() {
                   }}
                   icon={<Send size={17} />}
                 >
-                  Send approved quote
+                  Publish approved quote to portal
                 </Button>
               ) : (
                 <div className="policy-check">
                   <div className="policy-check__row">
                     <ShieldCheck size={14} />
                     {quoteStatus
-                      ? `Quote is ${quoteStatus.replaceAll('_', ' ')}`
-                      : 'No sendable quote is present'}
+                      ? `Quote is ${customerFacingQuoteStatus(quoteStatus)}`
+                      : 'No publishable quote is present'}
                   </div>
+                </div>
+              )}
+              {state.live?.quote && ['sent', 'viewed'].includes(state.live.quoteStatus ?? '') && (
+                <div className="policy-check">
+                  <div className="policy-check__row">
+                    <Send size={14} />
+                    Transactional quote delivery
+                  </div>
+                  <p>
+                    {state.live.quoteDelivery
+                      ? `${state.live.quoteDelivery.channel.toUpperCase()} · ${state.live.quoteDelivery.status.replaceAll('_', ' ')}${state.live.quoteDelivery.externalDeliveryClaimed ? ' · verified delivered' : ' · delivery not asserted'}`
+                      : 'Portal publication is confirmed. No provider delivery attempt has been queued.'}
+                  </p>
+                  {state.live.quoteDelivery?.manualReconciliationRequired && (
+                    <p role="alert">
+                      Provider submission is ambiguous. Reconcile the exact provider message before
+                      retrying.
+                    </p>
+                  )}
+                  {state.live.quoteDelivery?.lastErrorCode && (
+                    <p>Last result: {state.live.quoteDelivery.lastErrorCode}</p>
+                  )}
+                  <label className="input-group" htmlFor="quote-delivery-channel">
+                    <span>Delivery channel</span>
+                    <select
+                      id="quote-delivery-channel"
+                      className="select"
+                      value={deliveryChannel}
+                      onChange={(event) =>
+                        setDeliveryChannel(event.target.value as 'sms' | 'email')
+                      }
+                    >
+                      <option value="email">Email</option>
+                      <option value="sms">SMS</option>
+                    </select>
+                  </label>
+                  <Button
+                    variant="secondary"
+                    className="full-width"
+                    disabled={
+                      !can('communications.send') ||
+                      (state.live.quoteDelivery !== undefined &&
+                        !['failed', 'cancelled'].includes(state.live.quoteDelivery.status))
+                    }
+                    onClick={() =>
+                      void actions.queueTransactionalDelivery({
+                        action: 'quote.delivery',
+                        channel: deliveryChannel,
+                      })
+                    }
+                  >
+                    {state.live.quoteDelivery
+                      ? 'Quote delivery already recorded'
+                      : 'Queue quote delivery'}
+                  </Button>
+                  <p className="formula-note">
+                    Queueing is not sending. Sent and delivered appear only from provider evidence;
+                    sandbox remains explicitly sandboxed.
+                  </p>
                 </div>
               )}
               <p className="formula-note">

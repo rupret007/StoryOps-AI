@@ -10,13 +10,14 @@ import {
   ShieldCheck,
   Sparkles,
   Wrench,
-  type LucideIcon,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from '@/router';
+import { exteriorServiceTemplates } from '@/data/exteriorServiceTemplates';
 import { useStoryOps } from '@/state/StoryOpsProvider';
 import type { SandboxServiceCode } from '@/state/model';
 import { Badge, Button, Field } from '@/components/ui/Primitives';
+import { CompanyConfigurationStudio } from './CompanyConfigurationStudio';
 
 const steps = ['Business', 'Services', 'Policy', 'Launch'];
 
@@ -42,6 +43,10 @@ export function SetupPage() {
   );
   const [validationError, setValidationError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+
+  if (state.setupComplete) {
+    return <CompanyConfigurationStudio />;
+  }
 
   const toggleService = (service: SandboxServiceCode) => {
     setValidationError(undefined);
@@ -106,6 +111,9 @@ export function SetupPage() {
 
   return (
     <div className="setup-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <aside className="setup-aside">
         <div className="portal-brand">
           <span className="brand__mark">
@@ -113,16 +121,17 @@ export function SetupPage() {
           </span>
           StoryOps AI
         </div>
-        <h1>Your back office, safely on duty.</h1>
+        <h1>Your back office, safely under control.</h1>
         <p>
           {state.dataMode === 'supabase'
-            ? 'This authenticated setup provisions one owner-scoped company, selected inactive services, review-required drafts, and disabled optional providers. The private Supabase field-media data plane is a separate mandatory workspace dependency. Setup cannot publish pricing or terms, authorize launch, contact a customer, or charge a card.'
+            ? 'This authenticated setup provisions one owner-scoped company, all five supported service templates inactive, the selected initial scope, review-required drafts, and disabled optional providers. The private Supabase field-media data plane is a separate mandatory workspace dependency. Setup cannot publish pricing or terms, authorize launch, contact a customer, or charge a card.'
             : 'This guided setup records a local sandbox profile and constrains its seeded DFW price book to the services you select. It does not provision a live company, contact a customer, or charge a card.'}
         </p>
         <div className="setup-aside__safety">
           <ShieldCheck size={18} />
           <span>
-            AI can only auto-run low-risk, reversible actions allowed by your published policy.
+            Policy can only make low-risk, reversible actions eligible for automatic execution. V1.1
+            AI Office runs are started manually.
           </span>
         </div>
       </aside>
@@ -203,43 +212,31 @@ export function SetupPage() {
                 parent service.
               </p>
               <div className="setup-option-grid">
-                {(
-                  [
-                    [
-                      'pressure-wash-flatwork',
-                      'Pressure washing',
-                      'Driveways, patios, hardscape',
-                      Droplets,
-                    ],
-                    [
-                      'soft-wash-house',
-                      'Soft washing',
-                      'Exterior siding and approved surfaces',
-                      Home,
-                    ],
-                    [
-                      'gutter-cleaning',
-                      'Gutter cleaning',
-                      'Gutters and downspout flow test',
-                      Wrench,
-                    ],
-                  ] as Array<[SandboxServiceCode, string, string, LucideIcon]>
-                ).map(([id, name, detail, Icon]) => (
-                  <button
-                    className="setup-option"
-                    type="button"
-                    key={id}
-                    aria-pressed={services.includes(id)}
-                    onClick={() => toggleService(id)}
-                  >
-                    <span className="setup-option__icon">
-                      <Icon size={18} />
-                    </span>
-                    <strong>{name}</strong>
-                    <small>{detail}</small>
-                    {services.includes(id) && <Check size={16} />}
-                  </button>
-                ))}
+                {exteriorServiceTemplates.map((template) => {
+                  const id = template.catalogItem.code;
+                  const Icon =
+                    id === 'gutter-cleaning'
+                      ? Wrench
+                      : id === 'soft-wash-house' || id === 'roof-washing'
+                        ? Home
+                        : Droplets;
+                  return (
+                    <button
+                      className="setup-option"
+                      type="button"
+                      key={id}
+                      aria-pressed={services.includes(id)}
+                      onClick={() => toggleService(id)}
+                    >
+                      <span className="setup-option__icon">
+                        <Icon size={18} />
+                      </span>
+                      <strong>{template.catalogItem.name}</strong>
+                      <small>{template.scope.primaryMeasurementKind.replaceAll('_', ' ')}</small>
+                      {services.includes(id) && <Check size={16} />}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}

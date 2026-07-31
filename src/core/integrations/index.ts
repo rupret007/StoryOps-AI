@@ -1,6 +1,7 @@
 export * from './consent.ts';
 export * from './configuration.ts';
 export * from './contracts.ts';
+export * from './environmentHealth.ts';
 export * from './health.ts';
 export * from './livePublic.ts';
 export * from './liveServer.ts';

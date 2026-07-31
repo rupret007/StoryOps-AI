@@ -1,5 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
+  intakeReceiptPayload,
+  normalizeTwilioLeadIntake,
+  type NormalizedLeadIntake,
+} from '../../../src/core/intake/index.ts';
+import {
   ProviderReconciliationError,
   parseEmailReconciliation,
   parseStripeReconciliation,
@@ -7,6 +12,7 @@ import {
   type DeliveryReconciliation,
   type StripeReconciliation,
 } from '../../../src/core/integrations/providerReconciliation.ts';
+import { IntegrationError } from '../../../src/core/integrations/contracts.ts';
 import {
   parseWebhookJson,
   sha256TextHex,
@@ -15,64 +21,17 @@ import {
   verifyTwilioWebhook,
 } from '../../../src/core/integrations/webhooks.ts';
 import { HttpError, errorResponse, jsonResponse, readTextBody } from '../_shared/http.ts';
+import { assertProviderInvocation } from '../_shared/provider-authorization.ts';
+import { resolveProviderWebhookActivation, type ProviderWebhookKind } from './activation.ts';
+import { routeTwilioWebhook } from './routing.ts';
+import {
+  LeadIntakePersistenceError,
+  loadStoryOpsLeadIntakeReceipt,
+  persistStoryOpsLeadIntake,
+} from '../lead-intake/persistence.ts';
+import { enforceLeadIntakeRateLimits } from '../lead-intake/rateLimit.ts';
 
 type JsonObject = Record<string, unknown>;
-
-type StoryOpsDatabase = {
-  public: {
-    Tables: Record<string, never>;
-    Views: Record<string, never>;
-    Functions: {
-      claim_webhook_event: {
-        Args: {
-          p_provider: string;
-          p_provider_event_id: string;
-          p_event_type: string;
-          p_payload_hash: string;
-          p_payload: JsonObject;
-          p_company_id: string;
-        };
-        Returns: Array<{
-          event_id: string;
-          claimed: boolean;
-          existing_status: string;
-        }>;
-      };
-      start_webhook_processing: {
-        Args: { p_event_id: string; p_payload_hash: string };
-        Returns: boolean;
-      };
-      reconcile_provider_webhook: {
-        Args: {
-          p_event_id: string;
-          p_payload_hash: string;
-          p_company_id: string;
-          p_provider: string;
-          p_reconciliation: JsonObject;
-        };
-        Returns: JsonObject;
-      };
-      complete_webhook_event: {
-        Args: {
-          p_event_id: string;
-          p_payload_hash: string;
-          p_disposition: string;
-        };
-        Returns: undefined;
-      };
-      fail_webhook_event: {
-        Args: {
-          p_event_id: string;
-          p_payload_hash: string;
-          p_error: string;
-        };
-        Returns: undefined;
-      };
-    };
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-};
 
 type WebhookEnvelope = {
   provider: 'stripe' | 'twilio' | 'email';
@@ -83,6 +42,7 @@ type WebhookEnvelope = {
   consentSignal: 'opt_out' | 'opt_in' | 'none';
   stripe?: StripeReconciliation;
   delivery?: DeliveryReconciliation;
+  intake?: NormalizedLeadIntake;
 };
 
 type WebhookClaim = {
@@ -95,6 +55,25 @@ function requiredEnvironment(name: string): string {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`Missing required server environment variable ${name}.`);
   return value;
+}
+
+function providerKind(value: string): ProviderWebhookKind {
+  if (value === 'stripe' || value === 'twilio' || value === 'email') return value;
+  throw new HttpError('Provider must be stripe, twilio, or email.', 400, 'INVALID_PROVIDER');
+}
+
+function assertSandboxRequest(request: Request): void {
+  const hostname = new URL(request.url).hostname.toLowerCase();
+  if (
+    !['localhost', '127.0.0.1', '::1'].includes(hostname) ||
+    request.headers.get('x-storyops-sandbox')?.toLowerCase() !== 'true'
+  ) {
+    throw new HttpError(
+      'Sandbox provider callbacks are local-only and require the explicit sandbox header.',
+      403,
+      'SANDBOX_LOCAL_ONLY',
+    );
+  }
 }
 
 function objectRows(value: unknown): JsonObject[] {
@@ -148,6 +127,21 @@ function parseDisposition(value: unknown): 'processed' | 'ignored' {
   return disposition;
 }
 
+function parseProviderJson(rawBody: string): JsonObject {
+  try {
+    return parseWebhookJson(rawBody);
+  } catch (error) {
+    if (error instanceof IntegrationError) {
+      throw new HttpError(
+        error.message,
+        error.code === 'PAYLOAD_TOO_LARGE' ? 413 : 400,
+        error.code,
+      );
+    }
+    throw error;
+  }
+}
+
 async function parseEnvelope(
   request: Request,
   provider: string,
@@ -166,7 +160,15 @@ async function parseEnvelope(
         'INVALID_SIGNATURE',
       );
     }
-    const stripe = parseStripeReconciliation(parseWebhookJson(rawBody));
+    let stripe: StripeReconciliation;
+    try {
+      stripe = parseStripeReconciliation(parseProviderJson(rawBody));
+    } catch (error) {
+      if (error instanceof ProviderReconciliationError) {
+        throw new HttpError(error.message, 400, error.code);
+      }
+      throw error;
+    }
     return {
       provider: 'stripe',
       providerEventId: stripe.providerEventId,
@@ -189,18 +191,21 @@ async function parseEnvelope(
     if (!valid) {
       throw new HttpError('Twilio webhook signature is invalid.', 401, 'INVALID_SIGNATURE');
     }
-    const delivery = await parseTwilioReconciliation(
-      form,
-      requiredEnvironment('TWILIO_COMPANY_ID'),
-    );
+    const companyId = requiredEnvironment('TWILIO_COMPANY_ID');
+    const routing = routeTwilioWebhook(form);
+    const delivery = await parseTwilioReconciliation(routing.reconciliationForm, companyId);
+    const intake = routing.inboundIntake
+      ? normalizeTwilioLeadIntake(form, companyId, new Date(delivery.occurredAt))
+      : undefined;
     return {
       provider: 'twilio',
-      providerEventId: delivery.providerEventId,
-      eventType: delivery.eventType,
+      providerEventId: intake?.providerEventId ?? delivery.providerEventId,
+      eventType: intake?.eventType ?? delivery.eventType,
       companyId: delivery.companyId,
-      receipt: delivery.receipt,
+      receipt: intake ? intakeReceiptPayload(intake) : delivery.receipt,
       consentSignal: delivery.consentSignal,
       delivery,
+      ...(intake ? { intake } : {}),
     };
   }
 
@@ -213,7 +218,15 @@ async function parseEnvelope(
     if (!verification.valid) {
       throw new HttpError('Email webhook signature is invalid or stale.', 401, 'INVALID_SIGNATURE');
     }
-    const delivery = parseEmailReconciliation(parseWebhookJson(rawBody));
+    let delivery: DeliveryReconciliation;
+    try {
+      delivery = parseEmailReconciliation(parseProviderJson(rawBody));
+    } catch (error) {
+      if (error instanceof ProviderReconciliationError) {
+        throw new HttpError(error.message, 400, error.code);
+      }
+      throw error;
+    }
     return {
       provider: 'email',
       providerEventId: delivery.providerEventId,
@@ -229,14 +242,16 @@ async function parseEnvelope(
 }
 
 async function markFailed(
-  client: SupabaseClient<StoryOpsDatabase>,
+  client: SupabaseClient,
   claim: WebhookClaim,
   payloadHash: string,
+  processingLeaseId: string,
   errorCode: string,
 ): Promise<void> {
-  const { error } = await client.rpc('fail_webhook_event', {
+  const { error } = await client.rpc('fail_storyops_intake_webhook', {
     p_event_id: claim.eventId,
     p_payload_hash: payloadHash,
+    p_processing_lease_id: processingLeaseId,
     p_error: errorCode,
   });
   if (error) {
@@ -253,13 +268,19 @@ Deno.serve(async (request) => {
   }
 
   try {
+    const provider = providerKind(new URL(request.url).searchParams.get('provider') ?? '');
+    const activation = resolveProviderWebhookActivation(Deno.env.toObject(), provider);
+    if (activation.runtimeMode === 'disabled') {
+      throw new HttpError(
+        `${provider} callback ingress is disabled or its two-part activation is incomplete.`,
+        503,
+        'PROVIDER_WEBHOOK_DISABLED',
+      );
+    }
+    if (activation.runtimeMode === 'sandbox') assertSandboxRequest(request);
     const rawBody = await readTextBody(request, 1_000_000);
-    const envelope = await parseEnvelope(
-      request,
-      new URL(request.url).searchParams.get('provider') ?? '',
-      rawBody,
-    );
-    const serviceClient = createClient<StoryOpsDatabase>(
+    const envelope = await parseEnvelope(request, provider, rawBody);
+    const serviceClient = createClient(
       requiredEnvironment('SUPABASE_URL'),
       requiredEnvironment('SUPABASE_SERVICE_ROLE_KEY'),
       { auth: { persistSession: false, autoRefreshToken: false } },
@@ -274,6 +295,13 @@ Deno.serve(async (request) => {
       p_company_id: envelope.companyId,
     });
     if (error) {
+      if (/provider event id reused/iu.test(error.message)) {
+        throw new HttpError(
+          'Provider event ID was reused with a different scope or payload.',
+          409,
+          'WEBHOOK_REPLAY_CONFLICT',
+        );
+      }
       throw new ProviderReconciliationError(
         'Durable provider-event claim failed.',
         'WEBHOOK_CLAIM_FAILED',
@@ -281,18 +309,47 @@ Deno.serve(async (request) => {
     }
     const claim = parseClaim(data);
 
-    if (!claim.claimed && ['processed', 'ignored', 'processing'].includes(claim.status)) {
+    if (!claim.claimed && ['processed', 'ignored'].includes(claim.status)) {
+      const intakeReceipt =
+        envelope.intake && claim.status === 'processed'
+          ? await loadStoryOpsLeadIntakeReceipt(
+              serviceClient,
+              envelope.intake,
+              claim.eventId,
+              payloadHash,
+            )
+          : undefined;
       return jsonResponse({
         accepted: true,
         duplicate: true,
         eventId: claim.eventId,
         status: claim.status,
         consentSignal: envelope.consentSignal,
+        ...(intakeReceipt
+          ? {
+              subjectType: intakeReceipt.subjectType,
+              leadId: intakeReceipt.leadId,
+              customerId: intakeReceipt.customerId,
+            }
+          : {}),
       });
     }
 
-    const { data: started, error: startError } = await serviceClient.rpc(
-      'start_webhook_processing',
+    if (
+      activation.runtimeMode === 'live' &&
+      envelope.intake &&
+      envelope.intake.consentSignal !== 'opt_out'
+    ) {
+      await assertProviderInvocation(serviceClient, {
+        companyId: envelope.companyId,
+        provider: 'twilio',
+        capability: 'sms_voice',
+        operationClass: 'launch_start',
+      });
+    }
+
+    const { data: processingLeaseId, error: startError } = await serviceClient.rpc(
+      'start_storyops_intake_processing',
       {
         p_event_id: claim.eventId,
         p_payload_hash: payloadHash,
@@ -304,54 +361,104 @@ Deno.serve(async (request) => {
         'WEBHOOK_START_FAILED',
       );
     }
-    if (started !== true) {
-      return jsonResponse({
-        accepted: true,
-        duplicate: true,
-        eventId: claim.eventId,
-        status: claim.status,
-        consentSignal: envelope.consentSignal,
-      });
-    }
-
-    const { data: reconciliation, error: reconciliationError } = await serviceClient.rpc(
-      'reconcile_provider_webhook',
-      {
-        p_event_id: claim.eventId,
-        p_payload_hash: payloadHash,
-        p_company_id: envelope.companyId,
-        p_provider: envelope.provider,
-        p_reconciliation: envelope.receipt,
-      },
-    );
-    if (reconciliationError) {
-      await markFailed(serviceClient, claim, payloadHash, 'DATABASE_RECONCILIATION_FAILED');
-      throw new HttpError(
-        'Verified provider event could not be reconciled.',
-        500,
-        'DATABASE_RECONCILIATION_FAILED',
+    if (typeof processingLeaseId !== 'string') {
+      return jsonResponse(
+        {
+          accepted: false,
+          duplicate: true,
+          eventId: claim.eventId,
+          status: 'processing',
+          code: 'WEBHOOK_PROCESSING_BUSY',
+        },
+        503,
+        { 'retry-after': '5' },
       );
     }
 
     let disposition: 'processed' | 'ignored';
-    try {
-      disposition = parseDisposition(reconciliation);
-    } catch {
-      await markFailed(serviceClient, claim, payloadHash, 'INVALID_DATABASE_RESULT');
-      throw new HttpError(
-        'Verified provider event could not be reconciled.',
-        500,
-        'INVALID_DATABASE_RESULT',
+    let intakeReceipt: Awaited<ReturnType<typeof persistStoryOpsLeadIntake>> | undefined;
+    if (envelope.intake) {
+      try {
+        if (envelope.intake.consentSignal === 'none') {
+          await enforceLeadIntakeRateLimits(serviceClient, envelope.intake, Deno.env.toObject());
+        }
+        intakeReceipt = await persistStoryOpsLeadIntake(
+          serviceClient,
+          envelope.intake,
+          claim.eventId,
+          payloadHash,
+          processingLeaseId,
+        );
+        disposition = 'processed';
+      } catch (error) {
+        const errorCode =
+          error instanceof HttpError || error instanceof LeadIntakePersistenceError
+            ? error.code
+            : 'DATABASE_INTAKE_PERSISTENCE_FAILED';
+        await markFailed(serviceClient, claim, payloadHash, processingLeaseId, errorCode);
+        if (error instanceof LeadIntakePersistenceError) {
+          throw new HttpError(error.message, error.status, error.code);
+        }
+        throw error;
+      }
+    } else {
+      const { data: reconciliation, error: reconciliationError } = await serviceClient.rpc(
+        'reconcile_provider_webhook',
+        {
+          p_event_id: claim.eventId,
+          p_payload_hash: payloadHash,
+          p_company_id: envelope.companyId,
+          p_provider: envelope.provider,
+          p_reconciliation: envelope.receipt,
+        },
       );
+      if (reconciliationError) {
+        await markFailed(
+          serviceClient,
+          claim,
+          payloadHash,
+          processingLeaseId,
+          'DATABASE_RECONCILIATION_FAILED',
+        );
+        throw new HttpError(
+          'Verified provider event could not be reconciled.',
+          500,
+          'DATABASE_RECONCILIATION_FAILED',
+        );
+      }
+
+      try {
+        disposition = parseDisposition(reconciliation);
+      } catch {
+        await markFailed(
+          serviceClient,
+          claim,
+          payloadHash,
+          processingLeaseId,
+          'INVALID_DATABASE_RESULT',
+        );
+        throw new HttpError(
+          'Verified provider event could not be reconciled.',
+          500,
+          'INVALID_DATABASE_RESULT',
+        );
+      }
     }
 
-    const { error: completeError } = await serviceClient.rpc('complete_webhook_event', {
+    const { error: completeError } = await serviceClient.rpc('complete_storyops_intake_webhook', {
       p_event_id: claim.eventId,
       p_payload_hash: payloadHash,
+      p_processing_lease_id: processingLeaseId,
       p_disposition: disposition,
     });
     if (completeError) {
-      await markFailed(serviceClient, claim, payloadHash, 'WEBHOOK_COMPLETE_FAILED');
+      await markFailed(
+        serviceClient,
+        claim,
+        payloadHash,
+        processingLeaseId,
+        'WEBHOOK_COMPLETE_FAILED',
+      );
       throw new HttpError(
         'Verified provider event reconciliation could not be completed.',
         500,
@@ -365,8 +472,27 @@ Deno.serve(async (request) => {
       eventId: claim.eventId,
       status: disposition,
       consentSignal: envelope.consentSignal,
+      ...(intakeReceipt
+        ? {
+            subjectType: intakeReceipt.subjectType,
+            leadId: intakeReceipt.leadId,
+            customerId: intakeReceipt.customerId,
+          }
+        : {}),
     });
   } catch (error) {
+    if (error instanceof LeadIntakePersistenceError) {
+      return jsonResponse({ error: error.message, code: error.code }, error.status);
+    }
+    if (error instanceof ProviderReconciliationError) {
+      return jsonResponse(
+        {
+          error: 'Verified provider event could not be processed.',
+          code: error.code,
+        },
+        500,
+      );
+    }
     return errorResponse(error);
   }
 });

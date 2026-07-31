@@ -1,5 +1,7 @@
 import {
   InMemoryIdempotencyStore,
+  buildGuardedModelInput,
+  calculateGuardedModelTokenReservation,
   executeIdempotently,
   inspectUntrustedContent,
   redactSensitive,
@@ -111,5 +113,57 @@ describe('AI resilience primitives', () => {
       authorization: '[REDACTED]',
       nested: { api_key: '[REDACTED]' },
     });
+  });
+
+  it('minimizes direct identifiers before a provider-scoped model call', () => {
+    const guarded = buildGuardedModelInput(
+      {
+        runId: 'run-minimize',
+        companyId: 'company-a',
+        agent: 'intake',
+        objective: 'Qualify the request without contacting customer@example.test.',
+        actor: { id: 'private-user-id', role: 'dispatcher' },
+        trustedFacts: [
+          {
+            id: 'lead-record',
+            name: 'Lead',
+            value: { phone: '(214) 555-0100', status: 'new' },
+            source: 'database',
+            observedAt: '2026-07-29T12:00:00.000Z',
+          },
+        ],
+        untrustedContent: [
+          {
+            id: 'message',
+            channel: 'sms',
+            content: 'Call +1 214 555 0100; card 4242 4242 4242 4242; token sk-abcdefghijklmnop.',
+            receivedAt: '2026-07-29T12:00:00.000Z',
+          },
+        ],
+        idempotencyKey: 'minimize-request',
+        requestedAt: '2026-07-29T12:00:00.000Z',
+      },
+      { provider: 'openai' },
+    );
+
+    expect(guarded.dataPolicyId).toBe('storyops-model-data-minimization-v1:intake:openai');
+    expect(guarded.input).not.toContain('customer@example.test');
+    expect(guarded.input).not.toContain('214) 555-0100');
+    expect(guarded.input).not.toContain('4242 4242 4242 4242');
+    expect(guarded.input).not.toContain('sk-abcdefghijklmnop');
+    expect(guarded.input).not.toContain('private-user-id');
+    expect(guarded.redactionSignals).toEqual(
+      expect.arrayContaining([
+        'objective:email',
+        'message:phone',
+        'message:payment_card',
+        'message:api_key',
+        'trusted_fact:phone',
+      ]),
+    );
+    expect(calculateGuardedModelTokenReservation(guarded, 2_000)).toBe(
+      guarded.conservativeInputTokenUpperBound + 2_000,
+    );
+    expect(guarded.inputBytes).toBe(new TextEncoder().encode(guarded.input).byteLength);
   });
 });

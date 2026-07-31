@@ -8,7 +8,8 @@ test-results/
 .env.*.local
 .DS_Store
 .supabase/
-supabase/.temp/
-supabase/.branches/
+**/supabase/.temp/
+**/supabase/.branches/
 backups/
 artifacts/*.zip
+/.storyops-canary-upgrade-*/

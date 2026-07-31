@@ -72,5 +72,38 @@ verify_jwt = true
 [functions.post-service-worker]
 verify_jwt = false
 
+[functions.property-geocode]
+verify_jwt = true
+
+[functions.identity-provisioning]
+verify_jwt = true
+
 [functions.estimate-workflow]
+verify_jwt = true
+
+[functions.scope-photo-workflow]
+verify_jwt = true
+
+[functions.sds-registration]
+verify_jwt = true
+
+[functions.scope-photo-cleanup]
+verify_jwt = false
+
+[functions.scheduling-evidence]
+verify_jwt = true
+
+[functions.scheduling-suggestions]
+verify_jwt = true
+
+[functions.dispatch-clearance]
+verify_jwt = true
+
+[functions.scheduling-reconciliation]
+verify_jwt = false
+
+[functions.transactional-outbound-worker]
+verify_jwt = false
+
+[functions.trusted-pilot-proof]
 verify_jwt = true

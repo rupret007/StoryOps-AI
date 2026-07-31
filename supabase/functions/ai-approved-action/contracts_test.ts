@@ -6,6 +6,7 @@ import {
   approvedToolAgent,
   assertExecutableApprovalState,
   parseAndRevalidatePersistedApproval,
+  parseApprovedLeadPayload,
   parseApprovedRefundOutput,
   parseApprovedRefundPayload,
   safeExecutionErrorCode,
@@ -122,8 +123,16 @@ Deno.test('persisted exact action is rehashed from server-loaded fields', async 
   assert(mismatch, 'A changed exact payload must fail hash revalidation.');
 });
 
-Deno.test('only the authoritatively validated approved tool is executable', () => {
+Deno.test('only tools with authoritative approved-action validators are executable', () => {
   assert(approvedToolAgent('payments.refund') === 'finance', 'Refunds must use finance.');
+  assert(
+    approvedToolAgent('records.create_lead') === 'intake',
+    'Approved lead creation must use intake.',
+  );
+  assert(
+    approvedToolAgent('records.update_lead') === 'intake',
+    'Approved qualification must use intake.',
+  );
   let denied = false;
   try {
     approvedToolAgent('legal.send_message');
@@ -131,6 +140,50 @@ Deno.test('only the authoritatively validated approved tool is executable', () =
     denied = error instanceof ApprovedActionContractError && error.code === 'UNSUPPORTED_TOOL';
   }
   assert(denied, 'An approved legal message must stay denied without a validator.');
+});
+
+Deno.test('approved lead payloads reuse the exact strict server tool contracts', () => {
+  const create = parseApprovedLeadPayload('records.create_lead', {
+    source: 'web',
+    displayName: 'Reviewed lead',
+    requestedServices: ['gutter-cleaning'],
+    preferredContactChannel: 'email',
+  });
+  assert('displayName' in create && create.displayName === 'Reviewed lead', 'Create was rejected.');
+  const update = parseApprovedLeadPayload('records.update_lead', {
+    leadId: '20000000-0000-4000-8000-000000000001',
+    expectedVersion: 2,
+    status: 'unqualified',
+    disqualificationReason: 'Outside the configured service area.',
+  });
+  assert('status' in update && update.status === 'unqualified', 'Update was rejected.');
+  for (const invalid of [
+    {
+      toolName: 'records.create_lead' as const,
+      payload: {
+        source: 'web',
+        displayName: 'Unsafe lead',
+        requestedServices: ['gutter-cleaning'],
+        paymentStatus: 'paid',
+      },
+    },
+    {
+      toolName: 'records.update_lead' as const,
+      payload: {
+        leadId: '20000000-0000-4000-8000-000000000001',
+        expectedVersion: 2,
+        status: 'unqualified',
+      },
+    },
+  ]) {
+    let rejected = false;
+    try {
+      parseApprovedLeadPayload(invalid.toolName, invalid.payload);
+    } catch {
+      rejected = true;
+    }
+    assert(rejected, 'Expanded or incomplete approved lead payload was accepted.');
+  }
 });
 
 Deno.test('refund payload is strict, decimal, positive, and bounded', () => {

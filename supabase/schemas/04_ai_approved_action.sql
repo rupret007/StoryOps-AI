@@ -86,6 +86,9 @@ begin
   if not exists (
     select 1
     from public.company_memberships membership
+    join public.companies company
+      on company.id = membership.company_id
+     and company.status = 'active'
     where membership.company_id = p_company_id
       and membership.user_id = p_actor_user_id
       and membership.role = 'owner'
@@ -266,6 +269,10 @@ begin
         'status', 'succeeded',
         'receipt', reconciliation_receipt,
         'completedAt', now()
+      );
+      perform private.authorize_storyops_approval_consumption(
+        p_company_id,
+        approval_row.id
       );
       update public.approval_requests
       set consumed_at = now(), execution_receipt = reconciliation_receipt
@@ -592,6 +599,10 @@ begin
     failure_code = null
   where id = refund_payment.id;
 
+  perform private.authorize_storyops_approval_consumption(
+    p_company_id,
+    approval_row.id
+  );
   update public.approval_requests
   set consumed_at = completed_time, execution_receipt = receipt
   where id = approval_row.id and consumed_at is null;

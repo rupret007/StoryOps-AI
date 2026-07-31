@@ -1,12 +1,19 @@
 \set ON_ERROR_STOP on
 begin;
 
+insert into public.companies(id, name, status)
+values (
+  '99000000-0000-4000-8000-000000000001',
+  'Post-service claim isolation',
+  'active'
+);
+
 \echo '1/10 worker RPCs are service-role-only'
 do $$
 begin
   if has_function_privilege(
     'authenticated',
-    'public.claim_storyops_post_service_followup(uuid,integer)',
+    'public.claim_storyops_post_service_followup(uuid,uuid,integer)',
     'execute'
   )
     or has_function_privilege(
@@ -82,7 +89,11 @@ revoke select, update on public.communication_messages from authenticated;
 revoke select on public.communication_threads from authenticated;
 
 update public.companies
-set timezone = 'Pacific/Honolulu'
+set timezone = case
+  when extract(hour from now() at time zone 'UTC') < 8 then 'Asia/Tokyo'
+  when extract(hour from now() at time zone 'UTC') >= 20 then 'Pacific/Honolulu'
+  else 'UTC'
+end
 where id = '10000000-0000-4000-8000-000000000001';
 update public.visits
 set status = 'completed'
@@ -144,6 +155,7 @@ declare
   action_result jsonb;
   claim_result jsonb;
   duplicate_claim jsonb;
+  cross_company_claim jsonb;
   completion_result jsonb;
   followup_id uuid;
   communication_id uuid;
@@ -166,11 +178,23 @@ begin
   set scheduled_at = now(), next_attempt_at = now()
   where id = followup_id;
 
+  cross_company_claim := public.claim_storyops_post_service_followup(
+    '99000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000009',
+    90
+  );
+  if cross_company_claim is not null then
+    raise exception 'Post-service claim crossed company scope: %',
+      cross_company_claim;
+  end if;
+
   claim_result := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000010',
     90
   );
-  if claim_result ->> 'operation' <> 'send'
+  if claim_result is null
+    or claim_result ->> 'operation' <> 'send'
     or claim_result ->> 'followupId' <> followup_id::text
     or claim_result ->> 'consentSnapshotId'
       <> '10000000-0000-4000-8000-000000000232'
@@ -181,6 +205,7 @@ begin
   end if;
 
   duplicate_claim := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000011',
     90
   );
@@ -357,6 +382,7 @@ begin
     last_error_code = null
   where id = followup_id;
   claim_result := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000014',
     90
   );
@@ -409,6 +435,7 @@ begin
     last_error_code = null
   where id = followup_id;
   claim_result := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000015',
     90
   );
@@ -476,6 +503,7 @@ begin
     'SM_AMBIGUOUS_WORKER_TEST_001'
   );
   duplicate_claim := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000016',
     90
   );
@@ -542,9 +570,15 @@ begin
       'nextDueDate', (current_date + 1)::text
     )
   );
-  queued_count := public.queue_storyops_due_maintenance_followups(10);
+  queued_count := public.queue_storyops_due_maintenance_followups(
+    '10000000-0000-4000-8000-000000000001',
+    10
+  );
   if queued_count <> 1
-    or public.queue_storyops_due_maintenance_followups(10) <> 0
+    or public.queue_storyops_due_maintenance_followups(
+    '10000000-0000-4000-8000-000000000001',
+    10
+  ) <> 0
   then
     raise exception 'Maintenance materialization was not idempotent';
   end if;
@@ -563,6 +597,7 @@ begin
   where id = followup_id;
 
   claim_result := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000012',
     90
   );
@@ -694,6 +729,7 @@ begin
   where id = '10000000-0000-4000-8000-000000000201';
 
   claim_result := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000013',
     90
   );
@@ -873,6 +909,7 @@ begin
   where id = submitted_followup_id;
 
   claim_result := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
     'a1000000-0000-4000-8000-000000000024',
     90
   );
@@ -960,6 +997,224 @@ begin
     raise exception
       'Exhausted leases were not resolved without disturbing quarantine: %',
       claim_result;
+  end if;
+end;
+$$;
+
+\echo '11/11 reconciliation read failures preserve accepted-provider truth'
+do $$
+declare
+  followup_id_value uuid;
+  message_id_value uuid;
+  provider_id_value text;
+  retryable_failure jsonb;
+  nonretryable_failure jsonb;
+  second_claim jsonb;
+  status_projection jsonb;
+  message_status text;
+  original_timezone text;
+begin
+  select
+    followup.id,
+    followup.communication_message_id,
+    followup.provider_message_id
+  into
+    followup_id_value,
+    message_id_value,
+    provider_id_value
+  from public.post_service_followups followup
+  where followup.action_type = 'maintenance_reminder';
+
+  update public.post_service_followups
+  set
+    status = 'submitted',
+    completed_at = null,
+    reconciliation_count = max_attempts,
+    last_error_code = null,
+    claimed_by = 'a1000000-0000-4000-8000-000000000030',
+    claim_token = 'a1000000-0000-4000-8000-000000000031',
+    claim_operation = 'reconcile',
+    claim_expires_at = now() + interval '90 seconds'
+  where id = followup_id_value;
+
+  retryable_failure := public.fail_storyops_post_service_followup(
+    followup_id_value,
+    'a1000000-0000-4000-8000-000000000031',
+    'HTTP_503',
+    true
+  );
+
+  update public.post_service_followups
+  set
+    last_error_code = null,
+    reconciliation_count = 1,
+    claimed_by = 'a1000000-0000-4000-8000-000000000032',
+    claim_token = 'a1000000-0000-4000-8000-000000000033',
+    claim_operation = 'reconcile',
+    claim_expires_at = now() + interval '90 seconds'
+  where id = followup_id_value;
+
+  nonretryable_failure := public.fail_storyops_post_service_followup(
+    followup_id_value,
+    'a1000000-0000-4000-8000-000000000033',
+    'RECEIPT_LOOKUP_UNSUPPORTED',
+    false
+  );
+
+  select company.timezone
+  into original_timezone
+  from public.companies company
+  where company.id = '10000000-0000-4000-8000-000000000001';
+  update public.companies
+  set timezone = (
+    select zone.name
+    from pg_timezone_names zone
+    where (now() at time zone zone.name)::time
+      between time '09:00' and time '17:00'
+    order by zone.name
+    limit 1
+  )
+  where id = '10000000-0000-4000-8000-000000000001';
+  second_claim := public.claim_storyops_post_service_followup(
+    '10000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000034',
+    90
+  );
+  update public.companies
+  set timezone = original_timezone
+  where id = '10000000-0000-4000-8000-000000000001';
+
+  perform set_config(
+    'request.jwt.claims',
+    '{"sub":"10000000-0000-4000-8000-000000000101","role":"authenticated"}',
+    true
+  );
+  status_projection := public.get_storyops_post_service_status(
+    '10000000-0000-4000-8000-000000000001'
+  );
+  perform set_config('request.jwt.claims', '{}', true);
+
+  select message.delivery_status
+  into message_status
+  from public.communication_messages message
+  where message.id = message_id_value;
+
+  if retryable_failure ->> 'status' <> 'submitted'
+    or retryable_failure ->> 'errorCode' <> 'RECONCILIATION_EXHAUSTED'
+    or retryable_failure ->> 'providerReadErrorCode' <> 'HTTP_503'
+    or retryable_failure ->> 'retryScheduled' <> 'false'
+    or retryable_failure ->> 'manualReconciliationRequired' <> 'true'
+    or nonretryable_failure ->> 'status' <> 'submitted'
+    or nonretryable_failure ->> 'providerReadErrorCode'
+      <> 'RECEIPT_LOOKUP_UNSUPPORTED'
+    or nonretryable_failure ->> 'manualReconciliationRequired' <> 'true'
+    or second_claim is not null
+    or message_status <> 'queued'
+    or not exists (
+      select 1
+      from public.post_service_followups followup
+      where followup.id = followup_id_value
+        and followup.status = 'submitted'
+        and followup.last_error_code = 'RECONCILIATION_EXHAUSTED'
+        and followup.completed_at is null
+        and followup.provider_mode = 'live'
+        and followup.provider_status = 'queued'
+        and followup.provider_message_id = provider_id_value
+    )
+    or not exists (
+      select 1
+      from jsonb_array_elements(status_projection -> 'followups') item
+      where item ->> 'id' = followup_id_value::text
+        and item ->> 'status' = 'reconciliation_required'
+        and item ->> 'manualReconciliationRequired' = 'true'
+        and item ->> 'externalDeliveryClaimed' = 'false'
+    )
+    or exists (
+      select 1
+      from public.audit_events event
+      where event.entity_id = followup_id_value
+        and event.action in (
+          'post_service.outbound_failed',
+          'post_service.provider_failed'
+        )
+    )
+  then
+    raise exception
+      'Post-service reconciliation read failure fabricated provider failure: %, %, %',
+      retryable_failure,
+      nonretryable_failure,
+      message_status;
+  end if;
+
+  perform set_config('storyops.provider_evidence_write', 'on', true);
+  update public.communication_messages
+  set delivery_status = 'delivered'
+  where id = message_id_value
+    and provider_message_id = provider_id_value;
+  perform set_config('storyops.provider_evidence_write', 'off', true);
+
+  if not exists (
+    select 1
+    from public.post_service_followups followup
+    where followup.id = followup_id_value
+      and followup.status = 'completed'
+      and followup.provider_status = 'delivered'
+      and followup.last_error_code is null
+  ) then
+    raise exception
+      'Verified post-service callback could not resolve manual reconciliation';
+  end if;
+end;
+$$;
+
+select set_config('storyops.provider_evidence_write', 'on', true);
+update public.communication_messages message
+set delivery_status = 'failed'
+from public.post_service_followups followup
+where followup.action_type = 'maintenance_reminder'
+  and followup.communication_message_id = message.id
+  and followup.provider_message_id = message.provider_message_id;
+select set_config('storyops.provider_evidence_write', 'off', true);
+insert into public.audit_events(
+  company_id,
+  actor_type,
+  actor_id,
+  action,
+  entity_type,
+  entity_id,
+  before_data,
+  after_data
+)
+select
+  followup.company_id,
+  'system',
+  'post-service-worker-v1',
+  'post_service.outbound_failed',
+  'post_service_followup',
+  followup.id,
+  jsonb_build_object('status', 'submitted'),
+  jsonb_build_object(
+    'status', 'failed',
+    'errorCode', 'HTTP_503',
+    'externalDeliveryClaimed', false
+  )
+from public.post_service_followups followup
+where followup.action_type = 'maintenance_reminder';
+do $$
+declare
+  blocked boolean := false;
+begin
+  begin
+    perform private.storyops_assert_no_ambiguous_worker_upgrade_state();
+  exception when others then
+    blocked := position(
+      'PRIVATE_WORKER_UPGRADE_POST_SERVICE_PROVIDER_TRUTH_RECONCILIATION_REQUIRED'
+      in sqlerrm
+    ) > 0;
+  end;
+  if not blocked then
+    raise exception
+      'Upgrade accepted a fabricated post-service provider-failure signature';
   end if;
 end;
 $$;

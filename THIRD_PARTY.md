@@ -1,6 +1,6 @@
 # StoryOps AI third-party software and reference register
 
-**Reviewed:** 2026-07-28  
+**Reviewed:** 2026-07-30  
 **Policy:** exact revisions/versions are authoritative; update this file,
 lockfiles, container build arguments, notices, and verification evidence
 together.
@@ -28,10 +28,10 @@ repository’s full history.
 
 ## Runtime services built from source
 
-| Project                                                                                                                     | Version / exact pin                                    | License                                           | Packaging and boundary                                                                                                                                                                                                                                                                            |
-| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [VROOM-Project/vroom](https://github.com/VROOM-Project/vroom/tree/43dd7d0b8b560431eb555bf335cf4797eb7343c4)                 | `v1.15.0` / `43dd7d0b8b560431eb555bf335cf4797eb7343c4` | BSD-2-Clause, copyright © 2015–2025 Julien Coupey | `infra/vroom/Dockerfile` fetches the exact commit and builds the binary. GLPK is deliberately absent, so its GPL license is not introduced and plan-mode ETA validation is disabled.                                                                                                              |
-| [VROOM-Project/vroom-express](https://github.com/VROOM-Project/vroom-express/tree/5475901e60ec13ed9eec6cc87c811206a779eb03) | `v0.12.0` / `5475901e60ec13ed9eec6cc87c811206a779eb03` | BSD-2-Clause, copyright © 2016 Julien Coupey      | Exact source is copied into the optional routing image. `infra/vroom/runtime-package/package-lock.json` pins a compatible, audit-clean runtime graph because upstream v0.12.0 does not publish a lockfile; all provider-facing behavior remains covered by the pinned source and StoryOps limits. |
+| Project                                                                                                                     | Version / exact pin                                    | License                                           | Packaging and boundary                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [VROOM-Project/vroom](https://github.com/VROOM-Project/vroom/tree/43dd7d0b8b560431eb555bf335cf4797eb7343c4)                 | `v1.15.0` / `43dd7d0b8b560431eb555bf335cf4797eb7343c4` | BSD-2-Clause, copyright © 2015–2025 Julien Coupey | `infra/vroom/Dockerfile` fetches the exact commit and builds the binary. GLPK is deliberately absent, so its GPL license is not introduced and plan-mode ETA validation is disabled.                                                                                                                                                                                                                 |
+| [VROOM-Project/vroom-express](https://github.com/VROOM-Project/vroom-express/tree/5475901e60ec13ed9eec6cc87c811206a779eb03) | `v0.12.0` / `5475901e60ec13ed9eec6cc87c811206a779eb03` | BSD-2-Clause, copyright © 2016 Julien Coupey      | Exact source is copied into the optional routing image. `infra/vroom/runtime-package/package-lock.json` pins a compatible, audit-clean runtime graph because upstream v0.12.0 does not publish a lockfile. Its separately generated notice inventory is copied into the image alongside the upstream license; all provider-facing behavior remains covered by the pinned source and StoryOps limits. |
 
 VROOM v1.15.0 records three header-only submodules at exact commits. They are
 compiled into the binary and their notices are copied into the routing image:
@@ -54,6 +54,18 @@ and
 [vroom-express license](https://github.com/VROOM-Project/vroom-express/blob/5475901e60ec13ed9eec6cc87c811206a779eb03/LICENSE).
 Binary/container distribution must reproduce the applicable copyright notice,
 conditions, and disclaimer in its accompanying materials.
+
+The VROOM runtime lock contains 83 exact package paths (81 unique
+name/version pairs) and records a resolved artifact URL, integrity hash, and
+declared license for every entry. Its generated distribution inventory is
+`infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt`. It validates the
+separately installed runtime graph and embeds all captured MIT, ISC, BSD, and
+Python-2.0 notice material. `cookie-signature@1.0.6` places its complete MIT
+notice in the shipped `Readme.md` rather than a dedicated license file; the
+generator explicitly binds and embeds that exact lock-installed source instead
+of substituting notice text from another version. The routing Docker image
+copies this inventory to
+`/usr/share/licenses/vroom-express-runtime/NPM_THIRD_PARTY_NOTICES.txt`.
 
 ## OpenAI agent runtime
 
@@ -103,6 +115,7 @@ is not a current dependency.
 | `eslint`                      | `10.8.0`   | MIT          |
 | `eslint-plugin-react-hooks`   | `7.1.1`    | MIT          |
 | `eslint-plugin-react-refresh` | `0.5.3`    | MIT          |
+| `fake-indexeddb`              | `6.2.5`    | Apache-2.0   |
 | `globals`                     | `16.3.0`   | MIT          |
 | `jsdom`                       | `26.1.0`   | MIT          |
 | `prettier`                    | `3.9.6`    | MIT          |
@@ -127,53 +140,59 @@ audit, lint, typecheck, test, and build.
 
 ## Other pinned tooling and base images
 
-| Item                         | Pin                  | Use                                             |
-| ---------------------------- | -------------------- | ----------------------------------------------- |
-| Node.js                      | `22.22.3` / `.nvmrc` | Local, build, and runtime JavaScript engine     |
-| Supabase CLI                 | `2.110.0`            | Local stack, migration/reset/lint, logical dump |
-| `node:22.22.3-alpine3.22`    | exact image tag      | Application build/runtime base                  |
-| `node:22.22.3-bookworm-slim` | exact image tag      | Pinned Node runtime copied into the VROOM image |
-| `ubuntu:24.04`               | major/minor LTS tag  | VROOM C++20 build and minimal runtime base      |
+| Item                         | Pin                                                                       | Use                                             |
+| ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- |
+| Node.js                      | `22.22.3` / `.nvmrc`                                                      | Local, build, and runtime JavaScript engine     |
+| Supabase CLI                 | `2.110.0`                                                                 | Local stack, migration/reset/lint, logical dump |
+| `node:22.22.3-alpine3.22`    | `sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8` | Application build/runtime base                  |
+| `node:22.22.3-bookworm-slim` | `sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752` | Node runtime copied into the VROOM image        |
+| `ubuntu:24.04`               | `sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90` | VROOM C++20 build and minimal runtime base      |
 
-Image tags are human-readable pins but are not immutable digests. Before a
-production build, resolve and record multi-architecture image digests, scan OS
-packages, preserve base-image notices, and rebuild from the reviewed commit.
+Dockerfiles retain the human-readable tags and bind each base to the reviewed
+registry digest above. The VROOM image still resolves unversioned Ubuntu apt
+packages from the image's configured repositories during its build; no
+reviewed snapshot repository is currently pinned. A release build must record
+the resulting OS package manifest, scan it, preserve base/OS notices, and treat
+any changed apt resolution as a new artifact requiring review.
 
 GitHub Actions in `.github/workflows/ci.yml` are pinned to full commit SHAs with
 their major-version names in comments.
 
 ## Transitive dependency inventory
 
-`package-lock.json` currently records 682 exact-version package entries with
+`package-lock.json` currently records 683 exact-version package entries with
 dependency edges and declared license metadata. npm omits resolved artifact
 URLs and integrity hashes from some registry entries in this lockfile; the
 generated report preserves values where present and labels every omitted value
 `UNKNOWN`. The tables above list direct and specifically controlled components,
 not every transitive package.
 
-`NPM_THIRD_PARTY_NOTICES.txt` is the committed, generated distribution
-inventory. It lists every locked package path and exact version, preserves
-artifact/integrity references when the lockfile supplies them, validates
-non-optional installed package metadata against the lockfile, clearly labels
-any `UNKNOWN` metadata, and embeds the actual top-level license/notice files
-found in the installed non-optional graph. Platform-specific optional build
-binaries are listed from the lockfile but their text is not guessed from other
-packages. The generator is
-`scripts/generate-npm-notices.mjs`; `npm run verify` fails when the committed
+`NPM_THIRD_PARTY_NOTICES.txt` and the separate VROOM runtime inventory are the
+committed, generated distribution inventories. They list every locked package
+path and exact version, preserve artifact/integrity references when the
+lockfile supplies them, validate non-optional installed package metadata
+against the applicable lockfile, clearly label any `UNKNOWN` metadata, and
+embed the actual captured license/notice material found in each installed
+graph. Platform-specific optional build binaries are listed from the root
+lockfile but their text is not guessed from other packages. The generator is
+`scripts/generate-npm-notices.mjs`; `npm run verify` fails when either committed
 artifact is stale.
 
 Reproduce and verify the inventory after a clean install:
 
 ```bash
 npm ci --ignore-scripts
+npm run install:vroom-runtime
 npm run licenses:check
 npm ls --all
 npm audit
+npm audit --prefix infra/vroom/runtime-package --audit-level=high
 ```
 
-When the lockfile changes, run `npm run licenses:generate`, review the diff,
-and commit the regenerated artifact. Archive this inventory with each release.
-It is license evidence, not a legal conclusion: review packages that expose
+When either lockfile changes, install both exact graphs, run
+`npm run licenses:generate`, review the diff, and commit both regenerated
+artifacts. Archive the applicable inventory with each release. It is license
+evidence, not a legal conclusion: review packages that expose
 multiple/alternative licenses, assets under Creative Commons, native binaries,
 or embedded data rather than relying only on a declared license field.
 
@@ -198,8 +217,9 @@ the adapter code.
   Docker image copies all four to `/usr/share/licenses/storyops-ai/`.
 - Keep dependency license files with installed/vendored packages; reproduce
   required notices in binary/container distributions.
-- Keep VROOM and vroom-express license texts inside or alongside the routing
-  image.
+- Keep VROOM and vroom-express license texts plus
+  `infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt` inside or alongside
+  the routing image.
 - Do not remove upstream copyright/license headers.
 - Do not copy StoryLand or OCA content under the current no-code boundaries.
 - Any new vendored source, font, icon set, image, SDS, map data, template, or

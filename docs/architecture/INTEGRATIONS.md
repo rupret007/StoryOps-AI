@@ -2,7 +2,7 @@
 
 **Status:** V1 provider contracts, sandbox suite, server adapters, and webhook boundary  
 **Owner:** Company owner for accounts/consent; principal engineer for adapters/secrets  
-**Last reviewed:** 2026-07-28
+**Last reviewed:** 2026-07-29
 
 StoryOps runs fully in sandbox mode without keys. Live connections are server-only, opt-in, health
 checked, and activated individually. No provider result is treated as success until the provider
@@ -12,8 +12,15 @@ Every outbound adapter uses the same two-switch activation: its provider mode
 must be `live` and its explicit capability enable flag must be `true`.
 Credentials are an additional gate. Either switch alone resolves to
 `disabled`, and an explicit `MODE=disabled` never falls through to sandbox
-receipts. Signed inbound lead intake is the documented mode-only exception
-because it receives events rather than calling a provider.
+receipts. Signed inbound lead intake follows the same rule:
+`LEAD_INTAKE_MODE=live` and `LEAD_INTAKE_LIVE_ENABLED=true` are both required
+before a request can reach its provider-specific signature boundary.
+
+Company lifecycle is a separate server gate. A `setup` or `paused` company
+cannot reserve or cross a new provider-call boundary regardless of provider
+configuration or prior approval. Pausing does not discard external work already
+accepted: signed callback/retrieval reconciliation, bounded failure recording,
+retention, and orphan cleanup continue through narrow trusted paths.
 
 The authenticated field-media data plane is not a provider toggle. Selecting
 `VITE_STORYOPS_DATA_MODE=supabase` makes private `job-media` Storage RLS,
@@ -23,20 +30,21 @@ server-issued signed upload/download targets.
 
 ## Provider matrix
 
-| Capability       | Implemented boundary                                                                   | No-key behavior                                     | Remaining manual YELLOW live gate                                        |
-| ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
-| OpenAI           | `StructuredModel`; Node/Edge Agents SDK, separate vision gate, durable run budgets     | Deterministic structured result, no proposed action | Credentials, model/vision evals, spend/redaction canary                  |
-| Twilio SMS       | `TwilioSmsProvider`; current-consent and durable-rate policy, signed status callbacks  | Consent/rate/idempotency sandbox ledger             | Owned number, registration/legal review, delivery/opt-out canary         |
-| Twilio voice     | `TwilioVoiceProvider`; owned From number, HTTPS TwiML, signed callbacks                | Validates HTTPS TwiML URL; sandbox queue            | Number/recording policy, call-state canary                               |
-| Email            | `HttpEmailProvider`; token-authenticated HTTPS endpoint, signed status callback        | Consent/rate/idempotency sandbox ledger             | Sending-domain/provider setup, bounce/complaint/suppression canary       |
-| Stripe           | `StripePaymentsProvider`; customer mapping, billing validators, signed reconciliation  | Deterministic checkout/invoice/refund artifacts     | Account, tax/accounting review, callback and money canary                |
-| Google Calendar  | `GoogleCalendarProvider`; allowlisted ID, OAuth refresh, free/busy, hold/booking       | Local holds/bookings labeled sandbox                | OAuth grant/redirect, conflict and token-refresh canary                  |
-| Maps/geocoding   | `GoogleMapsProvider`; validated address/coordinates/place ID                           | Explicit precision `unknown`, confidence `0.1`      | Restricted key/quota and human-precision canary                          |
-| NWS              | `NwsWeatherProvider`; validated points/forecast/alerts, explicit unknown periods       | Never fabricates weather                            | Monitored User-Agent, outage/staleness canary                            |
-| VROOM            | `VroomRoutingProvider`; finite timeout, HTTPS/auth guard, route completeness checks    | Deterministic custom-matrix plan                    | Private engine/router backend, capacity and dispatcher-acceptance canary |
-| Core field media | Private RLS upload/read-back, actual-byte SHA-256, trusted finalizer, immutable object | IndexedDB/local packet; zero Storage requests       | Hosted Auth/RLS/finalizer/device-loss and tamper canary                  |
-| Signed targets   | `SupabaseStorageProvider`; scoped short-lived server-issued upload/download targets    | `sandbox://` targets for client interception        | Optional adapter activation and signed-target expiry canary              |
-| QuickBooks       | `QuickBooksCsvProvider`; formula-safe escaped CSV and SHA-256                          | Produces reviewable CSV only                        | Accountant mapping/import acceptance; no API posting                     |
+| Capability       | Implemented boundary                                                                   | No-key behavior                                     | Remaining manual YELLOW live gate                                    |
+| ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
+| OpenAI           | `StructuredModel`; Node/Edge Agents SDK, separate vision gate, durable run budgets     | Deterministic structured result, no proposed action | Credentials, model/vision evals, spend/redaction canary              |
+| Twilio SMS       | `TwilioSmsProvider`; current-consent and durable-rate policy, signed status callbacks  | Consent/rate/idempotency sandbox ledger             | Owned number, registration/legal review, delivery/opt-out canary     |
+| Twilio voice     | `TwilioVoiceProvider`; owned From number, HTTPS TwiML, signed callbacks                | Validates HTTPS TwiML URL; sandbox queue            | Number/recording policy, call-state canary                           |
+| Email            | `HttpEmailProvider`; token-authenticated HTTPS endpoint, signed status callback        | Consent/rate/idempotency sandbox ledger             | Sending-domain/provider setup, bounce/complaint/suppression canary   |
+| Supabase Auth    | Exact identity invitation; deployment/owner/canary/launch-bound final marker           | Disabled; exact directory reconciliation only       | Read-only directory canary, owner activation, launch reauthorization |
+| Stripe           | `StripePaymentsProvider`; customer mapping, billing validators, signed reconciliation  | Deterministic checkout/invoice/refund artifacts     | Account, tax/accounting review, callback and money canary            |
+| Google Calendar  | Allowlisted adapter plus migration-160 event read-back/receipt/booking gate            | Local holds/bookings labeled sandbox; never live    | Scheduling worker, OAuth/conflict canary, compensation rehearsal     |
+| Maps/geocoding   | `GoogleMapsProvider`; validated address/coordinates/place ID                           | Explicit precision `unknown`, confidence `0.1`      | Restricted key/quota and human-precision canary                      |
+| NWS              | Validated adapter plus immutable exact weather row/policy/payload binding              | Never fabricates weather                            | Scheduling worker, monitored User-Agent, outage/staleness canary     |
+| VROOM            | Validated adapter plus immutable exact route row/request/response binding              | Deterministic custom-matrix plan; never live        | Scheduling worker, private router, capacity/dispatcher canary        |
+| Core field media | Private RLS upload/read-back, actual-byte SHA-256, trusted finalizer, immutable object | IndexedDB/local packet; zero Storage requests       | Hosted Auth/RLS/finalizer/device-loss and tamper canary              |
+| Signed targets   | `SupabaseStorageProvider`; scoped short-lived server-issued upload/download targets    | `sandbox://` targets for client interception        | Optional adapter activation and signed-target expiry canary          |
+| QuickBooks       | `QuickBooksCsvProvider`; formula-safe escaped CSV and SHA-256                          | Produces reviewable CSV only                        | Accountant mapping/import acceptance; no API posting                 |
 
 Implementation is not a claim of live connectivity. A capability stays
 `not_configured`/`disabled` until its explicit enable flag and required
@@ -44,6 +52,13 @@ server-only settings are present; configured status is still only `degraded`
 until a bounded active probe succeeds. No real provider credential or external
 canary was supplied for this release. Sandbox receipts always include
 `mode: "sandbox"`.
+
+For the core scope-photo workflow, the database rechecks active-company status
+before the Edge function mints a fresh signed upload URL, including on a replayed
+reservation. A pause does not revoke a URL minted earlier; keep it short-lived.
+Paused Storage/finalization controls prevent the object from becoming registered
+evidence, and trusted orphan cleanup may remove the expired unregistered object
+without reopening uploads.
 
 ## Shared guarantees
 
@@ -58,6 +73,46 @@ retryable. Authentication, validation, consent, and payload conflicts are not re
 Money crosses provider boundaries as base-10 strings with two decimal places and `USD`. Pricing
 calculation happens before the provider call in the deterministic pricing engine. Providers sum
 already-approved line items; they do not ask an LLM for an amount.
+
+## Scheduling evidence boundary
+
+Migration
+`supabase/migrations/20260728160000_scheduling_evidence_boundary.sql`
+joins the persisted scheduling facts to local booking without granting provider
+authority to the browser:
+
+- `record_storyops_scheduling_evidence` is service-role-only and appends one
+  immutable aggregate plus exact VROOM and NWS rows;
+- live receipts require `google_calendar`, `vroom`, and `nws`; sandbox receipts
+  require the three mock providers and can never be consumed;
+- eligible calendar evidence includes a confirmed event ID, etag, recent
+  provider read-back, bounded payload hash, and exact job/crew/window binding;
+- route/weather request, response, payload, and policy hashes bind the receipt
+  to a published live configuration and active operating baseline;
+- `get_storyops_booking_candidate` exposes only one fresh receipt identity to
+  an authenticated owner/dispatcher; and
+- `job.book` revalidates and consumes that receipt once under transaction locks
+  before creating confirmed local state.
+
+Normal API roles, including direct `service_role` table access, have no
+insert/update/delete grant for the promoted job/visit/dispatch or scheduling
+evidence tables. The trusted recorder remains the append path; the guarded
+booking RPC remains the promotion path.
+
+The authenticated `scheduling-evidence` Edge function implements the provider
+workflow behind independent live switches: it reads Google Calendar
+availability, NWS weather, reviewed coordinates and VROOM routing; prepares a
+durable calendar outbox attempt; creates and reads back the deterministic
+Google event; and records the exact scheduling receipt. A separate
+`scheduling-reconciliation` worker handles provider-unknown or unconsumed
+calendar attempts using exact read-back and conditional cancellation.
+
+Neither worker is activated or scheduled by this repository, and no real
+provider canary has run. The calendar-first ordering can still leave a provider
+event to compensate if local evidence recording or booking fails. Scheduler
+configuration, live credentials, staging/production canaries, alerting, and a
+rehearsed compensation runbook remain YELLOW launch gates. See
+`docs/architecture/SCHEDULING_EVIDENCE_CONTRACT.md`.
 
 Live SMS, voice, and email submission reloads the exact consent snapshot, proves it is still the
 latest grant for the same subject/channel/purpose, binds the stored contact to the recipient, checks
@@ -194,8 +249,20 @@ can prevent duplicate creation after ambiguous failures; see
 The adapter allows one configured operations calendar. It uses a short-lived access token for local
 diagnostics or refreshes access with the configured OAuth client/secret/refresh token, caches only
 until shortly before expiry, and retries once after an authenticated 401. Deterministic event IDs
-come from the server idempotency key. This implementation does not prove the production OAuth
-grant, redirect, token rotation, calendar ownership, or conflict canary.
+come from the server idempotency key.
+
+`20260728160000_scheduling_evidence_boundary.sql` persists an eligible calendar
+result only when the deterministic event has been read back as `confirmed` with
+the same ID/etag and exact job/crew/window capacity payload. Local booking must
+consume that live receipt while the read-back is still current. The repository
+joins the adapter and database boundary through the authenticated
+`scheduling-evidence` Edge function and includes the private
+`scheduling-reconciliation` worker for ambiguous durable attempts. Neither path
+is deployed, live-activated, connected to a production scheduler, or
+external-provider-canaried by this build. The local authenticated canary proves
+only the disabled-mode actor/RPC boundary; it does not prove the production
+OAuth grant, redirect, token rotation, calendar ownership, conflict handling,
+or event compensation path.
 
 ### Maps
 
@@ -213,6 +280,12 @@ unknown. Configure a descriptive User-Agent with monitored contact per
 Weather is a decision input, not an automatic safety instruction. Missing/stale forecasts, alerts,
 or unsafe conditions route to owner review.
 
+The service recorder can append the exact NWS row, full-window coverage,
+observation/forecast timestamps, disposition, raw-payload hash, and separate
+policy version/hash to an immutable scheduling receipt. This proves database
+binding only until the trusted live worker and NWS canary establish provider
+origin.
+
 ### VROOM
 
 The live adapter sends coordinates in longitude/latitude order, converts ISO windows to Unix
@@ -220,6 +293,11 @@ seconds, maps internal string IDs to VROOM integers, and maps routes/unassigned 
 configured endpoint with no health endpoint reports degraded—not healthy. VROOM remains an
 independent service; its project documentation is at
 [VROOM-Project/vroom](https://github.com/VROOM-Project/vroom).
+
+The service recorder appends the exact VROOM request/response row and hashes,
+and live booking requires that same fresh row to remain feasible with no
+violations. Provider completeness and target assignment still have to be
+validated by the live adapter/worker and proven in the VROOM canary.
 
 ### Storage
 
@@ -281,7 +359,10 @@ provider incident recovery, OAuth reconnection, and deployment.
 
 - Communication: submitted → provider receipt → callback/delivery state.
 - Payment: checkout/invoice created → provider event claimed → payment row reconciled.
-- Calendar: local hold/visit → returned event ID/etag → periodic exception reconciliation.
+- Calendar booking: deterministic provider event → exact ID/etag read-back →
+  immutable live receipt → one-time receipt consumption/local visit → periodic
+  exception reconciliation. If the local step fails, quarantine and compensate
+  the provider event before customer contact.
 - Core field media: immutable upload → user read-back → Edge byte checksum →
   service finalizer/attestation → asset record → dependent completion.
 - Optional signed targets: target issue → authorized client use → object
@@ -307,6 +388,10 @@ Before enabling any live adapter:
 - [ ] consent language and opt-out are legally reviewed;
 - [ ] restricted keys/scopes are confirmed;
 - [ ] rate and spend limits are set at the provider;
+- [ ] the trusted scheduling worker is activated only in the intended
+      environment and cannot accept provider evidence from a browser/model;
+- [ ] Google event read-back → receipt → local booking is observed end to end;
+- [ ] the orphan-event cancel/adopt compensation procedure is rehearsed;
 - [ ] delivery/payment/calendar reconciliation is observed end to end;
 - [ ] rollback is “disable adapter,” not “delete data”; and
 - [ ] owner knows the provider console manual recovery steps.

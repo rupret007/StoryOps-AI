@@ -5,7 +5,7 @@
 # runtime library. Plan-mode ETA validation is therefore excluded while the
 # core VRP solver and custom matrices remain available.
 
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS builder
 
 ARG VROOM_REF=43dd7d0b8b560431eb555bf335cf4797eb7343c4
 ARG VROOM_VERSION=v1.15.0
@@ -44,9 +44,9 @@ RUN git init vroom-express \
     && test "$(git rev-parse FETCH_HEAD)" = "${VROOM_EXPRESS_REF}" \
     && git checkout --detach FETCH_HEAD
 
-FROM node:22.22.3-bookworm-slim AS node-runtime
+FROM node:22.22.3-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752 AS node-runtime
 
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS runtime
 
 ARG VROOM_REF=43dd7d0b8b560431eb555bf335cf4797eb7343c4
 ARG VROOM_VERSION=v1.15.0
@@ -77,6 +77,7 @@ COPY --from=builder /build/vroom/include/cxxopts/LICENSE /usr/share/licenses/vro
 COPY --from=builder /build/vroom/include/polylineencoder/LICENSE /usr/share/licenses/vroom-dependencies/polylineencoder.LICENSE
 COPY --from=builder /build/vroom/include/rapidjson/license.txt /usr/share/licenses/vroom-dependencies/rapidjson.LICENSE
 COPY --from=builder /build/vroom-express/LICENSE /usr/share/licenses/vroom-express/LICENSE
+COPY runtime-package/NPM_THIRD_PARTY_NOTICES.txt /usr/share/licenses/vroom-express-runtime/NPM_THIRD_PARTY_NOTICES.txt
 COPY --from=builder /build/vroom-express ./
 COPY runtime-package/package.json runtime-package/package-lock.json ./
 COPY config.yml ./config.yml

@@ -5,6 +5,8 @@ const supportedServiceCodeSchema = z.enum([
   'pressure-wash-flatwork',
   'soft-wash-house',
   'gutter-cleaning',
+  'roof-washing',
+  'window-cleaning',
 ]);
 
 const printableName = z
@@ -30,7 +32,7 @@ export const liveSetupInputSchema = z
       .trim()
       .regex(/^\d{5}$/u),
     timezone: z.literal('America/Chicago'),
-    enabledServiceCodes: z.array(supportedServiceCodeSchema).min(1).max(3),
+    enabledServiceCodes: z.array(supportedServiceCodeSchema).min(1).max(5),
     policyAcknowledged: z.literal(true),
   })
   .strict()
@@ -89,8 +91,9 @@ export const liveSetupReceiptSchema = z
     replayed: z.boolean(),
     commandId: z.string().uuid(),
     requestHash: z.string().regex(/^[a-f0-9]{64}$/u),
-    serviceCount: z.number().int().min(1).max(3).optional(),
-    integrationsDisabled: z.literal(10).optional(),
+    serviceCount: z.number().int().min(1).max(5),
+    availableServiceCount: z.literal(5),
+    integrationsDisabled: z.literal(11),
     serverTime: z.string(),
   })
   .strict();

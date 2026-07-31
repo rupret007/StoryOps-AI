@@ -31,7 +31,12 @@ describe('provider webhook reconciliation contracts', () => {
           currency: 'usd',
           customer_email: 'must-not-persist@example.com',
           customer_details: { phone: '+12145550123' },
-          metadata: { company_id: companyId, quote_id: quoteId },
+          metadata: {
+            company_id: companyId,
+            quote_id: quoteId,
+            checkout_purpose: 'quote_deposit',
+            checkout_attempt: '1',
+          },
         },
       },
     });
@@ -42,12 +47,55 @@ describe('provider webhook reconciliation contracts', () => {
       action: 'payment_succeeded',
       companyId,
       quoteId,
+      checkoutPurpose: 'quote_deposit',
+      checkoutAttempt: 1,
       paymentIntentId: 'pi_live_redacted',
       amountCents: 61_356,
     });
     const durableReceipt = JSON.stringify(parsed.receipt);
     expect(durableReceipt).not.toContain('must-not-persist');
     expect(durableReceipt).not.toContain('+12145550123');
+  });
+
+  it('binds invoice-balance checkout events to the exact invoice version', () => {
+    const invoiceId = '10000000-0000-4000-8000-000000000701';
+    const parsed = parseStripeReconciliation({
+      id: 'evt_invoice_balance_paid',
+      type: 'checkout.session.completed',
+      created: 1_785_259_200,
+      data: {
+        object: {
+          id: 'cs_live_invoice_balance',
+          payment_intent: 'pi_live_invoice_balance',
+          payment_status: 'paid',
+          amount_total: 48_124,
+          currency: 'usd',
+          metadata: {
+            company_id: companyId,
+            quote_id: quoteId,
+            checkout_purpose: 'invoice_balance',
+            checkout_attempt: '7',
+            invoice_id: invoiceId,
+            invoice_version: '7',
+          },
+        },
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      objectKind: 'checkout',
+      action: 'payment_succeeded',
+      checkoutPurpose: 'invoice_balance',
+      checkoutAttempt: 7,
+      invoiceId,
+      invoiceVersion: 7,
+    });
+    expect(parsed.receipt).toMatchObject({
+      checkoutPurpose: 'invoice_balance',
+      checkoutAttempt: 7,
+      invoiceId,
+      invoiceVersion: 7,
+    });
   });
 
   it('requires job metadata and authoritative paid amounts for Stripe invoices', () => {
@@ -132,7 +180,12 @@ describe('provider webhook reconciliation contracts', () => {
           id: 'pi_invalid',
           amount: 100,
           currency: 'usd',
-          metadata: { company_id: companyId, quote_id: quoteId },
+          metadata: {
+            company_id: companyId,
+            quote_id: quoteId,
+            checkout_purpose: 'quote_deposit',
+            checkout_attempt: '1',
+          },
         },
       },
     };
@@ -179,6 +232,80 @@ describe('provider webhook reconciliation contracts', () => {
     ).toThrowError(
       expect.objectContaining<Partial<ProviderReconciliationError>>({
         code: 'INVALID_TIMESTAMP',
+      }),
+    );
+    expect(() =>
+      parseStripeReconciliation({
+        ...baseEvent,
+        data: {
+          object: {
+            ...baseEvent.data.object,
+            metadata: { company_id: companyId, quote_id: quoteId },
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<ProviderReconciliationError>>({
+        code: 'MISSING_REFERENCE',
+      }),
+    );
+    expect(() =>
+      parseStripeReconciliation({
+        ...baseEvent,
+        data: {
+          object: {
+            ...baseEvent.data.object,
+            metadata: {
+              company_id: companyId,
+              quote_id: quoteId,
+              checkout_purpose: 'quote_deposit',
+            },
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<ProviderReconciliationError>>({
+        code: 'MISSING_REFERENCE',
+      }),
+    );
+    expect(() =>
+      parseStripeReconciliation({
+        ...baseEvent,
+        data: {
+          object: {
+            ...baseEvent.data.object,
+            metadata: {
+              ...baseEvent.data.object.metadata,
+              checkout_attempt: '0',
+            },
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<ProviderReconciliationError>>({
+        code: 'INVALID_REFERENCE',
+      }),
+    );
+    expect(() =>
+      parseStripeReconciliation({
+        ...baseEvent,
+        data: {
+          object: {
+            ...baseEvent.data.object,
+            metadata: {
+              company_id: companyId,
+              quote_id: quoteId,
+              checkout_purpose: 'invoice_balance',
+              checkout_attempt: '1',
+              invoice_id: '10000000-0000-4000-8000-000000000701',
+              invoice_version: 'not-an-integer',
+            },
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<ProviderReconciliationError>>({
+        code: 'INVALID_REFERENCE',
       }),
     );
   });

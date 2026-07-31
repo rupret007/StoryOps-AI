@@ -1,9 +1,11 @@
 # Texas / DFW launch checklist
 
 **Status:** launch gate, not legal advice  
-**Verified against official sources:** July 28, 2026  
+**Official-source links reviewed:** July 30, 2026; applicability is not verified  
 **Required owner:** company owner  
-**Required reviewers:** Texas attorney, Texas tax professional/CPA, insurance agent, and each applicable municipal environmental authority
+**Required reviewers:** Texas attorney, Texas tax professional/CPA, insurance
+agent, qualified safety/chemical reviewer, relevant water provider/backflow
+authority, and each applicable municipal environmental authority
 
 > **REQUIRED LEGAL REVIEW:** Every legal, tax, licensing, environmental,
 > employment, privacy, contract, and communications determination in this
@@ -12,6 +14,22 @@
 > evidence of review; it is not a legal conclusion. Revalidate the linked
 > sources at launch and at least quarterly because rules and official guidance
 > change.
+
+## Readiness labels
+
+Use exactly one label in pilot notes and customer-facing status:
+
+| Label                  | Meaning                                                                                                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NOT READY`            | A required professional, municipal, safety, provider, or recovery gate is open.                                                                                                                           |
+| `SANDBOX REHEARSED`    | The local golden path passed with synthetic fixtures. No customer was contacted, no appointment was reserved, and no money moved.                                                                         |
+| `LIVE CANARY VERIFIED` | Each provider and authenticated data-plane canary passed with retained local/provider/audit evidence. This does not resolve legal, safety, tax, insurance, or environmental gates.                        |
+| `PILOT AUTHORIZED`     | Every required professional/authority sign-off and hard gate is complete, and the owner signed the exact service area, services, price book, SOPs, providers, policies, and evidence for a bounded pilot. |
+
+StoryOps setup completion is not launch authorization. The authenticated setup
+flow creates a company in `setup` status, inactive service drafts, unpublished
+pricing/terms/retention drafts, disabled integrations, and
+`launchAuthorized = false`. Do not relabel that state as live-ready.
 
 ## Hard launch gates
 
@@ -61,6 +79,19 @@
       exceptions in its
       [door-to-door sales guidance](https://www.texasattorneygeneral.gov/consumer-protection/home-real-estate-and-travel/door-door-sales-3-day-right-rescission).
 
+- [ ] **REQUIRED AI/PRIVACY LEGAL REVIEW.** Counsel must review the actual
+      customer chat, SMS, phone, email, photo analysis, pricing, scheduling,
+      profiling, and retention uses under current Texas and federal law. The
+      Texas Attorney General says the Texas Responsible Artificial Intelligence
+      Governance Act has governed entities deploying AI in Texas since January
+      1, 2026:
+      [Texas Consumer AI Rights](https://www.texasattorneygeneral.gov/consumer-protection/file-consumer-complaint/consumer-ai-rights).
+      Its disclosure provisions are use- and actor-specific; do not infer that a
+      generic disclosure is either required or sufficient for this business.
+      Preserve counsel-approved AI notices, prohibited-use controls, human
+      escalation, and review version. This checklist is not a TRAIGA compliance
+      opinion.
+
 - [ ] Complete and sign the
       [exterior-cleaning safety checklist](./EXTERIOR-CLEANING-SAFETY-CHECKLIST.md).
       No service may be activated until its owner-approved SOP, price-book rule,
@@ -69,9 +100,30 @@
 - [ ] Complete a sandbox golden-path proof and retain the JSON result:
       `npm run demo:proof`. No live provider keys are needed.
 
+- [ ] Run `npm run eval:ai` and retain the machine-readable result. A passing
+      deterministic evaluator proves only the included fixtures. Any reported
+      integration gap remains a launch blocker until the executable boundary
+      and regression evidence exist.
+
 - [ ] Complete a backup and restore drill into a disposable local/fresh target.
       Record the backup manifest checksum, restore operator, validation results,
       recovery time, and deletion of the disposable target.
+
+- [ ] **REQUIRED WATER-SYSTEM/ENVIRONMENTAL REVIEW.** Approve the potable-water
+      connection and backflow controls for every equipment arrangement and water
+      provider served. TCEQ identifies garden hoses used with soap attachments or
+      forced into gutters/downspouts as common cross-connections:
+      [TCEQ Cross-Connection Control and Backflow Prevention](https://www.tceq.texas.gov/drinkingwater/cross-connection).
+      Record the water provider, site device/air-gap evidence, inspector/tester
+      evidence when required, and any provider-specific rule. AI must not select,
+      install, certify, or waive a backflow device.
+
+- [ ] Activate roof cleaning and window cleaning only as separately reviewed
+      services. Each needs its own price-book rules, exclusions, equipment,
+      chemical list, insurance endorsement/exclusion review, fall/electrical
+      plan, rescue plan where applicable, and field checklist. Rope-descent
+      window cleaning is outside the V1 pilot unless a qualified program proves
+      every applicable OSHA requirement.
 
 ## DFW jurisdiction gates
 
@@ -178,6 +230,12 @@ conflicting geocodes require owner review.
 - [ ] Verify driver authorization, license status, commercial/personal auto
       coverage, vehicle/trailer registration, inspection, secure chemical/equipment
       transport, spill kit, first aid, and daily equipment inspection.
+      TxDMV states that all non-farm trailers operated on public highways must be
+      registered and that title requirements vary by type and gross weight:
+      [TxDMV trailer guidance](https://www.txdmv.gov/motorists/buying-or-selling-a-vehicle/trailers).
+      **REQUIRED VEHICLE/INSURANCE LEGAL REVIEW:** confirm the actual truck,
+      trailer, weight, load, use, driver, and policy; StoryOps must not infer a
+      registration or coverage class.
 
 - [ ] Record manufacturer model/serial, manual revision, maintenance interval,
       inspection, defect/tag-out, and repair. Never let AI infer equipment safety
@@ -222,20 +280,117 @@ conflicting geocodes require owner review.
       [Texas Attorney General’s official overview](https://www.texasattorneygeneral.gov/consumer-protection/file-consumer-complaint/consumer-privacy-rights/texas-data-privacy-and-security-act).
       Do not infer exemption solely from employee count or revenue.
 
+## Provider and authenticated-data readiness
+
+The repository’s provider adapters and sandbox fixtures are not evidence that a
+real account, credential, callback, sender, calendar, payment method, or storage
+policy works. Activate one provider at a time and attach a rollback.
+
+- [ ] **Authenticated identity/RBAC/RLS canary.** Prove the intended owner,
+      dispatcher, technician, and customer identities see and mutate only their
+      authorized company/records. Prove denied cross-company and direct-DML
+      attempts. Remove the one-time bootstrap claim after setup.
+
+- [ ] **Core field-media canary.** As the assigned live user, prove private
+      immutable upload, actual-byte read-back/checksum, trusted finalization,
+      exact replay, denied overwrite, and blocked visit completion when any
+      dependency fails. The optional signed-target health card does not certify
+      this core path.
+
+- [ ] **Inbound communications canary.** For every enabled web/chat/email/SMS/
+      voice path, retain signed-request or trusted-ingress evidence, duplicate
+      replay result, normalized lead/thread/message/consent IDs, rate-limit
+      result, and an opt-out/suppression proof.
+
+- [ ] **Outbound communications canary.** Retain consent snapshot, exact
+      recipient/purpose, approved send window, provider acceptance ID, signed
+      delivery result, duplicate/ambiguous-timeout behavior, and suppression
+      test. Live post-service marketing email is disabled in V1; do not work
+      around that boundary.
+
+- [ ] **Stripe canary.** Use provider test mode. Prove Checkout/Invoice creation,
+      signed webhook reconciliation, duplicate event handling, and that a browser
+      redirect does not mark a payment paid. Prove exact-approved refund
+      execution and ambiguous-result reconciliation without creating a new
+      idempotency key.
+
+- [ ] **Calendar/maps/NWS/VROOM canaries.** Prove the one allowlisted calendar,
+      geocode precision/jurisdiction review, current weather observation and
+      alert handling, route result plus unassigned-job handling, and stale/
+      unavailable failure behavior. A missing result must remain unknown.
+
+- [ ] **Email/accounting/export canaries.** Prove only the live capabilities
+      actually enabled. Verify bounce/complaint/unsubscribe handling before any
+      marketing email, and reconcile QuickBooks export rows by stable invoice ID
+      and checksum. Manual export is not provider synchronization.
+
+## Records and evidence schedule
+
+- [ ] **REQUIRED LEGAL/TAX/INSURANCE REVIEW.** Adopt a written schedule by record
+      class; do not use one blanket period. Include entity/permit, contract/terms,
+      quote/pricing snapshot, tax, payment/refund, consent/opt-out, customer
+      communication, photo/signature, employee/training, SDS/chemical, equipment/
+      vehicle, wastewater/disposal, incident/near-miss, AI trace, approval, audit,
+      webhook/idempotency, and backup evidence.
+
+- [ ] Texas Comptroller permit guidance says permit holders must keep adequate
+      records and describes a minimum four-year audit horizon:
+      [Texas Sales and Use Tax Permit FAQ](https://comptroller.texas.gov/taxes/sales/faq/permit.php).
+      The tax reviewer must identify the exact records and any longer requirement.
+
+- [ ] **REQUIRED EMPLOYMENT/SAFETY LEGAL REVIEW.** Determine OSHA and Texas injury
+      recordkeeping/reporting applicability even if routine OSHA logs may be
+      partially exempt. OSHA states that covered employers must report specified
+      fatalities and severe injuries even when partially exempt:
+      [OSHA severe-injury reporting](https://www.osha.gov/report/).
+      Configure deadlines only from the reviewed determination; AI may remind but
+      may not decide reportability or submit.
+
+- [ ] Retention expiry must place records into a review queue. Legal hold,
+      unresolved incident, chargeback, tax audit, insurer request, or regulator
+      direction blocks automated deletion. Destructive changes require exact human
+      approval and a recoverable audit trail.
+
 ## Production readiness sign-off
 
-| Evidence                                             | Owner | Reviewer                            | Date | Link / record ID |
-| ---------------------------------------------------- | ----- | ----------------------------------- | ---- | ---------------- |
-| Entity, assumed name, and contracts                  |       | Texas attorney                      |      |                  |
-| Tax classification, permit, and price-book tax rules |       | Texas CPA/tax professional          |      |                  |
-| Municipality/permit matrix                           |       | Attorney + municipal authorities    |      |                  |
-| Wastewater and chemical program                      |       | Environmental/safety reviewer       |      |                  |
-| Insurance binders and exclusions                     |       | Licensed insurance agent + attorney |      |                  |
-| Communications/recording/marketing policy            |       | Attorney                            |      |                  |
-| Privacy/retention/breach plan                        |       | Attorney/security reviewer          |      |                  |
-| Sandbox golden-path proof                            |       | Owner                               |      |                  |
-| Backup/restore drill                                 |       | Owner/technical operator            |      |                  |
-| Live-provider health and webhook validation          |       | Owner/technical operator            |      |                  |
+| Evidence                                             | Owner | Reviewer                             | Date | Link / record ID |
+| ---------------------------------------------------- | ----- | ------------------------------------ | ---- | ---------------- |
+| Entity, assumed name, and contracts                  |       | Texas attorney                       |      |                  |
+| Tax classification, permit, and price-book tax rules |       | Texas CPA/tax professional           |      |                  |
+| Municipality/permit matrix                           |       | Attorney + municipal authorities     |      |                  |
+| Wastewater and chemical program                      |       | Environmental/safety reviewer        |      |                  |
+| Insurance binders and exclusions                     |       | Licensed insurance agent + attorney  |      |                  |
+| Communications/recording/marketing policy            |       | Attorney                             |      |                  |
+| Privacy/retention/breach plan                        |       | Attorney/security reviewer           |      |                  |
+| Texas AI-use review and customer notices             |       | Texas attorney                       |      |                  |
+| Potable-water/backflow program                       |       | Water provider/safety reviewer       |      |                  |
+| Roof/window service-specific authorization           |       | Safety + insurance + legal reviewers |      |                  |
+| Sandbox golden-path proof                            |       | Owner                                |      |                  |
+| AI evaluator result and gap disposition              |       | Owner/technical operator             |      |                  |
+| Backup/restore drill                                 |       | Owner/technical operator             |      |                  |
+| Live-provider health and webhook validation          |       | Owner/technical operator             |      |                  |
+| Auth/RLS and core field-media canaries               |       | Owner/technical operator             |      |                  |
 
 No live launch is approved until every required reviewer signs and every hard
 gate has attached evidence in the approval/audit trail.
+
+## Official source register
+
+These source links were reviewed on **July 30, 2026**, but the repository does
+not archive a complete copy of every page or establish applicability. Reopen
+each source at sign-off; a review date is not proof that a rule still applies
+to the actual facts.
+
+| Topic                                       | Primary source                                                                                                                                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Texas cleaning-service tax                  | [Texas Comptroller — Cleaning and Janitorial Services](https://comptroller.texas.gov/taxes/publications/94-111.php)                                                                                          |
+| Texas sales-tax permit/records              | [Texas Comptroller — Sales and Use Tax Permit FAQ](https://comptroller.texas.gov/taxes/sales/faq/permit.php)                                                                                                 |
+| Texas consumer cancellation                 | [Texas Attorney General — Door-to-Door Sales and 3-Day Right of Rescission](https://www.texasattorneygeneral.gov/consumer-protection/home-real-estate-and-travel/door-door-sales-3-day-right-rescission)     |
+| Texas AI governance                         | [Texas Attorney General — Consumer AI Rights](https://www.texasattorneygeneral.gov/consumer-protection/file-consumer-complaint/consumer-ai-rights)                                                           |
+| Texas privacy                               | [Texas Attorney General — Texas Data Privacy and Security Act](https://www.texasattorneygeneral.gov/consumer-protection/file-consumer-complaint/consumer-privacy-rights/texas-data-privacy-and-security-act) |
+| Workers’ compensation/non-subscriber duties | [Texas Department of Insurance — Employer Resources](https://www.tdi.texas.gov/wc/employer/)                                                                                                                 |
+| Trailer registration/title                  | [TxDMV — Trailers](https://www.txdmv.gov/motorists/buying-or-selling-a-vehicle/trailers)                                                                                                                     |
+| Cross-connection/backflow                   | [TCEQ — Cross-Connection Control and Backflow Prevention](https://www.tceq.texas.gov/drinkingwater/cross-connection)                                                                                         |
+| Fort Worth mobile cleaning                  | [City of Fort Worth — Mobile Commercial Cosmetic Cleaning](https://www.fortworthtexas.gov/departments/environmental-services/environmental-quality/stormwater-quality/powerwash)                             |
+| Dallas wash water                           | [City of Dallas — Pavement Washing Tips](https://dallascityhall.com/departments/waterutilities/stormwater-operations/PublishingImages/Keep%20Stormwater%20Clean%20Feb%2023_2021.pdf)                         |
+| Severe workplace incidents                  | [OSHA — Report a Fatality or Severe Injury](https://www.osha.gov/report/)                                                                                                                                    |

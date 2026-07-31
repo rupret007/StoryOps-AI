@@ -1,140 +1,104 @@
 # StoryOps AI current status
 
-**Updated:** 2026-07-28  
-**Branch:** `codex/storyops-v1`  
-**Phase:** V1 vertical slice complete; external launch evidence pending  
-**Overall verdict:** **YELLOW — implementation complete, not approved for live customer operations**  
+**Updated:** 2026-07-30  
+**Branch:** `codex/exterior-services-pilot-v1.1`  
+**Phase:** V1.1 source hardening; final source-freeze verification pending  
+**Overall verdict:** **YELLOW — sandbox/operator rehearsal only; live customer
+operations are not authorized**  
 **Owner:** company owner  
 **Technical owner:** principal engineer
 
-This file is updated in place and states current posture. Command transcripts
-and screenshots belong in `BUILD_REPORT.md`; durable history belongs in Git and
-the audit/incident stores.
+This file states the current operating posture. Exact command results,
+screenshots, hashes, backup evidence, and commit provenance belong in
+[`BUILD_REPORT.md`](../BUILD_REPORT.md) after final source-freeze verification.
+Durable history belongs in Git and the application audit/incident stores.
 
 ## Executive status
 
-The repository implements the coherent exterior-services golden path, domain
-and policy controls, Supabase schema/RLS/RPC data plane, guarded AI office,
-sandbox and opt-in live provider adapters, normalized ingress, durable webhook
-reconciliation, PWA/offline behavior, infrastructure scripts, tests, and
-operating documentation. Field completion now fails closed on checklist,
-before/after PNG evidence, signature, stopped time, notes, material/SDS, and
-incident state. Provider-proven paid invoices can queue consent-aware review/
-referral follow-up and create source-bound recurring plans without claiming
-provider delivery.
+StoryOps AI V1.1 implements a single-company service-business kernel and one
+exterior-cleaning industry pack. The pack covers pressure/soft washing,
+gutter/downspout cleaning, roof washing, exterior window cleaning, and related
+add-ons. The kernel covers CRM/property records, deterministic pricing,
+approvals, quote/portal, dispatch, offline field work, billing truth, AI
+governance, integrations, audit, incidents, and recurring follow-up.
 
-The browser has two explicit data modes. Default sandbox mode uses only
-synthetic `DemoState` persisted in IndexedDB. Supabase mode uses magic-link
-authentication, derives the role from an active membership, loads a
-role-projected workspace through `get_storyops_workspace`, and sends ordinary
-finite workspace mutations through `execute_storyops_command`. First-company
-setup and field-media finalization use separate, narrower guarded boundaries;
-the generic command RPC explicitly rejects `media.register`. Offline live
-commands retain their canonical payload, request hash, optimistic version, and
-command ID for replay. Visit media/signature bytes, stable UUIDs, SHA-256
-hashes, exact finalization work, and dependencies persist in the scoped
-IndexedDB packet; completion remains pending until Storage read-back and the
-trusted media/completion RPCs reconcile.
+Current source boundaries include:
 
-Dedicated server workflows cover setup, estimating, quote-to-invoice
-transitions, exact approved refunds, post-service outbound, field-media
-finalization, normalized ingress, and provider webhook reconciliation.
-`estimate-workflow` loads authoritative evidence, the effective price book,
-derived travel, customer tax state, and an approved terms record before
-atomically creating an estimate, lines, quote, approval, and replay receipt.
-`golden-path` advances an accepted quote through deposit checkout,
-provider-confirmed payment, checked booking, field completion, and invoice
-issuance. The local terms record is a synthetic test fixture and no external
-provider canary has been run.
+- quote acceptance with a typed signer and affirmative acknowledgement of the
+  exact quote version, terms version, and total, persisted as append-only
+  server evidence;
+- an owner-only bounded, paginated, redacted audit metadata feed that does not
+  expose raw payloads or actor IDs and is not represented as backup/integrity
+  proof;
+- distinct Stripe Checkout Session (`cs_*`) and PaymentIntent (`pi_*`)
+  identities, retirement of failed/expired checkout attempts, and quarantine
+  of a late success from a retired attempt;
+- payment-allocation conflicts and collection holds whenever verified funds
+  cannot be safely applied;
+- an owner-only exact resolver for an approved conflict only when the verified
+  amount still equals the current invoice balance and all server versions
+  remain current; and
+- scoped IndexedDB offline packets whose command/media identities, hashes,
+  dependencies, and server reconciliation prevent optimistic completion; and
+- an owner-only finite company lifecycle command and recovery projection:
+  `setup` remains closed until baseline activation, `paused` blocks new
+  operational/provider work, and `active` resumes only after exact server
+  readback. Pending device packets are preserved across the pause.
 
-The V1 release is not yet authorized for real customers. No hosted environment,
-real provider credentials, external canary, or production restore drill was
-provided or exercised. Required DFW legal, tax, insurance, environmental,
-communications, privacy/retention, and safety reviews remain unsigned, and the
-root-project distribution license is undecided.
+The source also contains guarded setup, authoritative estimating,
+quote-to-invoice transitions, field-media finalization, normalized ingress,
+provider webhook reconciliation, approved refunds, post-service outbound, and
+AI Office specialists. AI may draft, classify, summarize, and call
+least-privilege tools, but it may not invent measurements, prices,
+availability, payment state, regulations, or chemical/safety instructions.
+
+Final release evidence is not yet frozen. No current test count, migration
+count, screenshot set, backup fingerprint, image hash, proof timestamp, or
+release commit is asserted in this status file.
 
 ## Readiness matrix
 
-| Area                              | Verdict | Evidence / exact boundary                                                                                                                                                                                             |
-| --------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Responsive product shell          | GREEN   | Owner/dispatcher/technician/customer views and complete sandbox golden-path interactions                                                                                                                              |
-| Deterministic pricing             | GREEN   | Decimal engine, versioned rules, evidence references, tax/deposit/margin/approval flags                                                                                                                               |
-| Authenticated live estimating     | YELLOW  | Server-owned evidence/terms/price snapshot, atomic estimate/quote/approval and replay pass locally; hosted/legal canary pending                                                                                       |
-| Quote-to-invoice live workflow    | YELLOW  | Accepted quote, deposit truth, checked booking, field completion and invoice contracts pass locally; provider canary pending                                                                                          |
-| Authenticated Supabase workspace  | YELLOW  | Magic-link auth, server-derived role, role projection, finite command RPC, RLS; hosted auth canary pending                                                                                                            |
-| Authenticated first-company setup | YELLOW  | Protected invitation claim, guarded setup RPC, exact replay/conflict, takeover/direct-DML denial, and draft-disabled artifacts pass locally; hosted admin/Auth canary pending                                         |
-| Offline PWA field workflow        | YELLOW  | Scoped IndexedDB command/media packet, ordered idempotent replay, durable Storage read-back, retained conflicts, and non-optimistic completion pass locally; hosted/device-loss recovery pending                      |
-| AI office policy                  | GREEN   | Typed specialists/tools, structured output, injection defense, exact approvals, traces, replay                                                                                                                        |
-| AI fact/pricing authority         | GREEN   | Edge ignores client fact values; server loads company facts and recalculates stored estimates deterministically                                                                                                       |
-| AI operational budgets            | GREEN   | Durable user/company/token windows and redacted tracing are implemented                                                                                                                                               |
-| Exact approved refund execution   | YELLOW  | Owner-only Edge executor, atomic lease, state/amount revalidation, receipt and replay exist; Stripe canary pending                                                                                                    |
-| Provider sandbox suite            | GREEN   | No-key, idempotent, explicit sandbox receipts and health contracts                                                                                                                                                    |
-| Normalized lead intake            | YELLOW  | Signed web/chat/email and Twilio SMS/voice normalize to lead/thread/message/consent; public callback canary pending                                                                                                   |
-| Provider webhook reconciliation   | YELLOW  | Verified Stripe/Twilio/email events atomically update payment/invoice/delivery/consent state; canary pending                                                                                                          |
-| Photo-assisted scope              | YELLOW  | Evidence/unknown contracts, scoped Storage, and gated vision Edge exist; hosted media/vision canary pending                                                                                                           |
-| OpenAI live adapter               | YELLOW  | Node/Edge Agents SDK, explicit kill switches and budgets exist; credential/eval/spend canary pending                                                                                                                  |
-| Twilio/email live outbound        | YELLOW  | Twilio post-service sends use a no-resend unknown-submission quarantine plus signed delivery/STOP gates; live marketing email is disabled until signed unsubscribe/suppression; account/legal/canary pending          |
-| Stripe live billing               | YELLOW  | Checkout/Invoicing/refund, customer mapping, amount validators, signed reconciliation; account/tax/canary pending                                                                                                     |
-| Google Calendar/maps              | YELLOW  | Allowlisted calendar, OAuth refresh, validated free/busy/events and geocoding; credential/quota/canary pending                                                                                                        |
-| NWS/VROOM live reads              | YELLOW  | Response validation, finite timeouts and route completeness checks exist; production endpoints/canary pending                                                                                                         |
-| Core Supabase field media         | YELLOW  | Local assigned-user actual-PNG/tamper/replay/overwrite/completion canary passes; mandatory private RLS + Edge byte/magic + service attestation path still needs hosted device-loss/quota proof                        |
-| Customer scope-photo upload       | YELLOW  | Direct customer Storage writes are closed until a bounded quota/rate/lifecycle finalizer and orphan cleanup exist; staff-assisted intake remains manual                                                               |
-| Optional signed Storage targets   | YELLOW  | Separately named two-switch server adapter with scoped expiring targets; no live credential/canary                                                                                                                    |
-| QuickBooks integration            | YELLOW  | Formula-safe, checksummed CSV export only; accountant mapping/import acceptance pending                                                                                                                               |
-| Integration health                | YELLOW  | Optional-provider probes are separate from core field-media readiness; authenticated owner/dispatcher budgeted checks exist, hosted providers are unproven                                                            |
-| Observability                     | YELLOW  | Static-runtime logs/health and redacted durable traces exist; production collector/dashboards/alerts pending                                                                                                          |
-| Backup/restore                    | YELLOW  | Real local 3-file backup with all 12 migrations and three actual private-bucket PNG objects plus checksum/target restore dry-run passed; production encryption, off-site retention and isolated restore drill pending |
-| DFW launch/compliance             | YELLOW  | Professional legal/tax/insurance/environmental/safety/privacy sign-offs are manual hard gates                                                                                                                         |
-| Root-project license              | YELLOW  | Upstream notices/pins are recorded; StoryOps AI distribution license has not been selected                                                                                                                            |
-| Deployment                        | YELLOW  | No deployment was requested or performed; TLS, secret manager, monitoring and rollback proof remain manual                                                                                                            |
+| Area                            | Current source posture                                                                                                                                                                         | Live boundary                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Exterior-services product slice | Implemented for sandbox/operator rehearsal; final release suite pending                                                                                                                        | Operator validates every active service, formula, minimum, duration, exclusion, package, travel ZIP, tax, deposit, and margin rule |
+| Deterministic estimating        | Decimal/versioned rule boundary implemented; final source-freeze proof pending                                                                                                                 | Hosted authoritative-data canary and operator/legal/tax review                                                                     |
+| Quote and customer portal       | Published-quote projection plus exact typed/affirmative acceptance boundary implemented                                                                                                        | Hosted customer isolation, expiry/replay, terms, accessibility, and delivery canary                                                |
+| Owner audit view                | Bounded paginated redacted metadata feed implemented                                                                                                                                           | Hosted authorization/export/retention review; never treat it as backup or cryptographic integrity proof                            |
+| Identity/RBAC/tenant isolation  | Auth/RLS/RPC contracts implemented                                                                                                                                                             | Hosted cross-role and cross-company canary, invitation/offboarding/session procedure                                               |
+| First-company setup             | Protected invitation and guarded one-company setup boundary implemented; setup-only workspace remains operationally closed until reviewed baseline activation                                  | Hosted admin/Auth canary; generated artifacts remain draft/inactive/disabled and setup alone is never launch authority             |
+| Company pause/recovery          | Owner-only finite active/paused control, immutable receipt/audit history, active-company mutation/provider gate, and minimal read-only recovery implemented                                    | Hosted concurrency, already-issued-token expiry, provider reconciliation, multi-device queue, alerting, and incident rehearsal     |
+| Offline field workflow          | Scoped command/media replay and fail-closed completion implemented; pending packets survive pause and expose metadata-only recovery diagnostics                                                | Hosted device-loss, quota, conflict, Storage, recovery, pause/reactivation, and update/rollback canary                             |
+| AI Office                       | Guarded specialists, typed tools, approvals, budgets, injection defenses, and redacted traces implemented                                                                                      | Model/privacy review, staged eval/canary, monitoring, kill switch, and incident owner; no scheduler is claimed configured          |
+| Lead intake and communications  | Normalization, consent/opt-out, signatures, idempotency, ambiguity, and reconciliation boundaries implemented                                                                                  | Owned identities, approved language, public callback and delivery/STOP/bounce/complaint canaries                                   |
+| Stripe billing                  | Checkout/invoice/refund, `cs_*`/`pi_*` separation, attempt retirement, allocation quarantine, holds, and exact resolution implemented                                                          | Account/tax review plus signed webhook, replacement/late-success, amount, idempotency, and reconciliation canaries                 |
+| Calendar/maps/weather/routing   | Guarded provider interfaces and durable evidence contracts implemented                                                                                                                         | Reviewed credentials/endpoints/quotas and fresh provider canaries                                                                  |
+| Provider/launch authority       | Trusted environment generations, finite owner activation/disable, append-only launch authorization/revocation, dynamic health checks, and live-start/database booking gates implemented        | Hosted deployment probes, real capability canaries, trusted field-media/restore proofs, and owner launch rehearsal                 |
+| Photo-assisted scope            | Bounded evidence/unknown contracts and private Storage workflows implemented                                                                                                                   | Hosted media/privacy/content process, quota/lifecycle, signed-link expiry, and representative-media canary                         |
+| Core field media                | Private Storage/RLS/Edge finalization boundary implemented                                                                                                                                     | Hosted Auth/device-loss/quota/tamper/recovery proof                                                                                |
+| Customer photo upload           | Authenticated customer/staff requests use bounded private signed uploads, exact byte/hash finalization, tenant/customer/asset binding, retention state, and orphan cleanup                     | Hosted abuse/quota/content controls, cleanup scheduling/alerting, customer isolation, and representative upload/recovery canary    |
+| Materials and SDS               | Exact configuration-bound PDF checksum workflow, private write-once upload, server byte/PDF/SHA-256 attestation, immutable document versions, and publication/baseline/field gates implemented | Adopted manufacturer documents/SOPs, qualified review, hosted private-Storage/tamper/offline-device canary, retention/legal hold   |
+| QuickBooks                      | Formula-safe checksummed export boundary implemented                                                                                                                                           | Accountant mapping/import acceptance; no live ledger mutation                                                                      |
+| Backup/restore                  | Recovery tooling and V1.1 object contract present                                                                                                                                              | Final local source-freeze artifact pending; hosted encryption, off-site retention, isolated restore drill, RPO/RTO remain open     |
+| Observability                   | Runtime health, logs, traces, incidents, and runbooks present                                                                                                                                  | Production collector, dashboards, alerts, paging, on-call, and rollback evidence                                                   |
+| DFW launch/compliance           | Official-source engineering checklists present                                                                                                                                                 | Professional and jurisdiction-specific legal/tax/insurance/environmental/safety/privacy/communications sign-offs                   |
+| Distribution license            | Upstream notices and third-party inventory preserved                                                                                                                                           | Select and record StoryOps AI's root license before distribution                                                                   |
+| Release evidence                | **PENDING**                                                                                                                                                                                    | Freeze source, run every required command, capture fresh screenshots/proof, complete independent audit, and create local commit    |
+| Deployment                      | Not performed                                                                                                                                                                                  | Reviewed hosting, TLS, secret manager, access controls, monitoring, backup, and rollback proof                                     |
 
-## Non-negotiable manual launch gates
+## Release verification status
 
-- Provision a reviewed hosted Supabase environment, configure public
-  auth/redirect settings, apply the locked migrations, and run cross-role,
-  offline-replay, Storage, and customer-portal canaries. The sandbox role
-  selector must never be used as production identity.
-- A trusted administrator must place the exact intended company UUID in a new
-  owner's protected `app_metadata.storyops_bootstrap_company_id` invitation
-  claim. After the owner invokes `complete_storyops_setup`, the administrator
-  must verify its receipt/audit event and draft-disabled artifacts, remove the
-  claim, and require a fresh session. Setup completion does not activate
-  services, price books, terms, retention, providers, or launch authority.
-- Store restricted credentials in a production secret manager and activate one
-  provider at a time. For each provider, record validated callbacks/signatures,
-  replay/duplicate behavior, current consent, rate/spend limits, timeout/retry
-  behavior, authoritative reconciliation, kill switch, and one owner-approved
-  low-risk canary. No such external canary has run.
-- If photo-assisted automation is enabled, prove the private bucket, upload
-  constraints, signed-URL expiry, content/malware operating process, reviewed
-  model, uncertainty threshold, and human escalation with representative
-  staged media.
-- Complete an encrypted backup plus restore drill, including Storage if used,
-  approve the retention/deletion schedule and legal-hold path, and record actual
-  RPO/RTO.
-- Complete every required sign-off in
-  `docs/launch/DFW-LAUNCH-CHECKLIST.md` and adopt reviewed, site-specific
-  safety/environmental/chemical SOPs using
-  `docs/launch/EXTERIOR-CLEANING-SAFETY-CHECKLIST.md`.
-- Establish production TLS, secrets manager, database/network restrictions,
-  monitoring/alerts, on-call/incident ownership, privacy request channel,
-  retention jobs, and deployment/rollback evidence.
-- Choose and document the StoryOps AI root-project license before any
-  distribution. Preserve `LICENSE.atomic-crm.md`, `NOTICE.md`,
-  `THIRD_PARTY.md`, and `NPM_THIRD_PARTY_NOTICES.txt`.
+**Pending final source-freeze verification.** Earlier V1 counts, hashes,
+screenshots, backup artifacts, and commit provenance are not V1.1 release
+evidence.
 
-## Release verification
-
-The authoritative final command results, screenshot paths, package audit,
-database verification, container evidence, backup proof, and commit provenance
-are recorded in `BUILD_REPORT.md`. The machine-readable full proof is
-`artifacts/demo-proof-final.json`. Do not change this verdict based on an
-unrecorded local run.
-
-Minimum required release commands:
+The minimum final command set is:
 
 ```bash
 npm ci
+npm audit --audit-level=high
+npm run install:vroom-runtime
+npm audit --prefix infra/vroom/runtime-package --audit-level=high
+npm run format:check
 npm run licenses:check
 npm run lint
 npm run typecheck
@@ -144,29 +108,72 @@ npm run test:infra
 npm run build
 npm run test:e2e
 npm run test:supabase -- --reset
-npm run demo:proof -- --report artifacts/demo-proof-final.json --with-vroom
+npm run eval:ai
+npm run demo:proof -- --report artifacts/demo-proof-v1.1-YYYYMMDD-HHMMSS.json --with-vroom
 ```
 
-`npm run check:edge` requires Docker. Supabase release validation also requires
-Docker:
+The proof artifact must use a new filename. Docker/container checks,
+backup/restore, schema/migration mirrors, credential/placeholder scans, fresh
+screenshots, and an independent post-freeze audit must be recorded as well. A
+missing dependency, skipped required test, unavailable browser, or partial run
+is an error, not GREEN.
 
-```bash
-npx --yes supabase@2.110.0 start
-npm run test:supabase -- --reset
-npx --yes supabase@2.110.0 stop
-```
+## Non-negotiable launch gates
 
-An error, skipped E2E run, missing browser, or unavailable required Docker
-daemon remains **ERROR**, not GREEN. A provider with no real credential/canary
-remains a manual **YELLOW** launch gate even when mocked contracts pass.
+- Complete and reconcile final source-freeze verification to one local release
+  commit. Do not push or deploy as part of this release task.
+- Provision a reviewed hosted Supabase environment and prove authentication,
+  cross-role/cross-company isolation, private Storage, portal isolation,
+  offline recovery, backup/restore, observability, and rollback.
+- Use the protected administrator invitation in
+  [`docs/runbooks/LIVE_SETUP_RUNBOOK.md`](runbooks/LIVE_SETUP_RUNBOOK.md).
+  Remove the bootstrap claim after verifying the setup receipt and audit event.
+  Setup does not publish or activate services, price books, terms, retention,
+  providers, or launch authority; the ordinary workspace stays closed until
+  the reviewed operating baseline activates the company.
+- Rehearse the owner-only company kill switch with a second device and pending
+  offline packets. Prove that new provider/automation/field/media work stops,
+  already accepted provider truth and safe orphan cleanup reconcile, recovery
+  diagnostics reveal no customer content, and reactivation reloads the full
+  server workspace before queue replay.
+- Store restricted credentials in a production secret manager. Activate one
+  provider at a time and record signatures, duplicates, consent/opt-out,
+  delivery, rate/spend limits, retry/timeout behavior, reconciliation, kill
+  switch, and one owner-approved low-risk canary.
+- Prove the exact Stripe checkout replacement, late-retired-session success,
+  allocation-conflict, collection-hold, and owner-resolution behaviors against
+  the reviewed staging account before moving real funds.
+- Complete an encrypted backup and isolated database/Storage restore drill,
+  approve retention/deletion/legal-hold procedures, and measure RPO/RTO.
+- Complete every required sign-off in
+  [`docs/launch/DFW-LAUNCH-CHECKLIST.md`](launch/DFW-LAUNCH-CHECKLIST.md) and
+  adopt reviewed, site-specific safety/environmental/chemical SOPs using
+  [`docs/launch/EXTERIOR-CLEANING-SAFETY-CHECKLIST.md`](launch/EXTERIOR-CLEANING-SAFETY-CHECKLIST.md).
+- Establish TLS, secrets, database/network restrictions, monitoring/alerts,
+  on-call/incident ownership, privacy-request handling, retention jobs,
+  capacity/rate/spend limits, and deployment/rollback evidence.
+- Select the StoryOps AI root-project license before distribution and preserve
+  `LICENSE.atomic-crm.md`, `NOTICE.md`, `THIRD_PARTY.md`, and
+  `NPM_THIRD_PARTY_NOTICES.txt`, plus
+  `infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt` with the optional
+  routing image.
+
+Official source links in the DFW and safety checklists have been reviewed, but
+their applicability has not been verified. The checklists are engineering aids,
+not legal, tax, environmental, insurance, communications, privacy, or safety
+approval.
 
 ## Current operating rule
 
-Until the manual gates above are signed, use StoryOps with synthetic data and
-sandbox providers only. Supabase mode may be used against the local synthetic
-stack for role/RLS/RPC verification. Keep every live enable flag false. AI may
-draft, inspect, calculate through trusted server tools, and propose. The owner
-retains legal, safety, chemical, environmental, insurance, tax, vendor, bank,
-destructive, and live-customer commitments. Any uncertainty that affects
+Until the release evidence and manual gates above are closed, use StoryOps only
+with synthetic data and sandbox providers. Local Supabase mode may be used for
+synthetic RLS/RPC/Storage verification. Keep every live enable flag false.
+
+AI may draft, inspect, calculate through trusted server tools, and propose. The
+owner retains legal, safety, chemical, environmental, insurance, tax, vendor,
+bank, destructive, and live-customer commitments. Any uncertainty affecting
 people, money, consent, scope, availability, or provider state stops the
 affected action.
+
+No push, deployment, purchase, provider activation, customer contact, or secret
+exposure is authorized by this status.

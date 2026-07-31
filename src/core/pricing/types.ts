@@ -5,7 +5,10 @@ import type {
   ISODateTime,
   Money,
   PriceBook,
+  PricingAttribute,
   PricingUnit,
+  ServicePackageDefinition,
+  ServicePackageTier,
 } from '@/domain';
 
 export interface RequestedAddOn {
@@ -16,7 +19,7 @@ export interface RequestedAddOn {
 export interface RequestedService {
   serviceCode: string;
   quantity: DecimalString;
-  attributes: Readonly<Partial<Record<'stories' | 'surface' | 'soil' | 'access' | 'risk', string>>>;
+  attributes: Readonly<Partial<Record<PricingAttribute, string>>>;
   addOns: readonly RequestedAddOn[];
   sourceMeasurementIds: readonly DomainId[];
 }
@@ -36,8 +39,21 @@ export interface PricingRequest {
   discount: DiscountRequest;
   customerTaxExempt: boolean;
   manualPriceAdjustment?: Money;
-  scopeEvidenceDisposition?: 'usable_for_scope' | 'human_review_required' | 'insufficient';
+  scopeEvidenceDisposition?:
+    'usable_for_scope' | 'human_review_required' | 'insufficient' | 'not_applicable';
   calculatedAt: ISODateTime;
+}
+
+export interface PackageAddOnSelection {
+  serviceCode: string;
+  addOnCode: string;
+}
+
+export interface PackagePricingRequest extends Omit<PricingRequest, 'services'> {
+  packageDefinition: ServicePackageDefinition;
+  measuredServices: readonly RequestedService[];
+  selectedOptionalServiceCodes: readonly string[];
+  selectedOptionalAddOns: readonly PackageAddOnSelection[];
 }
 
 export interface PricingLine {
@@ -69,7 +85,8 @@ export interface PricingIssue {
     | 'UNKNOWN_ADD_ON'
     | 'UNKNOWN_TRAVEL_ZONE'
     | 'DISCOUNT_INVALID'
-    | 'EVIDENCE_REVIEW_REQUIRED';
+    | 'EVIDENCE_REVIEW_REQUIRED'
+    | 'PACKAGE_SCOPE_INVALID';
   message: string;
   serviceCode?: string;
 }
@@ -103,4 +120,12 @@ export interface PricingResult {
   priceBookId: DomainId;
   priceBookVersion: string;
   calculatedAt: ISODateTime;
+}
+
+export interface PackagePricingResult extends PricingResult {
+  packageCode: string;
+  packageTier: ServicePackageTier;
+  pricedServiceCodes: readonly string[];
+  selectedOptionalServiceCodes: readonly string[];
+  selectedOptionalAddOns: readonly PackageAddOnSelection[];
 }
