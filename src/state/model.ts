@@ -300,6 +300,48 @@ export interface DemoTrace {
   promptVersion: string;
 }
 
+export interface DemoShowcaseCheckpoint {
+  id:
+    | 'owner-dashboard'
+    | 'lead-qualification'
+    | 'photo-assist'
+    | 'quote-and-terms'
+    | 'dispatch-and-route'
+    | 'field-closeout';
+  title: string;
+  role: AppRole[];
+  status: 'complete' | 'current' | 'blocked';
+  summary: string;
+  detail: string;
+  actions: string[];
+  actionLabel?: string;
+  href: string;
+  requiresApproval: boolean;
+  evidenceSources: string[];
+}
+
+export interface DemoShowcaseState {
+  id: 'showcase-v1.2';
+  source: 'deterministic_local_fixture';
+  enabled: boolean;
+  badge: 'DEMO';
+  route: 'showcase';
+  generatedAt: string;
+  checkpoints: DemoShowcaseCheckpoint[];
+  completeCount: number;
+  uncertainty: string[];
+  whatIsNext: DemoShowcaseCheckpoint | undefined;
+}
+
+export interface DemoShowcaseBadge {
+  label: 'DEMO DATA';
+  environment: 'local';
+  state: 'sandbox';
+  scope: 'DFW Exterior Services pilot';
+  policyBoundaries: string[];
+  ownerNotice: string;
+}
+
 export interface DemoAuditEvent {
   id: string;
   time: string;
@@ -893,6 +935,7 @@ export interface DemoState {
   reviewRequested: boolean;
   referralInvited: boolean;
   recurringPlanActive: boolean;
+  showcase?: DemoShowcaseState;
 }
 
 export interface StoryOpsActions {
@@ -918,6 +961,9 @@ export interface StoryOpsActions {
     reviewReference: string;
   }): Promise<CompanyLaunchAuthorizationReceipt | undefined>;
   resetDemo(): void;
+  resetShowcaseData(): void;
+  getShowcaseTourState(): DemoShowcaseState;
+  getShowcaseBadge(): DemoShowcaseBadge;
   requestMagicLink(email: string): Promise<void>;
   signOut(): Promise<void>;
   clearThisDevice(): Promise<void>;

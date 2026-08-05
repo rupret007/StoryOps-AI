@@ -72,8 +72,10 @@ import type {
   DemoApproval,
   DemoAuditEvent,
   DemoEstimate,
+  DemoShowcaseBadge,
   DemoIncident,
   DemoState,
+  DemoShowcaseState,
   DemoToast,
   DemoTrace,
   DemoVisit,
@@ -119,6 +121,7 @@ import {
   savePersistedState,
 } from './persistence';
 import { createCompletionSignaturePng } from './completionSignature';
+import { deriveShowcaseManifest } from '@/core/pilot/showcase';
 
 interface StoryOpsContextValue {
   state: DemoState;
@@ -3108,6 +3111,57 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
     }
     void clearPersistedState();
     setState({ ...createDemoState(), hydrated: true, online: navigator.onLine });
+  }, []);
+
+  const resetShowcaseData = useCallback(() => {
+    if (stateRef.current.dataMode === 'supabase') {
+      setState((current) =>
+        withToast(
+          current,
+          'Showcase reset unavailable in live mode',
+          'Live providers, queue state, and recorded workspace cannot be deterministically reset through sandbox replay.',
+        ),
+      );
+      return;
+    }
+    void clearPersistedState();
+    setState((current) => ({
+      ...createDemoState(),
+      hydrated: true,
+      online: navigator.onLine,
+      toasts: current.toasts,
+      role: 'owner',
+    }));
+  }, []);
+
+  const getShowcaseTourState = useCallback((): DemoShowcaseState => {
+    return deriveShowcaseManifest(stateRef.current);
+  }, []);
+
+  const getShowcaseBadge = useCallback((): DemoShowcaseBadge => {
+    const current = stateRef.current;
+    const unknowns = [
+      !current.setupComplete ? 'Setup incomplete' : '',
+      current.dataMode === 'supabase' ? 'No local fixture scope in live mode' : '',
+      current.leads.filter((item) => item.stage === 'new').length > 0
+        ? 'One or more leads need qualification'
+        : '',
+    ].filter(Boolean);
+    return {
+      label: 'DEMO DATA',
+      environment: 'local',
+      state: 'sandbox',
+      scope: 'DFW Exterior Services pilot',
+      policyBoundaries: [
+        'No invented measurements or prices',
+        'No live payment state',
+        'No unsanctioned chemical/safety advice',
+      ],
+      ownerNotice:
+        unknowns.length > 0
+          ? `Sandbox boundaries active: ${unknowns.join(' · ')}`
+          : 'Sandbox fixture is in deterministic replay mode.',
+    };
   }, []);
 
   const selectLead = useCallback((id: string) => {
@@ -7880,6 +7934,9 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
       setProviderActivation,
       setCompanyLaunchAuthorization,
       resetDemo,
+      resetShowcaseData,
+      getShowcaseTourState,
+      getShowcaseBadge,
       requestMagicLink,
       signOut,
       clearThisDevice,
@@ -7959,6 +8016,9 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
       setProviderActivation,
       setCompanyLaunchAuthorization,
       resetDemo,
+      resetShowcaseData,
+      getShowcaseTourState,
+      getShowcaseBadge,
       requestMagicLink,
       signOut,
       clearThisDevice,

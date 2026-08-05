@@ -496,6 +496,10 @@ export function DashboardPage() {
               <Inbox size={16} aria-hidden="true" />
               Open inbox
             </Link>
+            <Link className="button button--secondary button--md" to="/showcase">
+              <Sparkles size={16} aria-hidden="true" />
+              Open showcase
+            </Link>
           </>
         }
       />

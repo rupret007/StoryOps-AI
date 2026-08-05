@@ -46,6 +46,18 @@ function renderLiveShell(role: AppRole = 'owner', overrides: Partial<DemoState> 
     resetDemo: vi.fn(),
     markNotificationsRead: vi.fn(),
     dismissToast: vi.fn(),
+    getShowcaseBadge: vi.fn(() => ({
+      label: 'DEMO DATA',
+      environment: 'local',
+      state: 'sandbox',
+      scope: 'DFW Exterior Services pilot',
+      policyBoundaries: [
+        'No invented measurements or prices',
+        'No live payment state',
+        'No unsanctioned chemical/safety advice',
+      ],
+      ownerNotice: 'Sandbox boundary active.',
+    })),
   } as unknown as StoryOpsActions;
   mocked.value = {
     state,

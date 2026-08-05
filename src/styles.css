@@ -423,6 +423,17 @@ h3 {
   gap: 0.5rem;
 }
 
+.topbar__showcase-badge {
+  padding: 0.34rem 0.6rem;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  background: linear-gradient(120deg, #e9faf5, var(--surface-muted));
+  font-size: 0.66rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .role-switcher {
   height: 34px;
   padding: 0 1.8rem 0 0.65rem;
@@ -7755,6 +7766,12 @@ h3 {
   width: 100%;
 }
 
+.mobile-menu__badge {
+  color: var(--ink);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
 .spin {
   animation: spin 0.8s linear infinite;
 }
@@ -7915,6 +7932,7 @@ h3 {
   }
 
   .topbar__sandbox-restart,
+  .topbar__showcase-reset,
   .topbar__role-switcher,
   .topbar__clear-device {
     display: none;

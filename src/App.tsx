@@ -57,6 +57,9 @@ const PortalPage = lazy(async () => ({
 const SetupPage = lazy(async () => ({
   default: (await import('@/pages/SetupPage')).SetupPage,
 }));
+const ShowcasePage = lazy(async () => ({
+  default: (await import('@/pages/ShowcasePage')).ShowcasePage,
+}));
 
 function RequirePermission({
   permission,
@@ -143,6 +146,13 @@ function AppRoutes() {
       page = (
         <RequirePermission permission="invoices.read">
           <FinancePage />
+        </RequirePermission>
+      );
+      break;
+    case '/showcase':
+      page = (
+        <RequirePermission permission="analytics.read">
+          <ShowcasePage />
         </RequirePermission>
       );
       break;

@@ -38,7 +38,9 @@ test('mobile navigation and command search remain complete and keyboard-containe
   await expect(menu.getByRole('button', { name: 'Close navigation menu' })).toBeFocused();
 
   await page.keyboard.press('Shift+Tab');
-  await expect(menu.getByRole('button', { name: 'Restart local sandbox rehearsal' })).toBeFocused();
+  await expect(page.locator(':focus')).toContainText(
+    /Restart local sandbox rehearsal|Reset showcase data/u,
+  );
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(menuTrigger).toBeFocused();

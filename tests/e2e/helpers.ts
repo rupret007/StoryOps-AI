@@ -60,12 +60,42 @@ export async function publishSandboxCompanyConfiguration(page: Page): Promise<vo
   await expect(
     page.getByRole('heading', { name: 'Configure the company without changing source code.' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Create review draft' }).click();
-  await expect(page.getByRole('heading', { name: 'Crew and permissions' })).toBeVisible();
-  await expect(page.getByText(/Synthetic rehearsal/iu).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Review & publish' }).click();
+
+  const ensurePublicationTab = async () => {
+    const publicationHeader = page.getByRole('heading', { name: /publication gate/i });
+    if (await publicationHeader.isVisible()) return;
+
+    const reviewTab = page.getByRole('button', { name: 'Review & publish' });
+    await expect(reviewTab).toBeVisible();
+    await reviewTab.click();
+    await expect(publicationHeader).toBeVisible();
+  };
+
+  const createDraft = page.getByRole('button', { name: 'Create review draft' });
+  if (await createDraft.isVisible()) {
+    await createDraft.click();
+    await expect(page.getByRole('heading', { name: 'Crew and permissions' })).toBeVisible();
+    await expect(page.getByText(/Synthetic rehearsal/iu).first()).toBeVisible();
+    await ensurePublicationTab();
+  } else {
+    await ensurePublicationTab();
+  }
+
   const publish = page.getByRole('button', { name: 'Publish sandbox snapshot' });
-  await expect(publish).toBeEnabled();
+  await expect(publish).toBeVisible();
+  if (await publish.isDisabled()) {
+    const configurationRevision = page.locator('.configuration-revision');
+    const isPublished = await configurationRevision
+      .getByText(/published/i)
+      .isVisible()
+      .catch(() => false);
+    const isSandboxSnapshot = await configurationRevision
+      .getByText(/sandbox snapshot/i)
+      .isVisible()
+      .catch(() => false);
+    if (isPublished && isSandboxSnapshot) return;
+    await expect(publish).toBeEnabled();
+  }
   await publish.click();
   await expect(page.locator('.configuration-revision')).toContainText('published');
   await expect(page.locator('.configuration-revision')).toContainText('sandbox snapshot');

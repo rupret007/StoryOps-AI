@@ -60,6 +60,7 @@ const primaryNav: NavItem[] = [
   { to: '/dispatch', label: 'Dispatch', icon: CalendarDays, permission: 'jobs.read' },
   { to: '/field', label: 'Field mode', icon: BriefcaseBusiness, permission: 'jobs.read' },
   { to: '/finance', label: 'Finance', icon: CircleDollarSign, permission: 'invoices.read' },
+  { to: '/showcase', label: 'Showcase', icon: Sparkles, permission: 'analytics.read' },
 ];
 
 const officeNav: NavItem[] = [
@@ -374,6 +375,7 @@ function Topbar({
       navigate('/setup');
     }
   };
+  const showcaseBadge = actions.getShowcaseBadge();
 
   return (
     <header className="topbar">
@@ -432,6 +434,17 @@ function Topbar({
             >
               Restart rehearsal
             </button>
+            <button
+              className="button button--dark button--sm topbar__showcase-reset"
+              type="button"
+              title={showcaseBadge.ownerNotice}
+              onClick={() => actions.resetShowcaseData()}
+            >
+              Reset Showcase Data
+            </button>
+            <span className="topbar__showcase-badge" title={showcaseBadge.ownerNotice}>
+              {showcaseBadge.label} · {showcaseBadge.scope}
+            </span>
             <label className="sr-only" htmlFor="role-switcher">
               Preview role
             </label>
@@ -566,6 +579,7 @@ function MobileMenu({ onClose }: { onClose(): void }) {
       navigate('/setup');
     }
   };
+  const showcaseBadge = actions.getShowcaseBadge();
 
   const renderNav = (items: NavItem[]) => (
     <ul className="mobile-menu__links">
@@ -687,8 +701,14 @@ function MobileMenu({ onClose }: { onClose(): void }) {
                 <option value="technician">Technician</option>
                 <option value="customer">Customer</option>
               </select>
+              <p className="mobile-menu__badge">
+                {showcaseBadge.label} · {showcaseBadge.scope}
+              </p>
               <Button variant="secondary" size="sm" onClick={restartSandboxRehearsal}>
                 Restart local sandbox rehearsal
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => actions.resetShowcaseData()}>
+                Reset showcase data
               </Button>
             </>
           ) : (
