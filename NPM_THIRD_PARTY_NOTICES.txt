@@ -13,8 +13,8 @@ Locked package paths: 683
 Unique package name/version pairs: 681
 Unique installed license/notice texts: 281
 Packages with UNKNOWN declared license metadata: 0
-Lock entries with UNKNOWN resolved artifact URL: 542
-Lock entries with UNKNOWN integrity hash: 542
+Lock entries with UNKNOWN resolved artifact URL: 539
+Lock entries with UNKNOWN integrity hash: 539
 Installed non-optional packages with no captured license/notice material: 9
 Optional package variants inventoried from lockfile only: 96
 Explicit supplemental notice sources: 0
@@ -2843,14 +2843,14 @@ body-parser@2.3.0
     integrity: UNKNOWN
     flags: runtime, required
 
-brace-expansion@5.0.8
+brace-expansion@5.0.9
   declared-license: MIT
   scope: transitive; graph: development-only; optional-only: no
   installed-evidence: node_modules/brace-expansion
   license-material: sha256:9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e
   lock-path: node_modules/brace-expansion
-    resolved: https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.8.tgz
-    integrity: sha512-JZyDyq3D4AUifKTPOB7DELf6XsB3WdPuNxCtob1vFXPsSXhdAiHBWJ/tJ8HAc9aH84BK+5JFZLNkJKx3G9kzQg==
+    resolved: https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz
+    integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==
     flags: development, required
 
 browserslist@4.28.7
@@ -3697,14 +3697,14 @@ fast-levenshtein@2.0.6
     integrity: UNKNOWN
     flags: development, required
 
-fast-uri@3.1.4
+fast-uri@3.1.5
   declared-license: BSD-3-Clause
   scope: transitive; graph: runtime; optional-only: no
   installed-evidence: node_modules/fast-uri
   license-material: sha256:b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786
   lock-path: node_modules/fast-uri
-    resolved: UNKNOWN
-    integrity: UNKNOWN
+    resolved: https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.5.tgz
+    integrity: sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw==
     flags: runtime, required
 
 fdir@6.5.0
@@ -4087,14 +4087,14 @@ hermes-parser@0.25.1
     integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==
     flags: development, required
 
-hono@4.12.32
+hono@4.12.34
   declared-license: MIT
   scope: transitive; graph: runtime; optional-only: no
   installed-evidence: node_modules/hono
   license-material: sha256:a6ab98e5c77b9070c443eaff2ff81034a6f8cc05a7524d5098eb0f24defa0115
   lock-path: node_modules/hono
-    resolved: UNKNOWN
-    integrity: UNKNOWN
+    resolved: https://registry.npmjs.org/hono/-/hono-4.12.34.tgz
+    integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==
     flags: runtime, required
 
 html-encoding-sniffer@4.0.0
@@ -5061,14 +5061,14 @@ ms@2.1.3
     integrity: UNKNOWN
     flags: runtime, required
 
-nanoid@3.3.16
+nanoid@3.3.18
   declared-license: MIT
   scope: transitive; graph: development-only; optional-only: no
   installed-evidence: node_modules/nanoid
   license-material: sha256:da4db1480d9beea3483a2eda5c53b22238d0827d57da162b48f122e04d2d9987
   lock-path: node_modules/nanoid
-    resolved: UNKNOWN
-    integrity: UNKNOWN
+    resolved: https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz
+    integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==
     flags: development, required
 
 natural-compare@1.4.0
@@ -13410,7 +13410,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ----- END MATERIAL sha256:9a9edad7baae52622bddf3c15b2ef8a33d2c89f2d25408ad13e8a7481c6b0c97 -----
 
 ----- BEGIN MATERIAL sha256:9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e -----
-Package: brace-expansion@5.0.8; installed file(s): node_modules/brace-expansion/LICENSE
+Package: brace-expansion@5.0.9; installed file(s): node_modules/brace-expansion/LICENSE
 
 MIT License
 
@@ -13745,7 +13745,7 @@ SOFTWARE.
 ----- END MATERIAL sha256:a6a23fb76d91d98669f5ed6eb58213df594ab2d56c9e981ae021b194e3d662a7 -----
 
 ----- BEGIN MATERIAL sha256:a6ab98e5c77b9070c443eaff2ff81034a6f8cc05a7524d5098eb0f24defa0115 -----
-Package: hono@4.12.32; installed file(s): node_modules/hono/LICENSE
+Package: hono@4.12.34; installed file(s): node_modules/hono/LICENSE
 
 MIT License
 
@@ -14384,7 +14384,7 @@ THE SOFTWARE.
 ----- END MATERIAL sha256:aee9670e09b75ca8a2a1fe62d545ae38a6797970caf0335628e3a4dd15bc9b6c -----
 
 ----- BEGIN MATERIAL sha256:b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786 -----
-Package: fast-uri@3.1.4; installed file(s): node_modules/fast-uri/LICENSE
+Package: fast-uri@3.1.5; installed file(s): node_modules/fast-uri/LICENSE
 
 Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae
 Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team>
@@ -18923,7 +18923,7 @@ SOFTWARE.
 ----- END MATERIAL sha256:d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5 -----
 
 ----- BEGIN MATERIAL sha256:da4db1480d9beea3483a2eda5c53b22238d0827d57da162b48f122e04d2d9987 -----
-Package: nanoid@3.3.16; installed file(s): node_modules/nanoid/LICENSE
+Package: nanoid@3.3.18; installed file(s): node_modules/nanoid/LICENSE
 
 The MIT License (MIT)
 
