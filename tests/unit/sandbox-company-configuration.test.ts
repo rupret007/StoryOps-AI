@@ -75,7 +75,7 @@ describe('sandbox company configuration prerequisite', () => {
 
     expect(sandboxGoldenPathConfigurationIssue(state, enabledServiceCodes)).toBeUndefined();
     expect(sandboxGoldenPathConfigurationIssue(state, ['roof-washing'])).toMatch(
-      /current snapshot does not authorize: roof-washing/u,
+      /published catalog entries for roof-washing/u,
     );
     state.setupProfile!.enabledServiceCodes = ['gutter-cleaning'];
     expect(sandboxGoldenPathConfigurationIssue(state)).toMatch(/does not exactly match/u);

@@ -2,9 +2,9 @@ import type { PilotEvidenceKind, PilotReleaseEvidenceRecord } from '@/core/pilot
 import { pilotEvidenceProviderSchema } from '@/core/pilot/releaseEvidence';
 import { assessCompanyConfiguration } from '@/domain/companyConfiguration';
 import {
-  exteriorServiceOperationalRequirements,
-  getExteriorConfigurationRequirements,
-} from '@/domain/exteriorServiceRequirements';
+  assertAllEnabledServicesArePackBound,
+  getIndustryPackServiceRequirements,
+} from '@/domain/industryPackRequirements';
 import type { DemoIntegration, DemoState } from '@/state/model';
 
 export type PilotReadinessStatus = 'ready' | 'blocked' | 'manual_gate' | 'unknown';
@@ -333,11 +333,17 @@ export function derivePilotReadiness(
     state.operatingBaseline.configurationHash ===
       configuration.publicationReceipt?.configurationHash;
   const enabledServiceCodes = publishedConfiguration?.pricing.enabledServiceCodes ?? [];
-  const operationalRequirements = getExteriorConfigurationRequirements(enabledServiceCodes);
+  const operationalRequirements = getIndustryPackServiceRequirements(
+    enabledServiceCodes,
+    undefined,
+    publishedConfiguration?.pricing.priceBookTemplateVersion,
+  );
   const requirementsKnown =
     enabledServiceCodes.length > 0 &&
-    enabledServiceCodes.every((serviceCode) =>
-      Object.hasOwn(exteriorServiceOperationalRequirements, serviceCode),
+    assertAllEnabledServicesArePackBound(
+      enabledServiceCodes,
+      undefined,
+      publishedConfiguration?.pricing.priceBookTemplateVersion,
     );
   const activeOwners =
     publishedConfiguration?.people.crewMembers.filter(

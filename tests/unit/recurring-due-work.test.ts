@@ -82,6 +82,52 @@ describe('recurring due-work contract', () => {
     ).toThrow();
   });
 
+  it('accepts new recurring cadence values in projection plans', () => {
+    const projection = recurringDueWorkStateSchema.parse({
+      schemaVersion: 'storyops-recurring-due-work-state-v1',
+      companyId: COMPANY_ID,
+      role: 'dispatcher',
+      localDate: '2026-07-29',
+      plans: [
+        {
+          planId: PLAN_ID,
+          planVersion: 4,
+          customerId: '10000000-0000-4000-8000-000000000201',
+          customerName: 'Morgan Ellis',
+          propertyId: '10000000-0000-4000-8000-000000000211',
+          propertyName: 'Cedar Ridge',
+          cadence: 'every_four_weeks',
+          nextDueDate: '2026-07-29',
+          serviceCodes: ['gutter-cleaning'],
+          requiresFreshEstimate: true,
+          dueNow: true,
+          generationAction: 'create_fresh_estimate_work_item',
+        },
+      ],
+      workItems: [],
+      guardrails: {
+        historicalPriceCopied: false,
+        estimateCreated: false,
+        quoteAccepted: false,
+        depositVerified: false,
+        availabilityVerified: false,
+        visitCreated: false,
+        customerContacted: false,
+        requiredSequence: [
+          'fresh_deterministic_estimate',
+          'policy_approval_if_required',
+          'quote_acceptance',
+          'deposit_verification_if_required',
+          'live_scheduling_evidence',
+          'job.book',
+        ],
+      },
+      serverTime: '2026-07-29T12:00:00.000Z',
+    });
+
+    expect(projection.plans[0]?.cadence).toBe('every_four_weeks');
+  });
+
   it('rejects a receipt that claims any estimate, quote, deposit, scheduling, visit, or contact', () => {
     const receipt = {
       schemaVersion: 'storyops-recurring-due-work-receipt-v1',

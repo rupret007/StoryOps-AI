@@ -24,6 +24,12 @@ import {
   exteriorServiceTemplates,
   getExteriorServicePackage,
 } from '@/data/exteriorServiceTemplates';
+import {
+  createResidentialConfigurationPackages,
+  createResidentialStarterPriceBook,
+  residentialCleaningIndustryPack,
+  residentialPackages,
+} from '@/data/residentialServiceTemplates';
 import { getServiceIndustryPack, serviceIndustryPacks } from '@/data/industryPacks';
 
 const companyId = asDomainId('20000000-0000-4000-8000-000000000001');
@@ -154,11 +160,41 @@ const packageRequest = (
 });
 
 describe('exterior service starter registry', () => {
-  it('registers exterior services as a valid, replaceable industry pack', () => {
-    expect(serviceIndustryPacks.map((pack) => pack.code)).toEqual(['exterior-services']);
+  it('registers exterior and residential services as valid, replaceable industry packs', () => {
+    expect(serviceIndustryPacks.map((pack) => pack.code)).toEqual([
+      'exterior-services',
+      'residential-cleaning',
+    ]);
     expect(getServiceIndustryPack('exterior-services')).toBe(exteriorServicesIndustryPack);
+    expect(getServiceIndustryPack('residential-cleaning')).toBe(residentialCleaningIndustryPack);
     expect(validateServiceIndustryPack(exteriorServicesIndustryPack)).toEqual([]);
+    expect(validateServiceIndustryPack(residentialCleaningIndustryPack)).toEqual([]);
     expect(exteriorServicesIndustryPack.supportedKernelCapabilities).toContain('ai_office');
+  });
+
+  it('keeps a deterministic residential starter registry', () => {
+    const priceBook = createResidentialStarterPriceBook({
+      id: asDomainId('20000000-0000-4000-8000-000000000002'),
+      companyId,
+      createdAt: asISODateTime('2026-07-01T00:00:00.000-05:00'),
+      updatedAt: asISODateTime('2026-07-01T00:00:00.000-05:00'),
+      version: 3,
+      status: 'active',
+      effectiveFrom: asISODateTime('2026-07-01T00:00:00.000-05:00'),
+      publishedBy: companyId,
+      publishedAt: asISODateTime('2026-07-01T00:00:00.000-05:00'),
+    });
+
+    expect(residentialPackages.map((definition) => definition.code)).toHaveLength(3);
+    expect(createResidentialConfigurationPackages()).toEqual(residentialPackages);
+    expect(priceBook.serviceRules.map((rule) => rule.serviceCode).length).toBe(3);
+    expect(
+      priceBook.serviceRules
+        .map((rule) => rule.serviceCode)
+        .every(
+          (code) => code.startsWith('standard') || code.startsWith('deep') || code.includes('move'),
+        ),
+    ).toBe(true);
   });
 
   it('keeps the kernel open to bounded non-exterior categories and pricing dimensions', () => {

@@ -19,17 +19,19 @@ import {
 import { useMemo, useState } from 'react';
 import {
   assessCompanyConfiguration,
-  createExteriorServicesConfiguration,
+  createServiceCompanyConfiguration,
   type CompanyConfiguration,
   type CompanyConfigurationSection,
 } from '@/domain/companyConfiguration';
 import {
-  createExteriorConfigurationPackages,
-  createExteriorConfigurationPricing,
-  exteriorServiceTemplates,
-  getExteriorConfigurationRequirements,
-  type ExteriorServiceCode,
-} from '@/data/exteriorServiceTemplates';
+  getCanonicalPricingConfiguration,
+  getIndustryPackRuntimeForCode,
+  getIndustryPackRuntimeForInput,
+  listIndustryPackCodes,
+  type IndustryPackRuntimeProfile,
+} from '@/data/industryPackRuntime';
+import type { ServiceIndustryPackCode } from '@/data/industryPacks';
+import { getIndustryPackServiceRequirements } from '@/domain/industryPackRequirements';
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { useNavigate } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
@@ -73,14 +75,16 @@ interface BootstrapFields {
   city: string;
   region: string;
   postalCode: string;
-  enabledServiceCodes: ExteriorServiceCode[];
+  packCode: ServiceIndustryPackCode;
+  enabledServiceCodes: string[];
 }
 
 function canGenerateCanonicalPackageTiers(
-  enabledServiceCodes: readonly ExteriorServiceCode[],
+  runtime: IndustryPackRuntimeProfile,
+  enabledServiceCodes: readonly string[],
 ): boolean {
   try {
-    createExteriorConfigurationPackages(enabledServiceCodes);
+    runtime.buildPackages(enabledServiceCodes);
     return true;
   } catch {
     return false;
@@ -88,13 +92,14 @@ function canGenerateCanonicalPackageTiers(
 }
 
 function canDisableConfiguredService(
+  runtime: IndustryPackRuntimeProfile,
   enabledServiceCodes: readonly string[],
-  serviceCode: ExteriorServiceCode,
+  serviceCode: string,
 ): boolean {
-  const remainingExteriorServiceCodes = exteriorServiceTemplates
+  const remainingServiceCodes = runtime.serviceTemplates
     .map((template) => template.catalogItem.code)
     .filter((code) => code !== serviceCode && enabledServiceCodes.includes(code));
-  return canGenerateCanonicalPackageTiers(remainingExteriorServiceCodes);
+  return canGenerateCanonicalPackageTiers(runtime, remainingServiceCodes);
 }
 
 function initialBootstrap(
@@ -104,6 +109,11 @@ function initialBootstrap(
 ): BootstrapFields {
   const sandbox = dataMode === 'sandbox';
   const legalName = profile?.businessName ?? liveCompanyName ?? '';
+  const profileRuntime = profile?.enabledServiceCodes
+    ? getIndustryPackRuntimeForInput({ enabledServiceCodes: profile.enabledServiceCodes })
+    : undefined;
+  const runtime = profileRuntime ?? getIndustryPackRuntimeForCode('exterior-services');
+  if (!runtime) throw new Error('The default exterior-services industry pack is unavailable.');
   return {
     legalName,
     displayName: legalName,
@@ -114,9 +124,11 @@ function initialBootstrap(
     city: sandbox ? 'Grapevine' : '',
     region: 'TX',
     postalCode: profile?.homePostalCode ?? (sandbox ? '76051' : ''),
+    packCode: runtime.packCode,
     enabledServiceCodes:
-      profile?.enabledServiceCodes ??
-      (['pressure-wash-flatwork', 'gutter-cleaning'] satisfies ExteriorServiceCode[]),
+      profileRuntime && profile
+        ? [...profile.enabledServiceCodes]
+        : [...runtime.defaultEnabledServiceCodes],
   };
 }
 
@@ -156,7 +168,9 @@ export function CompanyConfigurationStudio() {
     setBusy(true);
     setError(undefined);
     try {
-      const generated = createExteriorServicesConfiguration({
+      const runtime = getIndustryPackRuntimeForCode(bootstrap.packCode);
+      if (!runtime) throw new Error('Select a supported industry pack before creating the draft.');
+      const generated = createServiceCompanyConfiguration({
         legalName: bootstrap.legalName,
         displayName: bootstrap.displayName,
         ownerName: bootstrap.ownerName,
@@ -167,7 +181,10 @@ export function CompanyConfigurationStudio() {
         region: bootstrap.region,
         postalCode: bootstrap.postalCode,
         enabledServiceCodes: bootstrap.enabledServiceCodes,
-        ...createExteriorConfigurationPricing(bootstrap.enabledServiceCodes),
+        priceBookTemplateVersion: runtime.packVersion,
+        starterEquipmentType: runtime.starterEquipmentType,
+        starterSkills: runtime.starterSkills,
+        ...getCanonicalPricingConfiguration(runtime, bootstrap.enabledServiceCodes),
       });
       const configuration =
         state.dataMode === 'sandbox' ? prepareSandboxRehearsalConfiguration(generated) : generated;
@@ -388,9 +405,12 @@ function BootstrapConfiguration({
 }) {
   const update = <Key extends keyof BootstrapFields>(key: Key, value: BootstrapFields[Key]) =>
     setFields({ ...fields, [key]: value });
-  const toggleService = (code: ExteriorServiceCode) => {
+  const runtime = getIndustryPackRuntimeForCode(fields.packCode);
+  if (!runtime) throw new Error(`Industry pack ${fields.packCode} is unavailable.`);
+  const toggleService = (code: string) => {
     const currentlyEnabled = fields.enabledServiceCodes.includes(code);
-    if (currentlyEnabled && !canDisableConfiguredService(fields.enabledServiceCodes, code)) return;
+    if (currentlyEnabled && !canDisableConfiguredService(runtime, fields.enabledServiceCodes, code))
+      return;
     update(
       'enabledServiceCodes',
       currentlyEnabled
@@ -474,14 +494,38 @@ function BootstrapConfiguration({
         </div>
       </div>
       <div className="configuration-section">
-        <h3>Exterior-services industry pack</h3>
+        <Field label="Industry pack" htmlFor="configuration-industry-pack">
+          <select
+            id="configuration-industry-pack"
+            className="select"
+            value={fields.packCode}
+            onChange={(event) => {
+              const nextRuntime = getIndustryPackRuntimeForCode(event.target.value);
+              if (!nextRuntime) return;
+              setFields({
+                ...fields,
+                packCode: nextRuntime.packCode,
+                enabledServiceCodes: [...nextRuntime.defaultEnabledServiceCodes],
+              });
+            }}
+          >
+            {listIndustryPackCodes().map((packCode) => {
+              const optionRuntime = getIndustryPackRuntimeForCode(packCode);
+              return optionRuntime ? (
+                <option key={packCode} value={packCode}>
+                  {optionRuntime.packName}
+                </option>
+              ) : null;
+            })}
+          </select>
+        </Field>
+        <h3>{runtime.packName} industry pack</h3>
         <p>
-          These selections constrain quoting and booking. All five deterministic templates remain
-          installed but inactive, so later reviewed revisions can enable them without source or
-          database changes.
+          These selections constrain quoting and booking. Disabled deterministic templates remain
+          installed so a later reviewed revision can enable them without source or database changes.
         </p>
         <div className="configuration-service-grid">
-          {exteriorServiceTemplates.map((template) => (
+          {runtime.serviceTemplates.map((template) => (
             <label key={template.catalogItem.code}>
               <input
                 type="checkbox"
@@ -489,6 +533,7 @@ function BootstrapConfiguration({
                 disabled={
                   fields.enabledServiceCodes.includes(template.catalogItem.code) &&
                   !canDisableConfiguredService(
+                    runtime,
                     fields.enabledServiceCodes,
                     template.catalogItem.code,
                   )
@@ -503,9 +548,8 @@ function BootstrapConfiguration({
           ))}
         </div>
         <p className="setup-final-note">
-          Keep at least three enabled services, or two including gutter cleaning with the explicit
-          measured Best downspout flush, so Good, Better, and Best remain materially distinct. Other
-          service sets need explicitly named custom packages in a later industry pack.
+          Keep a service set that supports the pack's deterministic Good, Better, and Best package
+          policy. Unsupported combinations remain blocked instead of generating partial packages.
         </p>
       </div>
       <div className="setup-final-note">
@@ -612,6 +656,10 @@ function TerritoryPanel({
   draft: CompanyConfiguration;
   update(mutate: (draft: CompanyConfiguration) => void): void;
 }) {
+  const runtime = getIndustryPackRuntimeForInput({
+    enabledServiceCodes: draft.pricing.enabledServiceCodes,
+    priceBookTemplateVersion: draft.pricing.priceBookTemplateVersion,
+  });
   return (
     <div className="configuration-stack">
       <Panel
@@ -816,7 +864,7 @@ function TerritoryPanel({
               <summary>
                 <span>
                   <strong>
-                    {exteriorServiceTemplates.find(
+                    {runtime?.serviceTemplates.find(
                       (template) => template.catalogItem.code === rule.serviceCode,
                     )?.catalogItem.name ?? rule.serviceCode}
                   </strong>
@@ -1048,7 +1096,11 @@ export function OperationsPanel({
     while (used.has(`${prefix}-${sequence}`)) sequence += 1;
     return `${prefix}-${sequence}`;
   };
-  const requirements = getExteriorConfigurationRequirements(draft.pricing.enabledServiceCodes);
+  const requirements = getIndustryPackServiceRequirements(
+    draft.pricing.enabledServiceCodes,
+    undefined,
+    draft.pricing.priceBookTemplateVersion,
+  );
   const activeOwner = draft.people.crewMembers.find(
     (member) => member.active && member.role === 'owner',
   );
@@ -1622,41 +1674,35 @@ export function MoneyPanel({
   draft: CompanyConfiguration;
   update(mutate: (draft: CompanyConfiguration) => void): void;
 }) {
+  const runtime = getIndustryPackRuntimeForInput({
+    enabledServiceCodes: draft.pricing.enabledServiceCodes,
+    priceBookTemplateVersion: draft.pricing.priceBookTemplateVersion,
+  });
   const [packageImpact, setPackageImpact] = useState(
-    'Changing the enabled service set regenerates all three canonical package scopes atomically. Keep at least three services, or two including gutter cleaning with the explicit measured Best downspout flush.',
+    runtime?.packCode === 'exterior-services'
+      ? 'Changing the enabled service set regenerates all three canonical package scopes atomically. Keep at least three services, or two including gutter cleaning with the explicit measured Best downspout flush.'
+      : 'Changing the enabled service set regenerates all three canonical package scopes atomically.',
   );
-  const toggleConfiguredService = (serviceCode: ExteriorServiceCode, serviceName: string) => {
+  const toggleConfiguredService = (serviceCode: string, serviceName: string) => {
+    if (!runtime) return;
     const currentlyEnabled = draft.pricing.enabledServiceCodes.includes(serviceCode);
     if (
       currentlyEnabled &&
-      !canDisableConfiguredService(draft.pricing.enabledServiceCodes, serviceCode)
+      !canDisableConfiguredService(runtime, draft.pricing.enabledServiceCodes, serviceCode)
     )
       return;
     const nextEnabledServiceCodes = currentlyEnabled
       ? draft.pricing.enabledServiceCodes.filter((code) => code !== serviceCode)
       : [...draft.pricing.enabledServiceCodes, serviceCode];
-    const supportedEnabledServiceCodes = exteriorServiceTemplates
+    const supportedEnabledServiceCodes = runtime.serviceTemplates
       .map((template) => template.catalogItem.code)
       .filter((code) => nextEnabledServiceCodes.includes(code));
     update((next) => {
       next.pricing.enabledServiceCodes = supportedEnabledServiceCodes;
-      next.pricing.packages = createExteriorConfigurationPackages(supportedEnabledServiceCodes).map(
-        (servicePackage) => ({
-          code: servicePackage.code,
-          name: servicePackage.name,
-          description: servicePackage.description,
-          tier: servicePackage.tier,
-          components: servicePackage.components.map((component) => ({
-            serviceCode: component.serviceCode,
-            required: component.required,
-            requiredAddOnCodes: [...component.requiredAddOnCodes],
-            optionalAddOnCodes: [...component.optionalAddOnCodes],
-          })),
-        }),
-      );
+      next.pricing.packages = runtime.buildPackages(supportedEnabledServiceCodes);
     });
     setPackageImpact(
-      `${serviceName} ${currentlyEnabled ? 'disabled' : 'enabled'}. Good, better, and best were regenerated from the canonical package policy; any required downspout flush is shown explicitly in Best.`,
+      `${serviceName} ${currentlyEnabled ? 'disabled' : 'enabled'}. Good, Better, and Best were regenerated from the canonical package policy for ${runtime.packName}.`,
     );
   };
 
@@ -1750,7 +1796,7 @@ export function MoneyPanel({
           />
         </div>
         <div className="configuration-service-grid">
-          {exteriorServiceTemplates.map((template) => (
+          {runtime?.serviceTemplates.map((template) => (
             <label key={template.catalogItem.code}>
               <input
                 type="checkbox"
@@ -1758,6 +1804,7 @@ export function MoneyPanel({
                 disabled={
                   draft.pricing.enabledServiceCodes.includes(template.catalogItem.code) &&
                   !canDisableConfiguredService(
+                    runtime,
                     draft.pricing.enabledServiceCodes,
                     template.catalogItem.code,
                   )
@@ -1774,6 +1821,11 @@ export function MoneyPanel({
             </label>
           ))}
         </div>
+        {!runtime && (
+          <p className="setup-error" role="alert">
+            This draft does not resolve to one complete industry pack. Pricing changes are blocked.
+          </p>
+        )}
         <p className="setup-final-note" id="configuration-package-impact" role="status">
           {packageImpact}
         </p>

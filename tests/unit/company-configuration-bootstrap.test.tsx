@@ -85,4 +85,57 @@ describe('authenticated company-configuration bootstrap', () => {
     expect(screen.getByRole('heading', { name: 'Crew and permissions' })).toBeVisible();
     expect(screen.getByText(/planning records only/iu)).toBeVisible();
   });
+
+  it('selects residential cleaning and saves its exact runtime-backed price book', async () => {
+    render(
+      <MemoryRouter initialEntries={['/setup']}>
+        <CompanyConfigurationStudio />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Industry pack'), {
+      target: { value: 'residential-cleaning' },
+    });
+    expect(screen.getByLabelText(/Standard recurring residential cleaning/iu)).toBeChecked();
+    expect(screen.getByLabelText(/Deep clean restoration/iu)).toBeChecked();
+    expect(screen.getByLabelText(/Move-in \/ move-out turnkey clean/iu)).toBeChecked();
+
+    fireEvent.change(screen.getByLabelText('Public email'), {
+      target: { value: 'owner@example.test' },
+    });
+    fireEvent.change(screen.getByLabelText('Public phone (E.164)'), {
+      target: { value: '+18175550123' },
+    });
+    fireEvent.change(screen.getByLabelText('Service-base street'), {
+      target: { value: '100 Main Street' },
+    });
+    fireEvent.change(screen.getByLabelText('City'), {
+      target: { value: 'Grapevine' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create review draft' }));
+
+    await waitFor(() => expect(mocks.saveCompanyConfigurationDraft).toHaveBeenCalledOnce());
+    const configuration = mocks.saveCompanyConfigurationDraft.mock
+      .calls[0]![0] as CompanyConfiguration;
+    expect(configuration.pricing.priceBookTemplateVersion).toBe(
+      'storyops-residential-cleaning-v1.0.0',
+    );
+    expect(configuration.pricing.enabledServiceCodes).toEqual([
+      'standard-recurring-clean',
+      'deep-clean',
+      'move-in-out-clean',
+    ]);
+    expect(configuration.pricing.packages.map((servicePackage) => servicePackage.tier)).toEqual([
+      'good',
+      'better',
+      'best',
+    ]);
+    expect(configuration.resources.equipment[0]).toMatchObject({
+      id: 'vacuum-1',
+      name: 'Primary vacuum',
+      equipmentType: 'vacuum',
+      inspectionStatus: 'due',
+    });
+    expect(configuration.people.crewMembers[0]?.skills).toEqual(['scope-verification']);
+  });
 });

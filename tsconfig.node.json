@@ -30,6 +30,9 @@
     "src/core/policy/**/*.ts",
     "src/core/pricing/**/*.ts",
     "src/core/scopePhotos/**/*.ts",
-    "src/domain/**/*.ts"
+    "src/domain/**/*.ts",
+    "src/data/exteriorServiceTemplates.ts",
+    "src/data/industryPacks.ts",
+    "src/data/residentialServiceTemplates.ts"
   ]
 }
