@@ -77,9 +77,16 @@ function getTemplateMetadata(
 export function resolveIndustryPack(input: ResolvePackInput): ServiceIndustryPack | undefined {
   if (input.activePack?.code && input.activePack.version) {
     const active = getPackByCodeAndVersion(input.activePack);
-    return active && packContainsAllServices(active, input.enabledServiceCodes)
-      ? active
-      : undefined;
+    if (!active || !packContainsAllServices(active, input.enabledServiceCodes)) {
+      return undefined;
+    }
+    // Both fields are persisted evidence when they are present. Never let an
+    // active-pack reference silently override a conflicting price-book
+    // template version and then resolve pricing under the wrong pack.
+    if (input.priceBookTemplateVersion && input.priceBookTemplateVersion !== active.version) {
+      return undefined;
+    }
+    return active;
   }
   if (input.priceBookTemplateVersion) {
     const versioned = getPackByTemplateVersion(input.priceBookTemplateVersion);
