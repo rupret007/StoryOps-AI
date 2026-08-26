@@ -96,7 +96,15 @@ export interface RecurringMaintenancePlan extends EntityMetadata {
   customerId: DomainId;
   propertyId: DomainId;
   serviceCodes: readonly string[];
-  cadence: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom';
+  cadence:
+    | 'weekly'
+    | 'biweekly'
+    | 'every_four_weeks'
+    | 'monthly'
+    | 'quarterly'
+    | 'semiannual'
+    | 'annual'
+    | 'custom';
   intervalDays?: number;
   nextDueDate: ISODate;
   status: 'proposed' | 'active' | 'paused' | 'ended';

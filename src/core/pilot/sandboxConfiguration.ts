@@ -3,7 +3,7 @@ import {
   parseCompanyConfiguration,
   type CompanyConfiguration,
 } from '@/domain/companyConfiguration';
-import { getExteriorConfigurationRequirements } from '@/domain/exteriorServiceRequirements';
+import { getIndustryPackServiceRequirements } from '@/domain/industryPackRequirements';
 import type { DemoState } from '@/state/model';
 
 type SandboxConfigurationState = Pick<
@@ -19,7 +19,11 @@ export function prepareSandboxRehearsalConfiguration(
   configuration: CompanyConfiguration,
 ): CompanyConfiguration {
   const next = structuredClone(configuration);
-  const requirements = getExteriorConfigurationRequirements(next.pricing.enabledServiceCodes);
+  const requirements = getIndustryPackServiceRequirements(
+    next.pricing.enabledServiceCodes,
+    undefined,
+    next.pricing.priceBookTemplateVersion,
+  );
   const owner = next.people.crewMembers.find((member) => member.active && member.role === 'owner');
   if (owner) {
     owner.skills = [...new Set([...owner.skills, ...requirements.requiredSkills])];
@@ -80,7 +84,7 @@ export function sandboxGoldenPathConfigurationIssue(
   }
   const missing = requiredServiceCodes.filter((serviceCode) => !published.includes(serviceCode));
   if (missing.length > 0) {
-    return `This synthetic pilot fixture requires published catalog entries for pressure-wash-flatwork and gutter-cleaning. The current snapshot does not authorize: ${missing.join(', ')}.`;
+    return `This synthetic pilot fixture requires published catalog entries for ${missing.join(', ')}.`;
   }
   return undefined;
 }

@@ -1,18 +1,18 @@
+import { asDecimalString, asPercentageString, money } from '../domain/primitives.ts';
 import {
-  asDecimalString,
-  asPercentageString,
-  money,
-  type EntityMetadata,
   type IndustryScopeDefinition,
   type IndustryServiceTemplate,
-  type PriceBook,
-  type PricingUnit,
   type ServiceIndustryPack,
-  type ServiceCatalogItem,
-  type ServicePackageDefinition,
-  type ServicePriceRule,
-} from '@/domain';
-export { getExteriorConfigurationRequirements } from '@/domain/exteriorServiceRequirements';
+} from '../domain/industryPack.ts';
+import type {
+  PriceBook,
+  PricingUnit,
+  ServiceCatalogItem,
+  ServicePackageDefinition,
+  ServicePriceRule,
+} from '../domain/catalog.ts';
+import type { EntityMetadata } from '../domain/primitives.ts';
+export { getExteriorConfigurationRequirements } from '../domain/exteriorServiceRequirements.ts';
 
 export const EXTERIOR_SERVICE_CODES = [
   'pressure-wash-flatwork',
@@ -95,7 +95,7 @@ export const exteriorServiceTemplates = [
       safetySopReference: 'SOP-PW-FLATWORK-001',
     },
     scope: {
-      primaryMeasurementKind: 'flatwork_sq_ft',
+      primaryMeasurementKind: 'area_sq_ft',
       pricingUnit: 'sq_ft',
       scopeEvidencePolicy: 'photo_required',
       requiredPhotoViews: ['full flatwork boundary', 'surface close-up', 'access and drainage'],
@@ -209,7 +209,7 @@ export const exteriorServiceTemplates = [
       safetySopReference: 'SOP-SW-HOUSE-001',
     },
     scope: {
-      primaryMeasurementKind: 'exterior_wall_sq_ft',
+      primaryMeasurementKind: 'area_sq_ft',
       pricingUnit: 'sq_ft',
       scopeEvidencePolicy: 'photo_required',
       requiredPhotoViews: [
@@ -319,7 +319,7 @@ export const exteriorServiceTemplates = [
       safetySopReference: 'SOP-GUTTER-001',
     },
     scope: {
-      primaryMeasurementKind: 'gutter_linear_ft',
+      primaryMeasurementKind: 'length_linear_ft',
       pricingUnit: 'linear_ft',
       scopeEvidencePolicy: 'photo_required',
       requiredPhotoViews: [
@@ -415,7 +415,7 @@ export const exteriorServiceTemplates = [
       safetySopReference: 'SOP-SW-ROOF-001',
     },
     scope: {
-      primaryMeasurementKind: 'roof_area_sq_ft',
+      primaryMeasurementKind: 'area_sq_ft',
       pricingUnit: 'sq_ft',
       scopeEvidencePolicy: 'photo_required',
       requiredPhotoViews: [
@@ -521,7 +521,7 @@ export const exteriorServiceTemplates = [
       safetySopReference: 'SOP-WINDOW-001',
     },
     scope: {
-      primaryMeasurementKind: 'window_pane_count',
+      primaryMeasurementKind: 'count',
       pricingUnit: 'each',
       scopeEvidencePolicy: 'photo_required',
       requiredPhotoViews: [

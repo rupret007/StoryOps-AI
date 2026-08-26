@@ -56,6 +56,39 @@ Deno.test('maintenance cadence contract requires explicit valid next service int
       commandId: COMMAND_ID,
       invoiceId: INVOICE_ID,
       expectedVersion: 3,
+      cadence: 'weekly',
+      nextDueDate: '2027-01-28',
+    }).success,
+  );
+  assert(
+    postServiceRequestSchema.safeParse({
+      companyId: COMPANY_ID,
+      action: 'maintenance.activate',
+      commandId: COMMAND_ID,
+      invoiceId: INVOICE_ID,
+      expectedVersion: 3,
+      cadence: 'biweekly',
+      nextDueDate: '2027-01-28',
+    }).success,
+  );
+  assert(
+    postServiceRequestSchema.safeParse({
+      companyId: COMPANY_ID,
+      action: 'maintenance.activate',
+      commandId: COMMAND_ID,
+      invoiceId: INVOICE_ID,
+      expectedVersion: 3,
+      cadence: 'every_four_weeks',
+      nextDueDate: '2027-01-28',
+    }).success,
+  );
+  assert(
+    postServiceRequestSchema.safeParse({
+      companyId: COMPANY_ID,
+      action: 'maintenance.activate',
+      commandId: COMMAND_ID,
+      invoiceId: INVOICE_ID,
+      expectedVersion: 3,
       cadence: 'semiannual',
       nextDueDate: '2027-01-28',
     }).success,
@@ -81,6 +114,18 @@ Deno.test('maintenance cadence contract requires explicit valid next service int
       cadence: 'annual',
       intervalDays: 365,
       nextDueDate: '2027-02-30',
+    }).success,
+  );
+  assert(
+    !postServiceRequestSchema.safeParse({
+      companyId: COMPANY_ID,
+      action: 'maintenance.activate',
+      commandId: COMMAND_ID,
+      invoiceId: INVOICE_ID,
+      expectedVersion: 3,
+      cadence: 'annual',
+      intervalDays: 365,
+      nextDueDate: '2027-02-28',
     }).success,
   );
 });

@@ -115,7 +115,7 @@ select set_config(
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000101', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
-\echo '1/8 owner creates one exact due work item without downstream truth claims'
+\echo '1/9 owner creates one exact due work item without downstream truth claims'
 do $$
 declare
   due_date_value date;
@@ -200,7 +200,7 @@ begin
 end;
 $$;
 
-\echo '2/8 only a newly persisted same-scope deterministic estimate can close the estimate task'
+\echo '2/9 only a newly persisted same-scope deterministic estimate can close the estimate task'
 reset role;
 insert into public.estimates(
   id,
@@ -417,7 +417,7 @@ begin
 end;
 $$;
 
-\echo '3/8 dispatcher reconciles a duplicate command without a second item or due-date advance'
+\echo '3/9 dispatcher reconciles a duplicate command without a second item or due-date advance'
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000102', true);
 do $$
 declare
@@ -475,7 +475,7 @@ begin
 end;
 $$;
 
-\echo '4/8 customer reads only its own review state and cannot create staff work'
+\echo '4/9 customer reads only its own review state and cannot create staff work'
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000104', true);
 do $$
 declare
@@ -535,7 +535,7 @@ begin
 end;
 $$;
 
-\echo '5/8 technician and cross-tenant reads fail closed'
+\echo '5/9 technician and cross-tenant reads fail closed'
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000103', true);
 do $$
 declare
@@ -562,7 +562,7 @@ begin
 end;
 $$;
 
-\echo '6/8 future due dates, stale versions, forged hashes, and command conflicts fail closed'
+\echo '6/9 future due dates, stale versions, forged hashes, and command conflicts fail closed'
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000101', true);
 do $$
 declare
@@ -667,7 +667,143 @@ begin
 end;
 $$;
 
-\echo '7/8 paused companies cannot create or read recurring due work'
+\echo '7/9 upgraded weekly cadences advance to the first future service date'
+reset role;
+update public.recurring_maintenance_plans
+set status = 'paused'
+where id = '41000000-0000-4000-8000-000000000001';
+
+insert into public.recurring_maintenance_plans(
+  id,
+  company_id,
+  customer_id,
+  property_id,
+  service_codes,
+  cadence,
+  interval_days,
+  next_due_date,
+  status,
+  price_book_id,
+  requires_fresh_estimate,
+  source_job_id,
+  source_invoice_id,
+  source_estimate_id,
+  activated_by_user_id,
+  activated_at
+)
+values (
+  '41000000-0000-4000-8000-000000000011',
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000201',
+  '10000000-0000-4000-8000-000000000211',
+  array['pressure-wash-flatwork', 'gutter-cleaning'],
+  'weekly',
+  null,
+  (
+    now() at time zone (
+      select company.timezone
+      from public.companies company
+      where company.id = '10000000-0000-4000-8000-000000000001'
+    )
+  )::date - 35,
+  'active',
+  '10000000-0000-4000-8000-000000000401',
+  true,
+  '10000000-0000-4000-8000-000000000631',
+  '10000000-0000-4000-8000-000000000651',
+  '10000000-0000-4000-8000-000000000501',
+  '10000000-0000-4000-8000-000000000101',
+  now()
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000101","role":"authenticated"}',
+  true
+);
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000101', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+do $$
+declare
+  cadence_case record;
+  iteration integer := 0;
+  local_today date := (
+    now() at time zone (
+      select company.timezone
+      from public.companies company
+      where company.id = '10000000-0000-4000-8000-000000000001'
+    )
+  )::date;
+  due_date_value date;
+  next_due_date_value date;
+  plan_version_value integer;
+  request_hash_value text;
+begin
+  for cadence_case in
+    select *
+    from (
+      values
+        ('weekly'::text, 35, 7, '41000000-0000-4000-8000-000000000111'::uuid),
+        ('biweekly'::text, 36, 6, '41000000-0000-4000-8000-000000000112'::uuid),
+        ('every_four_weeks'::text, 37, 19, '41000000-0000-4000-8000-000000000113'::uuid)
+    ) fixture(cadence, days_overdue, expected_days_ahead, command_id)
+  loop
+    iteration := iteration + 1;
+    due_date_value := local_today - cadence_case.days_overdue;
+    if iteration > 1 then
+      update public.recurring_maintenance_plans
+      set
+        cadence = cadence_case.cadence,
+        next_due_date = due_date_value
+      where id = '41000000-0000-4000-8000-000000000011';
+    end if;
+
+    select version
+    into plan_version_value
+    from public.recurring_maintenance_plans
+    where id = '41000000-0000-4000-8000-000000000011';
+
+    request_hash_value := encode(
+      extensions.digest(
+        array_to_string(
+          array[
+            'storyops-recurring-due-work-v1',
+            '10000000-0000-4000-8000-000000000001',
+            '41000000-0000-4000-8000-000000000011',
+            plan_version_value::text,
+            due_date_value::text
+          ],
+          chr(31)
+        ),
+        'sha256'
+      ),
+      'hex'
+    );
+    perform public.create_storyops_recurring_due_work(
+      '10000000-0000-4000-8000-000000000001',
+      cadence_case.command_id,
+      '41000000-0000-4000-8000-000000000011',
+      plan_version_value,
+      due_date_value,
+      request_hash_value
+    );
+
+    select next_due_date
+    into next_due_date_value
+    from public.recurring_maintenance_plans
+    where id = '41000000-0000-4000-8000-000000000011';
+    if next_due_date_value <> local_today + cadence_case.expected_days_ahead then
+      raise exception 'Upgraded % cadence advanced to %, expected %',
+        cadence_case.cadence,
+        next_due_date_value,
+        local_today + cadence_case.expected_days_ahead;
+    end if;
+  end loop;
+end;
+$$;
+
+\echo '8/9 paused companies cannot create or read recurring due work'
 reset role;
 update public.companies
 set status = 'paused'
@@ -704,7 +840,7 @@ begin
 end;
 $$;
 
-\echo '8/8 only authenticated finite RPCs are exposed'
+\echo '9/9 only authenticated finite RPCs are exposed'
 reset role;
 do $$
 begin

@@ -1147,7 +1147,16 @@ const postServiceStatusSchema = z
           customerId: z.string().uuid(),
           propertyId: z.string().uuid(),
           status: z.literal('active'),
-          cadence: z.enum(['monthly', 'quarterly', 'semiannual', 'annual', 'custom']),
+          cadence: z.enum([
+            'weekly',
+            'biweekly',
+            'every_four_weeks',
+            'monthly',
+            'quarterly',
+            'semiannual',
+            'annual',
+            'custom',
+          ]),
           nextDueDate: z.string(),
           serviceCodes: z.array(z.string().min(1)),
           requiresFreshEstimate: z.literal(true),
@@ -1170,7 +1179,15 @@ export type PostServiceActionInput =
       action: 'maintenance.activate';
       invoiceId: string;
       expectedVersion: number;
-      cadence: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom';
+      cadence:
+        | 'weekly'
+        | 'biweekly'
+        | 'every_four_weeks'
+        | 'monthly'
+        | 'quarterly'
+        | 'semiannual'
+        | 'annual'
+        | 'custom';
       intervalDays?: number;
       nextDueDate: string;
       commandId?: string;
@@ -1193,7 +1210,15 @@ export interface PostServiceActionResult {
   serverTime: string;
   channel?: 'sms' | 'email';
   scheduledAt?: string;
-  cadence?: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom';
+  cadence?:
+    | 'weekly'
+    | 'biweekly'
+    | 'every_four_weeks'
+    | 'monthly'
+    | 'quarterly'
+    | 'semiannual'
+    | 'annual'
+    | 'custom';
   nextDueDate?: string;
   requiresFreshEstimate?: true;
 }
@@ -3315,7 +3340,18 @@ export class LiveStoryOpsRepository {
         serverTime: z.string(),
         channel: z.enum(['sms', 'email']).optional(),
         scheduledAt: z.string().optional(),
-        cadence: z.enum(['monthly', 'quarterly', 'semiannual', 'annual', 'custom']).optional(),
+        cadence: z
+          .enum([
+            'weekly',
+            'biweekly',
+            'every_four_weeks',
+            'monthly',
+            'quarterly',
+            'semiannual',
+            'annual',
+            'custom',
+          ])
+          .optional(),
         nextDueDate: z.string().optional(),
         requiresFreshEstimate: z.literal(true).optional(),
       })

@@ -1,9 +1,9 @@
 import { Decimal } from 'decimal.js';
 import { z } from 'zod';
 import {
-  getExteriorConfigurationRequirements,
-  getExteriorServicePricingSemantics,
-} from './exteriorServiceRequirements.ts';
+  getIndustryPackPricingSemantics,
+  getIndustryPackServiceRequirements,
+} from './industryPackRequirements.ts';
 
 export const COMPANY_CONFIGURATION_SCHEMA_VERSION = 'storyops-company-config-v1' as const;
 
@@ -652,8 +652,21 @@ export const companyConfigurationInputSchema = z
     );
     for (const enabledServiceCode of enabledServices) {
       const rule = ruleByService.get(enabledServiceCode);
-      const catalogSemantics = getExteriorServicePricingSemantics(enabledServiceCode);
-      if (!rule || !catalogSemantics) continue;
+      const catalogSemantics = getIndustryPackPricingSemantics(
+        enabledServiceCode,
+        undefined,
+        configuration.pricing.priceBookTemplateVersion,
+      );
+      if (!rule) continue;
+      if (!catalogSemantics) {
+        const ruleIndex = configuration.pricing.serviceRules.indexOf(rule);
+        context.addIssue({
+          code: 'custom',
+          path: ['pricing', 'serviceRules', ruleIndex],
+          message: `Enabled service ${enabledServiceCode} has no resolved industry pack semantics in template ${configuration.pricing.priceBookTemplateVersion}.`,
+        });
+        continue;
+      }
       if (
         rule.pricingUnit !== catalogSemantics.pricingUnit ||
         rule.requiredMeasurementKinds.length !== catalogSemantics.requiredMeasurementKinds.length ||
@@ -824,7 +837,11 @@ export function createExteriorServicesConfiguration(input: {
   enabledServiceCodes: string[];
   serviceRules: CompanyConfiguration['pricing']['serviceRules'];
   packages: CompanyConfiguration['pricing']['packages'];
+  priceBookTemplateVersion?: string;
+  starterEquipmentType?: string;
+  starterSkills?: readonly string[];
 }): CompanyConfiguration {
+  const starterEquipmentType = input.starterEquipmentType ?? 'pressure-washer';
   return companyConfigurationInputSchema.parse({
     schemaVersion: COMPANY_CONFIGURATION_SCHEMA_VERSION,
     identity: {
@@ -888,7 +905,7 @@ export function createExteriorServicesConfiguration(input: {
       taxEnabled: true,
       marginFloorPercent: '42',
       automaticDiscountLimitPercent: '10',
-      priceBookTemplateVersion: 'storyops-exterior-dfw-v1.1.0',
+      priceBookTemplateVersion: input.priceBookTemplateVersion ?? 'storyops-exterior-dfw-v1.1.0',
       enabledServiceCodes: input.enabledServiceCodes,
       serviceRules: input.serviceRules,
       packages: input.packages,
@@ -905,7 +922,7 @@ export function createExteriorServicesConfiguration(input: {
           id: 'owner-crew',
           name: input.ownerName,
           role: 'owner',
-          skills: ['scope-verification', 'exterior-cleaning'],
+          skills: input.starterSkills ?? ['scope-verification', 'exterior-cleaning'],
           active: true,
         },
       ],
@@ -922,9 +939,9 @@ export function createExteriorServicesConfiguration(input: {
       ],
       equipment: [
         {
-          id: 'pressure-washer-1',
-          name: 'Primary pressure washer',
-          equipmentType: 'pressure-washer',
+          id: `${starterEquipmentType}-1`,
+          name: `Primary ${starterEquipmentType.replaceAll('-', ' ')}`,
+          equipmentType: starterEquipmentType,
           quantity: 1,
           inspectionStatus: 'due',
           active: true,
@@ -1005,6 +1022,8 @@ export function createExteriorServicesConfiguration(input: {
     integrations: { providers: allProviders },
   });
 }
+
+export const createServiceCompanyConfiguration = createExteriorServicesConfiguration;
 
 export function parseCompanyConfiguration(input: unknown): CompanyConfiguration {
   return companyConfigurationInputSchema.parse(input);
@@ -1112,8 +1131,10 @@ export function assessCompanyConfiguration(
   const activeOwner = configuration.people.crewMembers.find(
     (member) => member.active && member.role === 'owner',
   );
-  const operationalRequirements = getExteriorConfigurationRequirements(
+  const operationalRequirements = getIndustryPackServiceRequirements(
     configuration.pricing.enabledServiceCodes,
+    undefined,
+    configuration.pricing.priceBookTemplateVersion,
   );
   const activeOwnerSkills = new Set(activeOwner?.skills ?? []);
   const missingOwnerSkills = operationalRequirements.requiredSkills.filter(

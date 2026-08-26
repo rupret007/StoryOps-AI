@@ -447,14 +447,14 @@ ipaddr.js@1.9.1
     integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==
     flags: runtime, required
 
-js-yaml@4.3.0
+js-yaml@4.3.1
   declared-license: MIT
   scope: direct-runtime; graph: runtime; optional-only: no
   installed-evidence: node_modules/js-yaml
   license-material: sha256:a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550
   lock-path: node_modules/js-yaml
-    resolved: https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.0.tgz
-    integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==
+    resolved: https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.1.tgz
+    integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==
     flags: runtime, required
 
 math-intrinsics@1.1.0
@@ -1929,7 +1929,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ----- END MATERIAL sha256:98c970de440dcfc77471610aec2377c9d9b0db2b3be6d1add524a586e1d7f422 -----
 
 ----- BEGIN MATERIAL sha256:a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550 -----
-Package: js-yaml@4.3.0; installed file(s): infra/vroom/runtime-package/node_modules/js-yaml/LICENSE
+Package: js-yaml@4.3.1; installed file(s): infra/vroom/runtime-package/node_modules/js-yaml/LICENSE
 
 (The MIT License)
 

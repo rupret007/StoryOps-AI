@@ -2,6 +2,17 @@ import { z } from 'zod';
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
 
+const recurringCadenceSchema = z.enum([
+  'weekly',
+  'biweekly',
+  'every_four_weeks',
+  'monthly',
+  'quarterly',
+  'semiannual',
+  'annual',
+  'custom',
+]);
+
 export const recurringDuePlanSchema = z
   .object({
     planId: z.string().uuid(),
@@ -10,7 +21,7 @@ export const recurringDuePlanSchema = z
     customerName: z.string().min(1),
     propertyId: z.string().uuid(),
     propertyName: z.string().min(1),
-    cadence: z.enum(['monthly', 'quarterly', 'semiannual', 'annual', 'custom']),
+    cadence: recurringCadenceSchema,
     nextDueDate: isoDateSchema,
     serviceCodes: z.array(z.string().min(1)).min(1),
     requiresFreshEstimate: z.literal(true),
