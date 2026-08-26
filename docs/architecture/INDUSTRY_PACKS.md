@@ -40,6 +40,11 @@ selection or pack/version mismatch does not resolve. Configuration publication
 still does not activate providers, authorize launch, or prove that the selected
 vertical is operationally ready.
 
+When both an active-pack reference and a price-book template version exist,
+they must identify the same registered pack version. Conflicting persisted
+evidence fails closed; the runtime does not choose one field as more truthful
+and does not construct pricing or readiness from the mismatch.
+
 The registry is not a runtime pack marketplace or arbitrary manifest importer.
 It has no durable import/install/upgrade/rollback lifecycle, and checklist,
 completion, material/SDS, weather, routing, intake, and field behavior still

@@ -33,6 +33,16 @@ describe('industry-pack runtime and readiness', () => {
       }),
     ).toBeUndefined();
     expect(
+      resolveIndustryPack({
+        enabledServiceCodes: RESIDENTIAL_SERVICE_CODES,
+        activePack: {
+          code: 'residential-cleaning',
+          version: 'storyops-residential-cleaning-v1.0.0',
+        },
+        priceBookTemplateVersion: 'storyops-exterior-dfw-v1.1.0',
+      }),
+    ).toBeUndefined();
+    expect(
       assertAllEnabledServicesArePackBound(
         RESIDENTIAL_SERVICE_CODES,
         undefined,

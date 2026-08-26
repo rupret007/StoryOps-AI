@@ -9,6 +9,13 @@ execution, finance, provider truth, AI safety, and audit; the versioned pack
 owns service-specific measurements, formulas, evidence, skills, equipment, and
 operating guidance.
 
+This candidate also registers a bounded **draft residential-cleaning
+foundation** for deterministic starter pricing, pack-derived configuration,
+and recurring due-work cadence contracts. It is not a completed residential
+product or V1.2 release: pack-specific field/checklist behavior, occurrence
+lifecycle operations, and human review of operating assumptions remain open.
+See [the industry-pack contract](docs/architecture/INDUSTRY_PACKS.md).
+
 The repository is safe to run without credentials. Its default browser
 workspace and every provider are sandboxed; no message, charge, calendar event,
 route request, upload, or accounting mutation leaves the device.
