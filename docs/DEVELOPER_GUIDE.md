@@ -361,5 +361,8 @@ secrets.
 - [ ] No secrets, customer data, generated backup, or test artifact is staged.
 - [ ] Lint, typecheck, unit/integration, build, E2E, and relevant database gates
       pass from the locked graph.
+- [ ] Hosted GitHub Actions: a job with empty `steps` and no `runner_name` is
+      unexecuted. Classify it with `npm run check:hosted-ci`. Do not treat that
+      red X as a test pass or as a product-test failure.
 - [ ] `docs/STATUS.md`, third-party pins/notices, and release evidence are
       updated.

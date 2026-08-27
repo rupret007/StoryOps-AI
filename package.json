@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check:edge": "node scripts/check-edge.mjs",
+    "check:hosted-ci": "node infra/scripts/ci-build-honesty.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings=0",

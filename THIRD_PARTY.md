@@ -127,7 +127,11 @@ is not a current dependency.
 | `vitest`                      | `4.1.0`    | MIT          |
 
 The application build image uses Alpine/musl. Hosted CI and local Linux
-verification use Ubuntu/glibc (`ubuntu-24.04`). Root `optionalDependencies`
+verification use Ubuntu/glibc (`ubuntu-24.04`) when a runner actually claims
+the job. A hosted Actions job that finishes with empty `steps` and no
+`runner_name` is unexecuted; classify it with `npm run check:hosted-ci` and
+do not treat that red X as a test pass or a product-test failure. Root
+`optionalDependencies`
 therefore pin Rollup's published native packages for both libcs on the
 supported architectures: `@rollup/rollup-linux-arm64-gnu@4.62.3`,
 `@rollup/rollup-linux-arm64-musl@4.62.3`, `@rollup/rollup-linux-x64-gnu@4.62.3`,
