@@ -1,7 +1,7 @@
 # StoryOps AI current status
 
 **Updated:** 2026-07-30  
-**Branch:** `codex/exterior-services-pilot-v1.1`  
+**Branch:** `main`  
 **Phase:** V1.1 implementation frozen and locally verified; evidence recorded
 in a separate report-only commit boundary  
 **Overall verdict:** **YELLOW — sandbox/operator rehearsal only; live customer
