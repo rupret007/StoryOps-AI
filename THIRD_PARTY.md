@@ -126,11 +126,15 @@ is not a current dependency.
 | `vite-plugin-pwa`             | `1.3.0`    | MIT          |
 | `vitest`                      | `4.1.0`    | MIT          |
 
-The application build image uses Alpine/musl. Root `optionalDependencies`
-therefore pin Rollup's published native packages for both supported container
-architectures: `@rollup/rollup-linux-arm64-musl@4.62.3` and
-`@rollup/rollup-linux-x64-musl@4.62.3` (MIT). Their exact registry artifact
-URLs and integrity hashes are in `package-lock.json` and
+The application build image uses Alpine/musl. Hosted CI and local Linux
+verification use Ubuntu/glibc (`ubuntu-24.04`). Root `optionalDependencies`
+therefore pin Rollup's published native packages for both libcs on the
+supported architectures: `@rollup/rollup-linux-arm64-gnu@4.62.3`,
+`@rollup/rollup-linux-arm64-musl@4.62.3`, `@rollup/rollup-linux-x64-gnu@4.62.3`,
+and `@rollup/rollup-linux-x64-musl@4.62.3` (MIT). Pinning only the musl
+artifacts lets npm skip the GNU binary on Ubuntu, and `vite-plugin-pwa`
+then fails looking for `@rollup/rollup-linux-x64-gnu`. Their exact registry
+artifact URLs and integrity hashes are in `package-lock.json` and
 `NPM_THIRD_PARTY_NOTICES.txt`. They are build inputs only; the final static
 runtime image does not copy `node_modules`.
 
