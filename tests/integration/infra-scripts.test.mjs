@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, rm, stat, writeFile, chmod, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,15 @@ import {
   REQUIRED_STORYOPS_DATA_DUMP_EXCLUSIONS,
   extractStoryOpsStoragePolicyDump,
 } from '../../infra/scripts/storage-recovery.mjs';
+import {
+  HOSTED_CI_EXIT_CODES,
+  HOSTED_CI_VERDICTS,
+  assertLinuxRollupNativeInstalled,
+  classifyHostedJob,
+  classifyHostedRun,
+  detectLinuxLibcFamily,
+  requiredLinuxRollupNativeName,
+} from '../../infra/scripts/ci-build-honesty.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sandboxEnvironment = {
@@ -768,6 +777,137 @@ test('root optional Rollup natives cover Alpine images and Ubuntu CI', () => {
     );
     assert.match(entry?.integrity ?? '', /^sha512-/u);
   }
+
+  if (process.platform === 'linux') {
+    const libc = detectLinuxLibcFamily();
+    const nativeName = requiredLinuxRollupNativeName();
+    assert.equal(libc === 'gnu' || libc === 'musl', true);
+    assert.equal(assertLinuxRollupNativeInstalled(repositoryRoot), nativeName);
+    assert.equal(existsSync(resolve(repositoryRoot, 'node_modules', nativeName)), true);
+  }
+});
+
+const MAIN_BFD980A_UNEXECUTED_JOBS = {
+  jobs: [
+    {
+      name: 'Locked install, audit, tests, build',
+      conclusion: 'failure',
+      runner_name: '',
+      runner_group_name: '',
+      started_at: '2026-08-27T05:36:13Z',
+      completed_at: '2026-08-27T05:36:15Z',
+      steps: [],
+    },
+    {
+      name: 'Supabase migration, seed, and lint',
+      conclusion: 'failure',
+      runner_name: '',
+      runner_group_name: '',
+      started_at: '2026-08-27T05:36:13Z',
+      completed_at: '2026-08-27T05:36:15Z',
+      steps: [],
+    },
+    {
+      name: 'Desktop and mobile golden path',
+      conclusion: 'skipped',
+      runner_name: null,
+      runner_group_name: null,
+      started_at: '2026-08-27T05:36:16Z',
+      completed_at: '2026-08-27T05:36:15Z',
+      steps: [],
+    },
+  ],
+};
+
+test('hosted CI classifier refuses to treat empty Ubuntu jobs as a test result', () => {
+  const emptyFailure = classifyHostedJob(MAIN_BFD980A_UNEXECUTED_JOBS.jobs[0]);
+  assert.equal(emptyFailure.status, HOSTED_CI_VERDICTS.UNEXECUTED);
+  assert.equal(emptyFailure.executed, false);
+  assert.match(emptyFailure.reason ?? '', /not a test pass or a product-test failure/u);
+
+  const falseSuccess = classifyHostedJob({
+    name: 'Locked install, audit, tests, build',
+    conclusion: 'success',
+    runner_name: '',
+    steps: [],
+  });
+  assert.equal(falseSuccess.status, HOSTED_CI_VERDICTS.UNEXECUTED);
+  assert.notEqual(falseSuccess.status, HOSTED_CI_VERDICTS.EXECUTED_PASS);
+
+  const executedFailure = classifyHostedJob({
+    name: 'Locked install, audit, tests, build',
+    conclusion: 'failure',
+    runner_name: 'GitHub Actions 1000000000000000000',
+    steps: [{ name: 'Prove this Ubuntu runner claimed the job', conclusion: 'failure' }],
+  });
+  assert.equal(executedFailure.status, HOSTED_CI_VERDICTS.EXECUTED_FAIL);
+  assert.equal(executedFailure.executed, true);
+
+  const executedPass = classifyHostedJob({
+    name: 'Locked install, audit, tests, build',
+    conclusion: 'success',
+    runner_name: 'GitHub Actions 1000000000000000000',
+    steps: [{ name: 'Prove this Ubuntu runner claimed the job', conclusion: 'success' }],
+  });
+  assert.equal(executedPass.status, HOSTED_CI_VERDICTS.EXECUTED_PASS);
+  assert.equal(executedPass.executed, true);
+
+  const run = classifyHostedRun(MAIN_BFD980A_UNEXECUTED_JOBS);
+  assert.equal(run.verdict, HOSTED_CI_VERDICTS.UNEXECUTED);
+  assert.equal(HOSTED_CI_EXIT_CODES[run.verdict], 2);
+  assert.equal(
+    run.jobs.map((job) => job.status).join(','),
+    'unexecuted,unexecuted,skipped',
+  );
+
+  assert.equal(classifyHostedRun({ jobs: [] }).verdict, HOSTED_CI_VERDICTS.UNPROVEN);
+  assert.equal(classifyHostedRun({}).verdict, HOSTED_CI_VERDICTS.UNPROVEN);
+  assert.equal(classifyHostedJob(null).status, HOSTED_CI_VERDICTS.UNPROVEN);
+});
+
+test('hosted CI classifier CLI fail-closes empty Ubuntu job records', async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), 'storyops-hosted-ci-'));
+  const jobsFile = resolve(directory, 'jobs.json');
+  try {
+    await writeFile(jobsFile, JSON.stringify(MAIN_BFD980A_UNEXECUTED_JOBS), { mode: 0o600 });
+    const emptyRun = runScript('infra/scripts/ci-build-honesty.mjs', ['--jobs-file', jobsFile]);
+    assert.equal(emptyRun.status, 2);
+    assert.match(emptyRun.stderr, /unexecuted, not a test result/u);
+    const parsed = JSON.parse(emptyRun.stdout);
+    assert.equal(parsed.verdict, HOSTED_CI_VERDICTS.UNEXECUTED);
+
+    const missing = runScript('infra/scripts/ci-build-honesty.mjs', []);
+    assert.equal(missing.status, 3);
+    assert.match(missing.stderr, /unproven, not a pass/u);
+
+    if (process.platform === 'linux') {
+      const native = runScript('infra/scripts/ci-build-honesty.mjs', ['--assert-rollup-native']);
+      assert.equal(native.status, 0);
+      assert.match(native.stdout, /installed @rollup\/rollup-linux-(?:x64|arm64)-(?:gnu|musl)/u);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('quality and database jobs stay fail-closed when Ubuntu never claims a runner', () => {
+  const workflow = readFileSync(resolve(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
+  const quality = workflow.match(/ {2}quality:[\s\S]*?(?=\n  [a-z])/u)?.[0];
+  const database = workflow.match(/ {2}database:[\s\S]*$/u)?.[0];
+  const e2e = workflow.match(/ {2}e2e:[\s\S]*?(?=\n  [a-z])/u)?.[0];
+  assert.ok(quality && database && e2e, 'CI job blocks must remain parseable.');
+  assert.doesNotMatch(quality, /^\s+needs:/mu);
+  assert.doesNotMatch(database, /^\s+needs:/mu);
+  assert.match(e2e, /^\s+needs: quality$/mu);
+  assert.equal(
+    (workflow.match(/- name: Prove this Ubuntu runner claimed the job/gu) ?? []).length,
+    3,
+  );
+  assert.match(
+    quality,
+    /- name: Fail closed if this glibc host skipped the GNU Rollup native\n\s+run: npm run check:hosted-ci -- --assert-rollup-native/u,
+  );
+  assert.match(workflow, /unexecuted[\s\S]*not a test pass or as a product-test failure/u);
 });
 
 test('the distributable CI artifact preserves every required notice', () => {
