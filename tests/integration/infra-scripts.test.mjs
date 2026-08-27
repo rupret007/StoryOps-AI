@@ -764,7 +764,7 @@ test('root optional Rollup natives cover Alpine images and Ubuntu CI', () => {
     assert.equal(entry?.optional, true, `${name} must remain optional`);
     assert.match(
       entry?.resolved ?? '',
-      new RegExp(`${name.replaceAll('/', '\\/')}-4\\.62\\.3\\.tgz$`, 'u'),
+      new RegExp(`${name.slice(name.lastIndexOf('/') + 1)}-4\\.62\\.3\\.tgz$`, 'u'),
     );
     assert.match(entry?.integrity ?? '', /^sha512-/u);
   }
