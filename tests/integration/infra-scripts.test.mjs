@@ -855,10 +855,7 @@ test('hosted CI classifier refuses to treat empty Ubuntu jobs as a test result',
   const run = classifyHostedRun(MAIN_BFD980A_UNEXECUTED_JOBS);
   assert.equal(run.verdict, HOSTED_CI_VERDICTS.UNEXECUTED);
   assert.equal(HOSTED_CI_EXIT_CODES[run.verdict], 2);
-  assert.equal(
-    run.jobs.map((job) => job.status).join(','),
-    'unexecuted,unexecuted,skipped',
-  );
+  assert.equal(run.jobs.map((job) => job.status).join(','), 'unexecuted,unexecuted,skipped');
 
   assert.equal(classifyHostedRun({ jobs: [] }).verdict, HOSTED_CI_VERDICTS.UNPROVEN);
   assert.equal(classifyHostedRun({}).verdict, HOSTED_CI_VERDICTS.UNPROVEN);
@@ -907,7 +904,10 @@ test('quality and database jobs stay fail-closed when Ubuntu never claims a runn
     quality,
     /- name: Fail closed if this glibc host skipped the GNU Rollup native\n\s+run: npm run check:hosted-ci -- --assert-rollup-native/u,
   );
-  assert.match(workflow, /unexecuted[\s\S]*not a test pass or as a product-test failure/u);
+  assert.match(
+    workflow,
+    /unexecuted[\s\S]*Do not treat that red X as a test pass or as a product-test failure/u,
+  );
 });
 
 test('the distributable CI artifact preserves every required notice', () => {
