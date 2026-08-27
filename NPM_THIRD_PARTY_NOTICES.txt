@@ -9,14 +9,14 @@ SCOPE AND EVIDENCE
 
 Lockfile: package-lock.json (lockfileVersion 3)
 Root package: storyops-ai@1.1.0
-Locked package paths: 683
-Unique package name/version pairs: 681
+Locked package paths: 685
+Unique package name/version pairs: 683
 Unique installed license/notice texts: 281
 Packages with UNKNOWN declared license metadata: 0
 Lock entries with UNKNOWN resolved artifact URL: 539
 Lock entries with UNKNOWN integrity hash: 539
 Installed non-optional packages with no captured license/notice material: 9
-Optional package variants inventoried from lockfile only: 96
+Optional package variants inventoried from lockfile only: 98
 Explicit supplemental notice sources: 0
 
 Every package-lock entry is listed below with its exact version and with
@@ -2123,6 +2123,16 @@ PACKAGE INVENTORY
     integrity: UNKNOWN
     flags: development, optional
 
+@rollup/rollup-linux-arm64-gnu@4.62.3
+  declared-license: MIT
+  scope: direct-optional; graph: runtime; optional-only: yes
+  installed-evidence: NOT EXTRACTED — optional platform variant; metadata is lockfile-only
+  license-material: NOT EXTRACTED — no text inferred
+  lock-path: node_modules/@rollup/rollup-linux-arm64-gnu
+    resolved: https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.62.3.tgz
+    integrity: sha512-LLLFZKt4/Nraf9rxDkhiU8QVgLF4WmCkfr0L4fj0fPfIZFBib0DeiFk1hhaYKd03LFAFJcxHslhDFlNJLylf5Q==
+    flags: runtime, optional
+
 @rollup/rollup-linux-arm64-musl@4.62.3
   declared-license: MIT
   scope: direct-optional; graph: runtime; optional-only: yes
@@ -2131,6 +2141,16 @@ PACKAGE INVENTORY
   lock-path: node_modules/@rollup/rollup-linux-arm64-musl
     resolved: https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.62.3.tgz
     integrity: sha512-WJkdQCvS9sWNOUBJZfQRKpZGFBztRzcowI+nndmflKgU4XY+3a420FgTOSKTsVqJbnzSxeT4vaJalpOaPo2YCQ==
+    flags: runtime, optional
+
+@rollup/rollup-linux-x64-gnu@4.62.3
+  declared-license: MIT
+  scope: direct-optional; graph: runtime; optional-only: yes
+  installed-evidence: NOT EXTRACTED — optional platform variant; metadata is lockfile-only
+  license-material: NOT EXTRACTED — no text inferred
+  lock-path: node_modules/@rollup/rollup-linux-x64-gnu
+    resolved: https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.62.3.tgz
+    integrity: sha512-V4KtWtQfAFMU7+9/A/VDps/VI8CHd3cYz0L8sgJzz8qK7eY7wI4ruFD82UYIYvW9Z4DtlTfhQcsl4XyPHW5uSg==
     flags: runtime, optional
 
 @rollup/rollup-linux-x64-musl@4.62.3

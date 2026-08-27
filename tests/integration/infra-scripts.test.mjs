@@ -734,6 +734,42 @@ test('Compose and Docker builds require an explicit, complete data-mode contract
   );
 });
 
+test('root optional Rollup natives cover Alpine images and Ubuntu CI', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repositoryRoot, 'package.json'), 'utf8'));
+  const lockfile = JSON.parse(readFileSync(resolve(repositoryRoot, 'package-lock.json'), 'utf8'));
+  const workflow = readFileSync(resolve(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
+  const dockerfile = readFileSync(resolve(repositoryRoot, 'Dockerfile'), 'utf8');
+  const optional = pkg.optionalDependencies ?? {};
+  const rootOptional = lockfile.packages?.['']?.optionalDependencies ?? {};
+
+  assert.match(workflow, /runs-on: ubuntu-24\.04/u);
+  assert.match(dockerfile, /node:22\.22\.3-alpine3\.22/u);
+  assert.equal(optional['@rollup/rollup-linux-x64-gnu'], '4.62.3');
+  assert.equal(optional['@rollup/rollup-linux-x64-musl'], '4.62.3');
+  assert.equal(optional['@rollup/rollup-linux-arm64-gnu'], '4.62.3');
+  assert.equal(optional['@rollup/rollup-linux-arm64-musl'], '4.62.3');
+  assert.equal(rootOptional['@rollup/rollup-linux-x64-gnu'], '4.62.3');
+  assert.equal(rootOptional['@rollup/rollup-linux-x64-musl'], '4.62.3');
+  assert.equal(rootOptional['@rollup/rollup-linux-arm64-gnu'], '4.62.3');
+  assert.equal(rootOptional['@rollup/rollup-linux-arm64-musl'], '4.62.3');
+
+  for (const name of [
+    '@rollup/rollup-linux-x64-gnu',
+    '@rollup/rollup-linux-x64-musl',
+    '@rollup/rollup-linux-arm64-gnu',
+    '@rollup/rollup-linux-arm64-musl',
+  ]) {
+    const entry = lockfile.packages?.[`node_modules/${name}`];
+    assert.equal(entry?.version, '4.62.3', `${name} must be lock-pinned`);
+    assert.equal(entry?.optional, true, `${name} must remain optional`);
+    assert.match(
+      entry?.resolved ?? '',
+      new RegExp(`${name.replaceAll('/', '\\/')}-4\\.62\\.3\\.tgz$`, 'u'),
+    );
+    assert.match(entry?.integrity ?? '', /^sha512-/u);
+  }
+});
+
 test('the distributable CI artifact preserves every required notice', () => {
   const workflow = readFileSync(resolve(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
   const artifactStep = workflow.match(
