@@ -26,7 +26,10 @@ route request, upload, or accounting mutation leaves the device.
 > persists only synthetic data in IndexedDB; Supabase mode uses magic-link
 > authentication, a role-scoped workspace RPC, and a finite idempotent command
 > RPC. No real credential, hosted deployment, or external provider canary was
-> supplied or run. Treat [docs/STATUS.md](docs/STATUS.md) as the
+> supplied or run. A hosted GitHub Actions job with empty `steps` and no
+> `runner_name` is unexecuted—not a product-test failure—and
+> `npm run check:hosted-ci` classifies that state. Treat
+> [docs/STATUS.md](docs/STATUS.md) as the
 > launch-readiness source of truth; implemented connectivity is not
 > authorization to serve customers.
 
