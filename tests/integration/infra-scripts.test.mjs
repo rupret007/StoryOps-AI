@@ -862,6 +862,61 @@ test('hosted CI classifier refuses to treat empty Ubuntu jobs as a test result',
   assert.equal(classifyHostedJob(null).status, HOSTED_CI_VERDICTS.UNPROVEN);
 });
 
+test('hosted CI run classifier preserves the strongest mixed job truth', () => {
+  const executedPass = {
+    name: 'Executed pass',
+    conclusion: 'success',
+    runner_name: 'GitHub Actions 1000000000000000000',
+    steps: [{ name: 'Executed step', conclusion: 'success' }],
+  };
+  const executedFailure = {
+    name: 'Executed failure',
+    conclusion: 'failure',
+    runner_name: 'GitHub Actions 1000000000000000000',
+    steps: [{ name: 'Executed step', conclusion: 'failure' }],
+  };
+  const unexecuted = {
+    name: 'Unclaimed runner',
+    conclusion: 'failure',
+    runner_name: '',
+    steps: [],
+  };
+  const skipped = {
+    name: 'Skipped dependency',
+    conclusion: 'skipped',
+    runner_name: null,
+    steps: [],
+  };
+  const unproven = {
+    name: 'Unknown conclusion',
+    conclusion: 'cancelled',
+    runner_name: 'GitHub Actions 1000000000000000000',
+    steps: [{ name: 'Started step', conclusion: 'cancelled' }],
+  };
+
+  const failedWithUnexecuted = classifyHostedRun({ jobs: [executedFailure, unexecuted] });
+  assert.equal(failedWithUnexecuted.verdict, HOSTED_CI_VERDICTS.EXECUTED_FAIL);
+  assert.equal(HOSTED_CI_EXIT_CODES[failedWithUnexecuted.verdict], 1);
+  assert.match(failedWithUnexecuted.reason ?? '', /Other job states do not erase/u);
+
+  const failedWithUnproven = classifyHostedRun({ jobs: [unproven, executedFailure] });
+  assert.equal(failedWithUnproven.verdict, HOSTED_CI_VERDICTS.EXECUTED_FAIL);
+
+  const passWithUnexecuted = classifyHostedRun({ jobs: [executedPass, unexecuted] });
+  assert.equal(passWithUnexecuted.verdict, HOSTED_CI_VERDICTS.UNEXECUTED);
+  assert.equal(HOSTED_CI_EXIT_CODES[passWithUnexecuted.verdict], 2);
+
+  const passWithSkipped = classifyHostedRun({ jobs: [executedPass, skipped] });
+  assert.equal(passWithSkipped.verdict, HOSTED_CI_VERDICTS.SKIPPED);
+  assert.equal(HOSTED_CI_EXIT_CODES[passWithSkipped.verdict], 3);
+  assert.match(passWithSkipped.reason ?? '', /not a complete hosted test pass/u);
+
+  assert.equal(
+    classifyHostedRun({ jobs: [executedPass, { ...executedPass, name: 'Another pass' }] }).verdict,
+    HOSTED_CI_VERDICTS.EXECUTED_PASS,
+  );
+});
+
 test('hosted CI classifier CLI fail-closes empty Ubuntu job records', async () => {
   const directory = await mkdtemp(resolve(tmpdir(), 'storyops-hosted-ci-'));
   const jobsFile = resolve(directory, 'jobs.json');
@@ -872,6 +927,44 @@ test('hosted CI classifier CLI fail-closes empty Ubuntu job records', async () =
     assert.match(emptyRun.stderr, /unexecuted, not a test result/u);
     const parsed = JSON.parse(emptyRun.stdout);
     assert.equal(parsed.verdict, HOSTED_CI_VERDICTS.UNEXECUTED);
+
+    await writeFile(
+      jobsFile,
+      JSON.stringify({
+        jobs: [
+          {
+            name: 'Executed failure',
+            conclusion: 'failure',
+            runner_name: 'GitHub Actions 1000000000000000000',
+            steps: [{ name: 'Executed step', conclusion: 'failure' }],
+          },
+          MAIN_BFD980A_UNEXECUTED_JOBS.jobs[0],
+        ],
+      }),
+      { mode: 0o600 },
+    );
+    const mixedFailure = runScript('infra/scripts/ci-build-honesty.mjs', ['--jobs-file', jobsFile]);
+    assert.equal(mixedFailure.status, 1);
+    assert.equal(JSON.parse(mixedFailure.stdout).verdict, HOSTED_CI_VERDICTS.EXECUTED_FAIL);
+
+    await writeFile(
+      jobsFile,
+      JSON.stringify({
+        jobs: [
+          {
+            name: 'Executed pass',
+            conclusion: 'success',
+            runner_name: 'GitHub Actions 1000000000000000000',
+            steps: [{ name: 'Executed step', conclusion: 'success' }],
+          },
+          MAIN_BFD980A_UNEXECUTED_JOBS.jobs[2],
+        ],
+      }),
+      { mode: 0o600 },
+    );
+    const partialRun = runScript('infra/scripts/ci-build-honesty.mjs', ['--jobs-file', jobsFile]);
+    assert.equal(partialRun.status, 3);
+    assert.equal(JSON.parse(partialRun.stdout).verdict, HOSTED_CI_VERDICTS.SKIPPED);
 
     const missing = runScript('infra/scripts/ci-build-honesty.mjs', []);
     assert.equal(missing.status, 3);
