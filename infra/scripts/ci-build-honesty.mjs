@@ -124,6 +124,14 @@ export function classifyHostedRun(payload) {
   }
 
   const jobs = normalized.jobs.map(classifyHostedJob);
+  if (jobs.some((job) => job.status === HOSTED_CI_VERDICTS.EXECUTED_FAIL)) {
+    return {
+      verdict: HOSTED_CI_VERDICTS.EXECUTED_FAIL,
+      jobs,
+      reason:
+        'A claimed Ubuntu runner executed job steps and they failed. Other job states do not erase that result.',
+    };
+  }
   if (jobs.some((job) => job.status === HOSTED_CI_VERDICTS.UNPROVEN)) {
     return {
       verdict: HOSTED_CI_VERDICTS.UNPROVEN,
@@ -139,18 +147,19 @@ export function classifyHostedRun(payload) {
         'Hosted Ubuntu CI completed without claiming a runner. That red X is unexecuted, not a test result.',
     };
   }
-  if (jobs.some((job) => job.status === HOSTED_CI_VERDICTS.EXECUTED_FAIL)) {
+  if (jobs.some((job) => job.status === HOSTED_CI_VERDICTS.SKIPPED)) {
     return {
-      verdict: HOSTED_CI_VERDICTS.EXECUTED_FAIL,
+      verdict: HOSTED_CI_VERDICTS.SKIPPED,
       jobs,
-      reason: 'A claimed Ubuntu runner executed job steps and they failed.',
+      reason: 'At least one hosted job was skipped. That is not a complete hosted test pass.',
     };
   }
-  if (!jobs.some((job) => job.status === HOSTED_CI_VERDICTS.EXECUTED_PASS)) {
+
+  if (!jobs.every((job) => job.status === HOSTED_CI_VERDICTS.EXECUTED_PASS)) {
     return {
       verdict: HOSTED_CI_VERDICTS.UNPROVEN,
       jobs,
-      reason: 'Every hosted job was skipped. That is not a hosted test pass.',
+      reason: 'The hosted job set has no proven aggregate verdict. Fail closed.',
     };
   }
 
