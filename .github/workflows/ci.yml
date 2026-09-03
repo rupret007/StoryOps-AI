@@ -192,7 +192,7 @@ jobs:
         run: npm ci
 
       - name: Start pinned local Supabase
-        run: node scripts/setup.mjs --skip-install --with-supabase --env-file .env.local
+        run: node scripts/setup.mjs --skip-install --with-supabase --storyops-env-file .env.local
 
       - name: Run migration, RLS, RPC, and Edge release contract
         run: npm run test:supabase -- --reset

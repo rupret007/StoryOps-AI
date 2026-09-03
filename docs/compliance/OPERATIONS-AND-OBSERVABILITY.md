@@ -18,6 +18,10 @@ Node/runtime layout, and validates all provider modes. Every provider stays in
 npm run setup:app -- --check --skip-install
 ```
 
+Use `--storyops-env-file PATH` when setup must create or read a different
+owner-only environment file. Do not pass Node's reserved `--env-file` option to
+`setup.mjs`; current Node consumes it before the script can create the target.
+
 Optional local services:
 
 ```bash

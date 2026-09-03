@@ -275,6 +275,24 @@ test('no-key setup check passes in forced sandbox mode', () => {
   assert.doesNotMatch(result.stdout + result.stderr, /OPENAI_API_KEY=live/u);
 });
 
+test('setup creates an explicit owner-only environment target under pinned Node', async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), 'storyops-setup-env-target-'));
+  const envFile = resolve(directory, 'custom.env');
+  try {
+    const result = runScript('scripts/setup.mjs', [
+      '--skip-install',
+      '--storyops-env-file',
+      envFile,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, new RegExp(`CREATE ${envFile.replaceAll('\\', '\\\\')}`, 'u'));
+    assert.match(readFileSync(envFile, 'utf8'), /^STORYOPS_PROVIDER_MODE=sandbox$/mu);
+    assert.equal((await stat(envFile)).mode & 0o777, 0o600);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('local Edge contract runner uses an owner-only ephemeral webhook environment file', () => {
   const runner = readFileSync(resolve(repositoryRoot, 'scripts/verify-local-supabase.mjs'), 'utf8');
 
@@ -488,7 +506,7 @@ test('setup verification runs the live contract without reset unless explicitly 
       '--skip-install',
       '--with-supabase',
       '--verify',
-      '--env-file',
+      '--storyops-env-file',
       envFile,
     ]);
     assert.equal(regular.status, 0, regular.stderr);
@@ -513,7 +531,7 @@ test('setup verification runs the live contract without reset unless explicitly 
       '--with-supabase',
       '--verify',
       '--reset-supabase',
-      '--env-file',
+      '--storyops-env-file',
       envFile,
     ]);
     assert.equal(reset.status, 0, reset.stderr);
@@ -531,7 +549,7 @@ test(
     try {
       const result = runScript(
         'scripts/setup.mjs',
-        ['--skip-install', '--with-supabase', '--env-file', fixture.envFile],
+        ['--skip-install', '--with-supabase', '--storyops-env-file', fixture.envFile],
         fixture.environment,
       );
       assert.equal(result.status, 0, result.stderr);
@@ -585,7 +603,7 @@ test(
     try {
       const result = runScript(
         'scripts/setup.mjs',
-        ['--skip-install', '--with-supabase', '--env-file', fixture.envFile],
+        ['--skip-install', '--with-supabase', '--storyops-env-file', fixture.envFile],
         fixture.environment,
       );
       assert.equal(result.status, 0, result.stderr);
@@ -634,7 +652,7 @@ test(
             '--skip-install',
             '--with-supabase',
             '--unsafe-allow-wildcard-supabase-ports',
-            '--env-file',
+            '--storyops-env-file',
             fixture.envFile,
           ],
           fixture.environment,
@@ -666,7 +684,7 @@ test(
     try {
       const blocked = runScript(
         'scripts/setup.mjs',
-        ['--skip-install', '--with-supabase', '--env-file', fixture.envFile],
+        ['--skip-install', '--with-supabase', '--storyops-env-file', fixture.envFile],
         fixture.environment,
       );
       assert.notEqual(blocked.status, 0);
@@ -691,7 +709,7 @@ test(
           '--skip-install',
           '--with-supabase',
           '--unsafe-allow-wildcard-supabase-ports',
-          '--env-file',
+          '--storyops-env-file',
           fixture.envFile,
         ],
         fixture.environment,
@@ -1036,7 +1054,12 @@ test('CI and operator docs keep local Supabase on the reviewed loopback network'
   const developerGuide = readFileSync(resolve(repositoryRoot, 'docs/DEVELOPER_GUIDE.md'), 'utf8');
   assert.match(
     workflow,
-    /node scripts\/setup\.mjs --skip-install --with-supabase --env-file \.env\.local/u,
+    /node scripts\/setup\.mjs --skip-install --with-supabase --storyops-env-file \.env\.local/u,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /node scripts\/setup\.mjs[^\n]*\s--env-file(?:\s|=)/u,
+    'Node 22 reserves --env-file and consumes it before setup.mjs can create the target.',
   );
   assert.match(workflow, /--network-id storyops-ai-supabase-loopback/u);
   assert.doesNotMatch(workflow, /run:\s*npx --yes supabase@2\.110\.0 start\s*$/mu);
