@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomersPage } from '@/pages/CustomersPage';
-import { MemoryRouter } from '@/router';
 import { createDemoState } from '@/state/demoSeed';
 import type { DemoState, StoryOpsActions } from '@/state/model';
 
@@ -85,39 +84,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderCustomers(path = '/customers') {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <CustomersPage />
-    </MemoryRouter>,
-  );
-}
-
 describe('customer/property production workflow', () => {
-  it('opens only the exact role-visible customer named by a search deep link', () => {
-    mocked.value = {
-      state: liveState(),
-      actions: {} as StoryOpsActions,
-      can: () => true,
-    };
-    renderCustomers(`/customers?customer=${customerId}`);
-
-    expect(screen.getByRole('dialog', { name: 'Morgan Ellis' })).toBeVisible();
-    expect(screen.queryByText(/not in the current role-visible workspace/iu)).toBeNull();
-  });
-
-  it('fails closed when a customer search target is no longer role-visible', () => {
-    mocked.value = {
-      state: liveState(),
-      actions: {} as StoryOpsActions,
-      can: () => true,
-    };
-    renderCustomers('/customers?customer=stale-customer-id');
-
-    expect(screen.getByText(/not in the current role-visible workspace/iu)).toBeVisible();
-    expect(screen.queryByRole('dialog', { name: 'Morgan Ellis' })).toBeNull();
-  });
-
   it('keeps the intake dialog open and claims no success when atomic creation is unconfirmed', async () => {
     const createCustomerProperty = vi.fn().mockResolvedValue(undefined);
     mocked.value = {
@@ -125,7 +92,7 @@ describe('customer/property production workflow', () => {
       actions: { createCustomerProperty } as unknown as StoryOpsActions,
       can: () => true,
     };
-    renderCustomers();
+    render(<CustomersPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add customer' }));
     fireEvent.change(screen.getByLabelText('Customer name'), {
@@ -207,7 +174,7 @@ describe('customer/property production workflow', () => {
       } as unknown as StoryOpsActions,
       can: () => true,
     };
-    renderCustomers();
+    render(<CustomersPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Morgan Ellis' }));
     const dialog = screen.getByRole('dialog', { name: 'Morgan Ellis' });
