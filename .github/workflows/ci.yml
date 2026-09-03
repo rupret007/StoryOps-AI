@@ -147,8 +147,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright projects
         run: npm run test:e2e

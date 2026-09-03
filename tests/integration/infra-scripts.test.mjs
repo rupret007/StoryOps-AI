@@ -1041,6 +1041,10 @@ test('the distributable CI artifact preserves every required notice', () => {
   assert.match(workflow, /- name: Run AI evaluations\s+run: npm run eval:ai/u);
   assert.match(
     workflow,
+    /- name: Install Playwright browsers\s+run: npx playwright install --with-deps chromium webkit/u,
+  );
+  assert.match(
+    workflow,
     /- name: Run disposable migration upgrade rehearsal\s+run: npm run test:upgrade/u,
   );
 });

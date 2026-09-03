@@ -90,7 +90,7 @@ npm run verify
 Full local proof:
 
 ```bash
-npx playwright install chromium
+npx playwright install chromium webkit
 npm run demo:proof
 ```
 
