@@ -39,11 +39,6 @@ route request, upload, or accounting mutation leaves the device.
   workbench, dispatch board, offline-first field mode, finance, AI office,
   approvals, operations, integration health, audit trail, setup wizard, and
   customer portal.
-- A permission-scoped command palette indexes the actual role-visible customer,
-  lead, visit, estimate, invoice, and price-book records. It supports normalized
-  multi-field search and full keyboard selection, opens exact customer and
-  invoice targets, and verifies a visit selection before switching the field
-  packet; stale targets never fall back to a different record.
 - A reviewed company-configuration studio and versioned industry-pack contract.
   Setup creates drafts and requires separate publication; it never silently
   activates prices, terms, providers, outbound communication, or launch

@@ -13,8 +13,8 @@ Locked package paths: 685
 Unique package name/version pairs: 683
 Unique installed license/notice texts: 281
 Packages with UNKNOWN declared license metadata: 0
-Lock entries with UNKNOWN resolved artifact URL: 538
-Lock entries with UNKNOWN integrity hash: 538
+Lock entries with UNKNOWN resolved artifact URL: 539
+Lock entries with UNKNOWN integrity hash: 539
 Installed non-optional packages with no captured license/notice material: 9
 Optional package variants inventoried from lockfile only: 98
 Explicit supplemental notice sources: 0
@@ -3717,14 +3717,14 @@ fast-levenshtein@2.0.6
     integrity: UNKNOWN
     flags: development, required
 
-fast-uri@3.1.7
+fast-uri@3.1.5
   declared-license: BSD-3-Clause
   scope: transitive; graph: runtime; optional-only: no
   installed-evidence: node_modules/fast-uri
   license-material: sha256:b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786
   lock-path: node_modules/fast-uri
-    resolved: https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.7.tgz
-    integrity: sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg==
+    resolved: https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.5.tgz
+    integrity: sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw==
     flags: runtime, required
 
 fdir@6.5.0
@@ -5481,14 +5481,14 @@ punycode@2.3.1
     integrity: UNKNOWN
     flags: development, required
 
-qs@6.16.0
+qs@6.15.3
   declared-license: BSD-3-Clause
   scope: transitive; graph: runtime; optional-only: no
   installed-evidence: node_modules/qs
   license-material: sha256:e7dc37bf662d7f786efcb46c545615e70c1daf458a38385521c63cf6607cdfe1
   lock-path: node_modules/qs
-    resolved: https://registry.npmjs.org/qs/-/qs-6.16.0.tgz
-    integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==
+    resolved: UNKNOWN
+    integrity: UNKNOWN
     flags: runtime, required
 
 range-parser@1.3.0
@@ -14404,7 +14404,7 @@ THE SOFTWARE.
 ----- END MATERIAL sha256:aee9670e09b75ca8a2a1fe62d545ae38a6797970caf0335628e3a4dd15bc9b6c -----
 
 ----- BEGIN MATERIAL sha256:b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786 -----
-Package: fast-uri@3.1.7; installed file(s): node_modules/fast-uri/LICENSE
+Package: fast-uri@3.1.5; installed file(s): node_modules/fast-uri/LICENSE
 
 Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae
 Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team>
@@ -19225,7 +19225,7 @@ SOFTWARE.
 ----- END MATERIAL sha256:e6e972dba808fb9d80863fe90ca222a47710cb850f6e6e2af95cdc0d022f79bd -----
 
 ----- BEGIN MATERIAL sha256:e7dc37bf662d7f786efcb46c545615e70c1daf458a38385521c63cf6607cdfe1 -----
-Package: qs@6.16.0; installed file(s): node_modules/qs/LICENSE.md
+Package: qs@6.15.3; installed file(s): node_modules/qs/LICENSE.md
 
 BSD 3-Clause License
 

@@ -11,10 +11,9 @@ import {
   UserRoundPlus,
   WalletCards,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Link, useSearchParams } from '@/router';
+import { useState } from 'react';
+import { Link } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
-import type { DemoInvoice } from '@/state/model';
 import { Badge, Button, Card, Field, Metric, PageHeader } from '@/components/ui/Primitives';
 import { downloadText, rowsToCsv } from '@/utils/download';
 import {
@@ -29,56 +28,8 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-interface InvoiceTarget {
-  id?: string;
-  exists: boolean;
-  rowRef: RefObject<HTMLTableRowElement | null>;
-  clear(): void;
-}
-
-function useInvoiceTarget(invoices: readonly DemoInvoice[]): InvoiceTarget {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const rowRef = useRef<HTMLTableRowElement>(null);
-  const id = searchParams.get('invoice') ?? undefined;
-  const exists = Boolean(id && invoices.some((invoice) => invoice.id === id));
-
-  useEffect(() => {
-    if (!exists) return;
-    rowRef.current?.focus({ preventScroll: true });
-    rowRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-  }, [exists, id]);
-
-  return {
-    id,
-    exists,
-    rowRef,
-    clear: () => {
-      const next = new URLSearchParams(searchParams);
-      next.delete('invoice');
-      setSearchParams(next);
-    },
-  };
-}
-
-function MissingInvoiceTarget({ onClear }: { onClear(): void }) {
-  return (
-    <div role="status">
-      <Card className="record-target-notice">
-        <div>
-          <strong>That invoice is not in the current role-visible workspace.</strong>
-          <p>It may have changed, been reconciled, or fallen outside this signed-in scope.</p>
-        </div>
-        <Button variant="secondary" size="sm" onClick={onClear}>
-          Show role-visible invoices
-        </Button>
-      </Card>
-    </div>
-  );
-}
-
 export function FinancePage() {
   const { state, actions, can } = useStoryOps();
-  const invoiceTarget = useInvoiceTarget(state.invoices);
   const [filter, setFilter] = useState<'all' | 'open' | 'past_due'>('all');
   const issued = state.invoices.some((invoice) => invoice.id === 'invoice-morgan');
   const paid = state.invoices.some(
@@ -114,7 +65,7 @@ export function FinancePage() {
     );
   };
 
-  if (state.dataMode === 'supabase') return <LiveFinancePage invoiceTarget={invoiceTarget} />;
+  if (state.dataMode === 'supabase') return <LiveFinancePage />;
 
   return (
     <div className="page">
@@ -137,10 +88,6 @@ export function FinancePage() {
           </>
         }
       />
-
-      {invoiceTarget.id && !invoiceTarget.exists && (
-        <MissingInvoiceTarget onClear={invoiceTarget.clear} />
-      )}
 
       <section className="metrics-grid">
         <Metric
@@ -290,13 +237,7 @@ export function FinancePage() {
             </thead>
             <tbody>
               {visibleInvoices.map((invoice) => (
-                <tr
-                  key={invoice.id}
-                  ref={invoice.id === invoiceTarget.id ? invoiceTarget.rowRef : undefined}
-                  className={invoice.id === invoiceTarget.id ? 'data-table__target' : undefined}
-                  tabIndex={invoice.id === invoiceTarget.id ? -1 : undefined}
-                  aria-current={invoice.id === invoiceTarget.id ? 'true' : undefined}
-                >
+                <tr key={invoice.id}>
                   <td>
                     <strong>{invoice.number}</strong>
                     <span className="table-subtext">{invoice.jobNumber}</span>
@@ -394,7 +335,7 @@ export function FinancePage() {
   );
 }
 
-function LiveFinancePage({ invoiceTarget }: { invoiceTarget: InvoiceTarget }) {
+function LiveFinancePage() {
   const { state, actions, can } = useStoryOps();
   const [filter, setFilter] = useState<'all' | 'open' | 'past_due'>('all');
   const [allocationNotes, setAllocationNotes] = useState<Record<string, string>>({});
@@ -499,10 +440,6 @@ function LiveFinancePage({ invoiceTarget }: { invoiceTarget: InvoiceTarget }) {
           </>
         }
       />
-
-      {invoiceTarget.id && !invoiceTarget.exists && (
-        <MissingInvoiceTarget onClear={invoiceTarget.clear} />
-      )}
 
       <section className="metrics-grid">
         <Metric
@@ -700,13 +637,7 @@ function LiveFinancePage({ invoiceTarget }: { invoiceTarget: InvoiceTarget }) {
             </thead>
             <tbody>
               {visibleInvoices.map((invoice) => (
-                <tr
-                  key={invoice.id}
-                  ref={invoice.id === invoiceTarget.id ? invoiceTarget.rowRef : undefined}
-                  className={invoice.id === invoiceTarget.id ? 'data-table__target' : undefined}
-                  tabIndex={invoice.id === invoiceTarget.id ? -1 : undefined}
-                  aria-current={invoice.id === invoiceTarget.id ? 'true' : undefined}
-                >
+                <tr key={invoice.id}>
                   <td>
                     <strong>{invoice.number}</strong>
                   </td>
