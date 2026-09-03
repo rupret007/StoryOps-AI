@@ -2343,6 +2343,33 @@ h3 {
   background: #fbfbf7;
 }
 
+.data-table tbody tr.data-table__target {
+  background: var(--lime-soft);
+  box-shadow: inset 4px 0 0 var(--green-700);
+  outline: 0;
+}
+
+.data-table tbody tr.data-table__target:focus-visible {
+  box-shadow:
+    inset 4px 0 0 var(--green-700),
+    inset 0 0 0 2px var(--green-700);
+}
+
+.record-target-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-color: color-mix(in srgb, var(--orange) 45%, var(--line));
+  background: var(--orange-soft);
+}
+
+.record-target-notice p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
 .customer-cell {
   display: flex;
   min-width: 170px;
@@ -7370,8 +7397,18 @@ h3 {
   text-align: left;
 }
 
-.command-result:hover {
+.command-result:hover,
+.command-result--active {
   background: var(--surface-muted);
+}
+
+.command-result--active {
+  box-shadow: inset 3px 0 0 var(--lime);
+}
+
+.command-result:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .command-result__icon {
@@ -7394,6 +7431,29 @@ h3 {
   display: block;
   color: var(--muted);
   font-size: 0.6rem;
+}
+
+.command-results__error {
+  margin: 0.45rem 0.55rem 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--red) 28%, transparent);
+  border-radius: 9px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 7%, white);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.command-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--surface-muted);
+  font-size: 0.57rem;
 }
 
 .visually-hidden {

@@ -19,83 +19,19 @@ import {
   candidateIsConfirmable,
   type PropertyGeocodeCandidatesReceipt,
 } from '@/core/properties/contracts';
+import { sandboxCustomerRecords, type SandboxCustomerRecord } from '@/data/sandboxCustomers';
+import { useSearchParams } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
 import { downloadText, rowsToCsv } from '@/utils/download';
 
-const initialCustomers = [
-  {
-    id: 'riley',
-    name: 'Riley Brooks',
-    email: 'riley.brooks@example.com',
-    phone: '(817) 555-0172',
-    properties: 1,
-    address: '421 Oak Hollow Way, Southlake',
-    lifetime: '$2,348',
-    lastService: 'Today',
-    nextDue: 'Jan 2027',
-    status: 'Active',
-    tone: 'green' as const,
-  },
-  {
-    id: 'morgan',
-    name: 'Morgan Ellis',
-    email: 'morgan.ellis@example.com',
-    phone: '(214) 555-0184',
-    properties: 1,
-    address: '1842 Cedar Ridge Lane, Flower Mound',
-    lifetime: '$0',
-    lastService: 'New customer',
-    nextDue: 'Quote open',
-    status: 'Lead',
-    tone: 'blue' as const,
-  },
-  {
-    id: 'taylor',
-    name: 'Taylor Nguyen',
-    email: 'taylor.nguyen@example.com',
-    phone: '(972) 555-0142',
-    properties: 2,
-    address: '611 Stone Creek Drive, Plano',
-    lifetime: '$1,284',
-    lastService: 'Jul 25',
-    nextDue: 'Oct 2026',
-    status: 'Active',
-    tone: 'orange' as const,
-  },
-  {
-    id: 'cameron',
-    name: 'Cameron Lee',
-    email: 'cameron.lee@example.com',
-    phone: '(469) 555-0124',
-    properties: 1,
-    address: '72 Meridian Court, Dallas',
-    lifetime: '$1,016',
-    lastService: 'Jul 18',
-    nextDue: 'Invoice past due',
-    status: 'Attention',
-    tone: 'plum' as const,
-  },
-  {
-    id: 'jamie',
-    name: 'Jamie Ortiz',
-    email: 'jamie.ortiz@example.com',
-    phone: '(214) 555-0191',
-    properties: 3,
-    address: '1800 Westlake Parkway, Westlake',
-    lifetime: '$3,762',
-    lastService: 'Jul 14',
-    nextDue: 'Jan 2027',
-    status: 'Active',
-    tone: 'green' as const,
-  },
-];
-
 export function CustomersPage() {
   const { state, actions, can } = useStoryOps();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'active' | 'leads' | 'all'>('all');
-  const [records, setRecords] = useState(initialCustomers);
-  const [selectedId, setSelectedId] = useState<string>();
+  const [records, setRecords] = useState<SandboxCustomerRecord[]>(() =>
+    sandboxCustomerRecords.map((record) => ({ ...record })),
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string>();
@@ -126,7 +62,14 @@ export function CustomersPage() {
                 : ('plum' as const),
         }))
       : records;
+  const selectedId = searchParams.get('customer') ?? undefined;
   const selected = displayedRecords.find((customer) => customer.id === selectedId);
+  const setSelectedId = (customerId?: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (customerId) next.set('customer', customerId);
+    else next.delete('customer');
+    setSearchParams(next);
+  };
   const selectedProperties =
     state.dataMode === 'supabase' && selected
       ? (state.live?.properties ?? []).filter((property) => property.customerId === selected.id)
@@ -180,6 +123,20 @@ export function CustomersPage() {
           </>
         }
       />
+
+      {selectedId && !selected && (
+        <div role="status">
+          <Card className="record-target-notice">
+            <div>
+              <strong>That customer is not in the current role-visible workspace.</strong>
+              <p>The record may have changed or fallen outside this signed-in scope.</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setSelectedId(undefined)}>
+              Show role-visible customers
+            </Button>
+          </Card>
+        </div>
+      )}
 
       <section className="customer-summary-grid">
         <Card>

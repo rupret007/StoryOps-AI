@@ -50,12 +50,12 @@ test('mobile navigation and command search remain complete and keyboard-containe
   await searchTrigger.click();
 
   const searchDialog = page.getByRole('dialog', { name: 'Search StoryOps' });
-  const searchInput = searchDialog.getByRole('textbox', { name: 'Search' });
+  const searchInput = searchDialog.getByRole('combobox', { name: 'Search' });
   await expect(searchInput).toBeFocused();
   await expect(page.locator('.app-shell__chrome')).toHaveAttribute('inert', '');
   await page.keyboard.press('Shift+Tab');
   await expect(
-    searchDialog.getByRole('button', { name: /DFW Residential 2026\.07/u }),
+    searchDialog.getByRole('option', { name: /DFW Residential 2026\.07/u }),
   ).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(searchInput).toBeFocused();
@@ -64,4 +64,17 @@ test('mobile navigation and command search remain complete and keyboard-containe
   await expect(searchDialog).toBeHidden();
   await expect(searchTrigger).toBeFocused();
   await expect(page.locator('.app-shell__chrome')).not.toHaveAttribute('inert', '');
+
+  await searchTrigger.click();
+  const exactSearch = page
+    .getByRole('dialog', { name: 'Search StoryOps' })
+    .getByRole('combobox', { name: 'Search' });
+  await exactSearch.fill('INV 1021');
+  await expect(
+    page.getByRole('option', { name: /INV-1021 Invoice · Cameron Lee · past due/u }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await exactSearch.press('Enter');
+
+  await expect(page).toHaveURL(/\/finance\?invoice=invoice-1021$/u);
+  await expect(page.locator('tr[aria-current="true"]')).toContainText('INV-1021');
 });

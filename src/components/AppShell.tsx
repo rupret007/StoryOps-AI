@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -39,6 +40,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { Permission } from '@/domain';
+import {
+  buildWorkspaceSearchItems,
+  searchWorkspaceItems,
+  type WorkspaceSearchItem,
+  type WorkspaceSearchKind,
+} from '@/core/workspaceSearch';
 import { NavLink, useLocation, useNavigate } from '@/router';
 import { useStoryOps } from '@/state/StoryOpsProvider';
 import type { AppRole } from '@/state/model';
@@ -119,41 +126,14 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-const sandboxSearchItems = (estimateTotal: string) => [
-  {
-    title: 'Morgan Ellis',
-    meta: 'Customer · Flower Mound',
-    href: '/pipeline?lead=lead-morgan',
-    icon: UserRound,
-  },
-  {
-    title: 'EST-1048',
-    meta: `Estimate · ${new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(Number(estimateTotal))}`,
-    href: '/estimates/estimate-1048',
-    icon: FileCheck2,
-  },
-  {
-    title: 'JOB-1032',
-    meta: 'Today · Riley Brooks',
-    href: '/field',
-    icon: BriefcaseBusiness,
-  },
-  {
-    title: 'INV-1021',
-    meta: 'Past due · $438.70',
-    href: '/finance',
-    icon: BadgeDollarSign,
-  },
-  {
-    title: 'DFW Residential 2026.07',
-    meta: 'Active price book · v3',
-    href: '/operations',
-    icon: Settings2,
-  },
-];
+const searchResultIcons: Readonly<Record<WorkspaceSearchKind, LucideIcon>> = {
+  customer: UserRound,
+  lead: Inbox,
+  visit: BriefcaseBusiness,
+  invoice: BadgeDollarSign,
+  estimate: FileCheck2,
+  price_book: Settings2,
+};
 
 const roleLabels: Record<AppRole, string> = {
   owner: 'Owner',
@@ -749,59 +729,48 @@ function MobileMenu({ onClose }: { onClose(): void }) {
 
 function CommandPalette({ onClose }: { onClose(): void }) {
   const [query, setQuery] = useState('');
-  const { state } = useStoryOps();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [openingKey, setOpeningKey] = useState<string>();
+  const [openError, setOpenError] = useState('');
+  const { state, actions, can } = useStoryOps();
   const navigate = useNavigate();
   const dialogRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const items = useMemo(() => {
-    if (state.dataMode === 'sandbox') return sandboxSearchItems(state.estimate.total);
-    return [
-      ...(state.live?.customers ?? []).map((customer) => ({
-        title: customer.name,
-        meta: `Customer · ${customer.address}`,
-        href: '/customers',
-        icon: UserRound,
-      })),
-      ...state.leads.map((lead) => ({
-        title: lead.name,
-        meta: `Lead · ${lead.service}`,
-        href: `/pipeline?lead=${encodeURIComponent(lead.id)}`,
-        icon: Inbox,
-      })),
-      ...state.visits.map((visit) => ({
-        title: visit.jobNumber,
-        meta: `Visit · ${visit.customerName} · ${visit.status.replaceAll('_', ' ')}`,
-        href: '/field',
-        icon: BriefcaseBusiness,
-      })),
-      ...state.invoices.map((invoice) => ({
-        title: invoice.number,
-        meta: `Invoice · ${invoice.customerName} · ${invoice.status}`,
-        href: '/finance',
-        icon: BadgeDollarSign,
-      })),
-      ...(state.estimate.id
-        ? [
-            {
-              title: state.estimate.estimateNumber,
-              meta: `Estimate · ${state.estimate.status}`,
-              href: `/estimates/${encodeURIComponent(state.estimate.id)}`,
-              icon: FileCheck2,
-            },
-          ]
-        : []),
-    ];
-  }, [state]);
-  const results = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return normalized
-      ? items.filter(
-          (item) =>
-            item.title.toLowerCase().includes(normalized) ||
-            item.meta.toLowerCase().includes(normalized),
-        )
-      : items;
-  }, [items, query]);
+  const listboxId = `${useId()}-workspace-results`;
+  const items = useMemo(() => buildWorkspaceSearchItems(state, can), [can, state]);
+  const matches = useMemo(() => searchWorkspaceItems(items, query), [items, query]);
+  const results = matches.slice(0, 30);
+  const selectedIndex = Math.min(activeIndex, Math.max(0, results.length - 1));
+
+  const openItem = useCallback(
+    async (item: WorkspaceSearchItem) => {
+      if (openingKey) return;
+      setOpeningKey(item.key);
+      setOpenError('');
+      try {
+        if (item.kind === 'visit') {
+          const selected = await actions.selectVisit(item.recordId);
+          if (!selected) {
+            setOpenError(
+              'That visit could not be verified in the current role scope. Refresh the workspace and try again.',
+            );
+            return;
+          }
+        } else if (item.kind === 'lead') {
+          actions.selectLead(item.recordId);
+        }
+        navigate(item.href);
+        onClose();
+      } catch {
+        setOpenError(
+          'That record could not be opened from the current workspace. Nothing was changed.',
+        );
+      } finally {
+        setOpeningKey(undefined);
+      }
+    },
+    [actions, navigate, onClose, openingKey],
+  );
 
   useDialogKeyboard(dialogRef, onClose, searchInputRef);
 
@@ -821,34 +790,74 @@ function CommandPalette({ onClose }: { onClose(): void }) {
           <input
             ref={searchInputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+              setOpenError('');
+            }}
+            onKeyDown={(event) => {
+              if (results.length === 0) return;
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setActiveIndex((current) => (current + 1) % results.length);
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setActiveIndex((current) => (current - 1 + results.length) % results.length);
+              } else if (event.key === 'Home') {
+                event.preventDefault();
+                setActiveIndex(0);
+              } else if (event.key === 'End') {
+                event.preventDefault();
+                setActiveIndex(results.length - 1);
+              } else if (event.key === 'Enter') {
+                event.preventDefault();
+                const item = results[selectedIndex];
+                if (item) void openItem(item);
+              }
+            }}
             placeholder="Search customers, jobs, estimates, invoices…"
             aria-label="Search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-activedescendant={
+              results[selectedIndex] ? `${listboxId}-option-${selectedIndex}` : undefined
+            }
           />
           <button className="icon-button" type="button" aria-label="Close search" onClick={onClose}>
             <X size={15} />
           </button>
         </div>
-        <div className="command-results">
-          {results.map(({ title, meta, href, icon: Icon }) => (
-            <button
-              className="command-result"
-              type="button"
-              key={title}
-              onClick={() => {
-                navigate(href);
-                onClose();
-              }}
-            >
-              <span className="command-result__icon">
-                <Icon size={15} aria-hidden="true" />
-              </span>
-              <span>
-                <span className="command-result__title">{title}</span>
-                <span className="command-result__meta">{meta}</span>
-              </span>
-            </button>
-          ))}
+        <div className="command-results" id={listboxId} role="listbox" aria-label="Search results">
+          {results.map((item, index) => {
+            const Icon = searchResultIcons[item.kind];
+            const active = index === selectedIndex;
+            return (
+              <button
+                id={`${listboxId}-option-${index}`}
+                className={`command-result ${active ? 'command-result--active' : ''}`}
+                type="button"
+                role="option"
+                aria-selected={active}
+                aria-label={`${item.title} ${item.meta}`}
+                aria-busy={openingKey === item.key || undefined}
+                disabled={openingKey !== undefined}
+                key={item.key}
+                onMouseEnter={() => setActiveIndex(index)}
+                onFocus={() => setActiveIndex(index)}
+                onClick={() => void openItem(item)}
+              >
+                <span className="command-result__icon">
+                  <Icon size={15} aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="command-result__title">{item.title}</span>
+                  <span className="command-result__meta">{item.meta}</span>
+                </span>
+              </button>
+            );
+          })}
           {results.length === 0 && (
             <div className="empty-state">
               <Search size={20} />
@@ -856,7 +865,20 @@ function CommandPalette({ onClose }: { onClose(): void }) {
               <p>Try a customer, job, estimate, or invoice number.</p>
             </div>
           )}
+          {openError && (
+            <p className="command-results__error" role="alert">
+              {openError}
+            </p>
+          )}
         </div>
+        <footer className="command-modal__footer" aria-live="polite">
+          <span>
+            {matches.length > results.length
+              ? `Showing ${results.length} of ${matches.length} role-visible matches`
+              : `${matches.length} role-visible ${matches.length === 1 ? 'match' : 'matches'}`}
+          </span>
+          <span aria-hidden="true">↑↓ choose · Enter open · Esc close</span>
+        </footer>
       </section>
     </div>
   );

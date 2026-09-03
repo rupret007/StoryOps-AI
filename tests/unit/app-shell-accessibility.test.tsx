@@ -28,6 +28,7 @@ import { Field } from '@/components/ui/Primitives';
 function renderLiveShell(role: AppRole = 'owner', overrides: Partial<DemoState> = {}) {
   const signOut = vi.fn(async () => undefined);
   const clearThisDevice = vi.fn(async () => undefined);
+  const selectVisit = vi.fn(async () => true);
   const state: DemoState = {
     ...createDemoState(),
     hydrated: true,
@@ -42,6 +43,7 @@ function renderLiveShell(role: AppRole = 'owner', overrides: Partial<DemoState> 
   const actions = {
     signOut,
     clearThisDevice,
+    selectVisit,
     setRole: vi.fn(),
     resetDemo: vi.fn(),
     markNotificationsRead: vi.fn(),
@@ -72,7 +74,7 @@ function renderLiveShell(role: AppRole = 'owner', overrides: Partial<DemoState> 
       </AppShell>
     </MemoryRouter>,
   );
-  return { ...result, signOut, clearThisDevice };
+  return { ...result, signOut, clearThisDevice, selectVisit };
 }
 
 describe('AppShell keyboard and mobile accessibility', () => {
@@ -135,14 +137,15 @@ describe('AppShell keyboard and mobile accessibility', () => {
     fireEvent.click(trigger);
 
     const dialog = screen.getByRole('dialog', { name: 'Search StoryOps' });
-    const search = within(dialog).getByRole('textbox', { name: 'Search' });
+    const search = within(dialog).getByRole('combobox', { name: 'Search' });
     const background = document.querySelector('.app-shell__chrome');
     expect(search).toHaveFocus();
     expect(background).toHaveAttribute('inert');
     expect(background).toHaveAttribute('aria-hidden', 'true');
 
     fireEvent.keyDown(search, { key: 'Tab', shiftKey: true });
-    expect(within(dialog).getByRole('button', { name: /EST-1048 Estimate/u })).toHaveFocus();
+    const options = within(dialog).getAllByRole('option');
+    expect(options.at(-1)).toHaveFocus();
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Tab' });
     expect(search).toHaveFocus();
 
@@ -151,6 +154,37 @@ describe('AppShell keyboard and mobile accessibility', () => {
     expect(screen.queryByRole('dialog', { name: 'Search StoryOps' })).not.toBeInTheDocument();
     expect(background).not.toHaveAttribute('inert');
     expect(background).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('filters authoritative fields and opens the exact selected visit from the keyboard', async () => {
+    const { selectVisit } = renderLiveShell();
+    fireEvent.click(screen.getByRole('button', { name: 'Search StoryOps' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Search StoryOps' });
+    const search = within(dialog).getByRole('combobox', { name: 'Search' });
+    fireEvent.change(search, { target: { value: 'JOB 1032' } });
+
+    const result = within(dialog).getByRole('option', { name: /JOB-1032 Visit/u });
+    expect(result).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    await waitFor(() => expect(selectVisit).toHaveBeenCalledWith('visit-riley'));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Search StoryOps' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('does not expose invoice search results to a technician', () => {
+    renderLiveShell('technician');
+    fireEvent.click(screen.getByRole('button', { name: 'Search StoryOps' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Search StoryOps' });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'Search' }), {
+      target: { value: 'INV-1021' },
+    });
+
+    expect(within(dialog).queryAllByRole('option')).toHaveLength(0);
+    expect(within(dialog).getByText('No matches')).toBeVisible();
   });
 
   it('filters the complete drawer to the authenticated technician permission set', () => {
