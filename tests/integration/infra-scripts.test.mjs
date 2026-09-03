@@ -1003,6 +1003,17 @@ test('quality and database jobs stay fail-closed when Ubuntu never claims a runn
   );
 });
 
+test('hosted e2e installs every browser engine declared by its desktop and mobile projects', () => {
+  const workflow = readFileSync(resolve(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
+  const playwrightConfig = readFileSync(resolve(repositoryRoot, 'playwright.config.ts'), 'utf8');
+  assert.match(playwrightConfig, /devices\['Desktop Chrome'\]/u);
+  assert.match(playwrightConfig, /devices\['iPhone 14'\]/u);
+  assert.match(
+    workflow,
+    /- name: Install locked desktop and mobile browser engines\n\s+run: npx playwright install --with-deps chromium webkit/u,
+  );
+});
+
 test('the distributable CI artifact preserves every required notice', () => {
   const workflow = readFileSync(resolve(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
   const artifactStep = workflow.match(

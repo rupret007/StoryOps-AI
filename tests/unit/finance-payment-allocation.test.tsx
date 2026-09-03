@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from '@/router';
+import { createDemoState } from '@/state/demoSeed';
 import { mapLiveWorkspace } from '@/state/liveWorkspaceMapper';
 import type { DemoState, PaymentAllocationConflict, StoryOpsActions } from '@/state/model';
 
@@ -101,6 +102,31 @@ describe('live finance payment allocation', () => {
   beforeEach(() => {
     mocked.resolvePaymentAllocation.mockReset();
     mocked.resolvePaymentAllocation.mockResolvedValue(true);
+  });
+
+  it('focuses the exact role-visible invoice named by global search', async () => {
+    mocked.state = createDemoState();
+    render(
+      <MemoryRouter initialEntries={['/finance?invoice=invoice-1021']}>
+        <FinancePage />
+      </MemoryRouter>,
+    );
+
+    const row = screen.getByText('INV-1021').closest('tr');
+    expect(row).toHaveAttribute('aria-current', 'true');
+    await waitFor(() => expect(row).toHaveFocus());
+  });
+
+  it('does not fall back to a different invoice when the requested one is absent', () => {
+    mocked.state = createDemoState();
+    render(
+      <MemoryRouter initialEntries={['/finance?invoice=stale-invoice-id']}>
+        <FinancePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/not in the current role-visible workspace/iu)).toBeVisible();
+    expect(document.querySelector('tr[aria-current="true"]')).toBeNull();
   });
 
   it('requires an explicit owner note before invoking the exact resolver', async () => {
