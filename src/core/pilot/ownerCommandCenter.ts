@@ -1,5 +1,5 @@
 import { assessCompanyConfiguration } from '@/domain/companyConfiguration';
-import type { DemoState } from '@/state/model';
+import type { DemoState, DemoVisit } from '@/state/model';
 
 export interface OwnerActionItem {
   id: string;
@@ -25,6 +25,13 @@ export interface OwnerCommandCenterProjection {
   unknowns: string[];
 }
 
+export interface VisitClearanceBadge {
+  key: 'weather' | 'route';
+  label: string;
+  tone: 'positive' | 'warning' | 'danger' | 'neutral';
+  evidence: 'live' | 'sandbox' | 'unknown';
+}
+
 type OwnerProjectionState = Pick<
   DemoState,
   | 'dataMode'
@@ -42,8 +49,94 @@ type OwnerProjectionState = Pick<
   | 'reviewRequested'
   | 'recurringPlanActive'
   | 'recurringDueWork'
+  | 'customerPortalRequests'
+  | 'outboundWorkers'
+  | 'dispatchOriginRetention'
   | 'live'
 >;
+
+function liveRouteIsCurrent(visit: DemoVisit): boolean {
+  return (
+    visit.route.provider === 'vroom' &&
+    visit.route.evidenceMode === 'live' &&
+    visit.route.freshness === 'current' &&
+    typeof visit.route.feasible === 'boolean' &&
+    Boolean(visit.route.checkedAt)
+  );
+}
+
+function liveWeatherIsCurrent(visit: DemoVisit): boolean {
+  return (
+    visit.weather.provider === 'nws' &&
+    visit.weather.evidenceMode === 'live' &&
+    visit.weather.freshness === 'current' &&
+    Boolean(visit.weather.checkedAt) &&
+    Boolean(visit.weather.policyDisposition)
+  );
+}
+
+export function describeVisitClearance(visit: DemoVisit): VisitClearanceBadge[] {
+  const weather: VisitClearanceBadge = liveWeatherIsCurrent(visit)
+    ? {
+        key: 'weather',
+        label:
+          visit.weather.policyDisposition === 'eligible'
+            ? 'weather eligible'
+            : visit.weather.policyDisposition === 'requires_approval'
+              ? 'weather needs approval'
+              : 'weather unavailable',
+        tone:
+          visit.weather.policyDisposition === 'eligible'
+            ? 'positive'
+            : visit.weather.policyDisposition === 'requires_approval'
+              ? 'warning'
+              : 'danger',
+        evidence: 'live',
+      }
+    : visit.weather.disposition ||
+        visit.weather.temperature !== undefined ||
+        visit.weather.checkedAt
+      ? {
+          key: 'weather',
+          label:
+            visit.weather.disposition === 'hold'
+              ? 'sandbox weather hold · not dispatch evidence'
+              : 'sandbox weather · not dispatch evidence',
+          tone: visit.weather.disposition === 'hold' ? 'warning' : 'neutral',
+          evidence: 'sandbox',
+        }
+      : {
+          key: 'weather',
+          label: 'weather unknown',
+          tone: 'warning',
+          evidence: 'unknown',
+        };
+
+  const route: VisitClearanceBadge = liveRouteIsCurrent(visit)
+    ? {
+        key: 'route',
+        label: visit.route.feasible ? 'route feasible' : 'route not feasible',
+        tone: visit.route.feasible ? 'positive' : 'danger',
+        evidence: 'live',
+      }
+    : visit.route.driveMinutes !== undefined ||
+        visit.route.miles !== undefined ||
+        visit.route.checkedAt
+      ? {
+          key: 'route',
+          label: 'sandbox route · not dispatch evidence',
+          tone: 'neutral',
+          evidence: 'sandbox',
+        }
+      : {
+          key: 'route',
+          label: 'route unknown',
+          tone: 'warning',
+          evidence: 'unknown',
+        };
+
+  return [weather, route];
+}
 
 function localDateKey(value: string, timeZone: string): string | undefined {
   const parsed = Date.parse(value);
@@ -86,13 +179,10 @@ export function deriveOwnerCommandCenter(
   const todayEvidenceFacts: string[] = [];
   const visitEvidenceUnknowns: string[] = [];
   for (const visit of todayVisits) {
-    const routeIsCurrent =
-      visit.route.provider === 'vroom' &&
-      visit.route.evidenceMode === 'live' &&
-      visit.route.freshness === 'current' &&
-      typeof visit.route.feasible === 'boolean' &&
-      Boolean(visit.route.checkedAt);
-    if (routeIsCurrent) {
+    const clearance = describeVisitClearance(visit);
+    const routeBadge = clearance.find((badge) => badge.key === 'route');
+    const weatherBadge = clearance.find((badge) => badge.key === 'weather');
+    if (routeBadge?.evidence === 'live') {
       todayEvidenceFacts.push(
         `${visit.jobNumber} route is ${visit.route.feasible ? 'feasible' : 'not feasible'} from current VROOM evidence checked ${visit.route.checkedAt}${
           visit.route.driveMinutes === undefined
@@ -100,21 +190,23 @@ export function deriveOwnerCommandCenter(
             : `; drive time is ${visit.route.driveMinutes} minutes.`
         }`,
       );
+    } else if (routeBadge?.evidence === 'sandbox') {
+      visitEvidenceUnknowns.push(
+        `${visit.jobNumber} route is a sandbox scenario only; current live VROOM evidence is required before dispatch.`,
+      );
     } else {
       visitEvidenceUnknowns.push(
         `${visit.jobNumber} route and travel time are unknown until current live VROOM evidence is bound to the visit.`,
       );
     }
 
-    const weatherIsCurrent =
-      visit.weather.provider === 'nws' &&
-      visit.weather.evidenceMode === 'live' &&
-      visit.weather.freshness === 'current' &&
-      Boolean(visit.weather.checkedAt) &&
-      Boolean(visit.weather.policyDisposition);
-    if (weatherIsCurrent) {
+    if (weatherBadge?.evidence === 'live') {
       todayEvidenceFacts.push(
         `${visit.jobNumber} weather is ${visit.weather.policyDisposition?.replaceAll('_', ' ')} under current NWS policy evidence checked ${visit.weather.checkedAt}.`,
+      );
+    } else if (weatherBadge?.evidence === 'sandbox') {
+      visitEvidenceUnknowns.push(
+        `${visit.jobNumber} weather is a sandbox scenario only; current live NWS policy evidence is required before dispatch.`,
       );
     } else {
       visitEvidenceUnknowns.push(
@@ -256,6 +348,27 @@ export function deriveOwnerCommandCenter(
     });
   }
 
+  const paymentHolds = (state.live?.paymentAllocationConflicts ?? []).filter(
+    (conflict) => conflict.status === 'open',
+  );
+  if (paymentHolds.length > 0) {
+    const first = paymentHolds[0]!;
+    actions.push({
+      id: 'payment-allocation-holds',
+      priority: 'P0',
+      title: 'Verified funds are on collection hold',
+      fact: `${paymentHolds.length} open allocation conflict${
+        paymentHolds.length === 1 ? '' : 's'
+      } ${paymentHolds.length === 1 ? 'has' : 'have'} provider-verified funds that are not applied to the ledger.`,
+      recommendation: first.nextAction,
+      blockedBy: first.canApplyExactCurrentBalance
+        ? 'Exact owner current-balance resolver'
+        : 'Manual provider or accounting work',
+      source: `${sourcePrefix} · payment allocation conflicts`,
+      href: '/finance',
+    });
+  }
+
   const newLeads = state.leads.filter((lead) => lead.stage === 'new');
   if (newLeads.length > 0) {
     actions.push({
@@ -267,6 +380,45 @@ export function deriveOwnerCommandCenter(
         'Verify contact, consent, property, service scope, and unknowns before estimating.',
       source: `${sourcePrefix} · lead stage projection`,
       href: '/pipeline',
+    });
+  }
+
+  const quoteChangeRequests =
+    state.live?.customerQuoteChangeRequests?.filter((request) =>
+      ['submitted', 'reviewing'].includes(request.status),
+    ) ?? [];
+  if (quoteChangeRequests.length > 0) {
+    const first = quoteChangeRequests[0]!;
+    actions.push({
+      id: 'quote-change-requests',
+      priority: 'P1',
+      title: 'Customers requested quote changes',
+      fact: `${quoteChangeRequests.length} quote-change request${
+        quoteChangeRequests.length === 1 ? ' is' : 's are'
+      } still ${quoteChangeRequests.length === 1 ? first.status : 'open'}.`,
+      recommendation: first.nextAction,
+      blockedBy: 'Owner review of the exact requested codes against the current quote version',
+      source: `${sourcePrefix} · customer quote-change requests`,
+      href: `/estimates/${state.estimate.id}`,
+    });
+  }
+
+  const portalRequests = state.customerPortalRequests.filter((request) =>
+    ['submitted', 'reviewing'].includes(request.status),
+  );
+  if (portalRequests.length > 0) {
+    actions.push({
+      id: 'customer-portal-requests',
+      priority: 'P1',
+      title: 'Customer portal requests need review',
+      fact: `${portalRequests.length} reschedule or additional-service request${
+        portalRequests.length === 1 ? ' is' : 's are'
+      } still open.`,
+      recommendation:
+        'Review the exact customer request. Do not treat a portal note as booking, payment, or schedule evidence.',
+      blockedBy: 'Staff review of the submitted request',
+      source: `${sourcePrefix} · customer portal requests`,
+      href: '/portal',
     });
   }
 
@@ -415,6 +567,42 @@ export function deriveOwnerCommandCenter(
         'Check secret-safe health evidence, callback validation, environment switch, and owner switch.',
       blockedBy: 'Provider health or activation evidence',
       source: `${sourcePrefix} · integration health projection`,
+      href: '/integrations',
+    });
+  }
+
+  if (state.outboundWorkers?.status === 'blocked') {
+    const blockedWorkers = state.outboundWorkers.workers.filter(
+      (worker) => worker.status === 'blocked',
+    );
+    actions.push({
+      id: 'private-workers-blocked',
+      priority: 'P0',
+      title: 'Private scheduled workers are blocked',
+      fact:
+        blockedWorkers.length > 0
+          ? `${blockedWorkers.length} of ${state.outboundWorkers.workers.length} private workers are blocked: ${blockedWorkers
+              .map((worker) => worker.worker.replaceAll('_', ' '))
+              .join(', ')}.`
+          : 'The private-worker readiness projection is blocked.',
+      recommendation:
+        'Read the exact worker credential, heartbeat, scheduler, and queue evidence. Do not resend while a submission may have succeeded.',
+      blockedBy: 'Current private-worker readiness evidence',
+      source: `${sourcePrefix} · private scheduled worker projection`,
+      href: '/integrations',
+    });
+  }
+
+  if (state.dispatchOriginRetention?.p0ReleaseCheck === 'blocked') {
+    actions.push({
+      id: 'dispatch-origin-retention',
+      priority: 'P0',
+      title: 'Departure-location retention is launch-blocked',
+      fact: 'The five-second purge-worker P0 check is blocked; launch and departure remain unproven.',
+      recommendation:
+        'Verify scheduler-owned purge success, exact ACLs, and stale-row counts on Integrations. Manual cleanup is not health proof.',
+      blockedBy: 'Scheduler-owned dispatch-origin retention evidence',
+      source: `${sourcePrefix} · dispatch-origin retention projection`,
       href: '/integrations',
     });
   }

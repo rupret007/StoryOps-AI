@@ -8,7 +8,6 @@ import {
   Droplets,
   Gauge,
   Inbox,
-  MessageSquareText,
   Route,
   ShieldAlert,
   Sparkles,
@@ -28,9 +27,14 @@ import {
   Progress,
 } from '@/components/ui/Primitives';
 import { deriveSandboxPilotRehearsal } from '@/core/pilot/rehearsal';
-import { deriveOwnerCommandCenter } from '@/core/pilot/ownerCommandCenter';
+import {
+  deriveOwnerCommandCenter,
+  describeVisitClearance,
+  type OwnerActionItem,
+  type OwnerCommandCenterProjection,
+} from '@/core/pilot/ownerCommandCenter';
 import { derivePilotReadiness, type PilotReadinessStatus } from '@/core/pilot/readiness';
-import type { DemoState } from '@/state/model';
+import type { DemoState, DemoVisit } from '@/state/model';
 import {
   actualCostCoverage,
   formatCurrencyDecimal,
@@ -466,6 +470,117 @@ function LiveFinancialEvidenceCard({
   );
 }
 
+function visitStatusTone(
+  status: DemoVisit['status'],
+): 'positive' | 'warning' | 'danger' | 'neutral' {
+  if (status === 'complete') return 'positive';
+  if (status === 'weather_hold' || status === 'paused') return 'danger';
+  if (status === 'on_site' || status === 'en_route') return 'warning';
+  return 'neutral';
+}
+
+function OwnerActionQueue({
+  projection,
+  heading = 'Owner action queue',
+}: {
+  projection: OwnerCommandCenterProjection;
+  heading?: string;
+}) {
+  return (
+    <Card className="section-card">
+      <div className="section-card__header">
+        <div>
+          <h2>{heading}</h2>
+          <p className="section-card__subtitle">
+            {projection.mode} mode · sourced {projection.sourcedAt}
+          </p>
+        </div>
+        <Badge tone="info">{projection.actions.length} actions</Badge>
+      </div>
+      {projection.actions.length > 0 ? (
+        <ul className="briefing-list">
+          {projection.actions.map((item: OwnerActionItem) => (
+            <li className="briefing-item" key={item.id}>
+              <span className="briefing-item__icon">
+                <ShieldAlert size={14} />
+              </span>
+              <Link className="briefing-item__link" to={item.href}>
+                <p className="briefing-item__title">{item.title}</p>
+                <p className="briefing-item__detail">
+                  <strong>Fact:</strong> {item.fact}
+                </p>
+                <p className="briefing-item__detail">
+                  <strong>Next safe action:</strong> {item.recommendation}
+                </p>
+                {item.blockedBy && (
+                  <p className="briefing-item__detail">
+                    <strong>Blocked by:</strong> {item.blockedBy}
+                  </p>
+                )}
+                <small className="briefing-item__source">Source: {item.source}</small>
+              </Link>
+              <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>{item.priority}</Badge>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="incident-empty">
+          <CheckCircle2 size={22} />
+          <div>
+            <h3>No role-visible action is due</h3>
+            <p>This does not claim that provider-side or hidden records are clear.</p>
+          </div>
+        </div>
+      )}
+      {projection.actions[0] && (
+        <Link className="button button--dark button--sm full-width" to={projection.actions[0].href}>
+          Open highest-priority action <ArrowRight size={13} />
+        </Link>
+      )}
+      {projection.today.evidenceFacts.length > 0 && (
+        <details className="briefing-unknowns">
+          <summary>Current visit evidence ({projection.today.evidenceFacts.length})</summary>
+          <ul>
+            {projection.today.evidenceFacts.map((fact) => (
+              <li key={fact}>{fact}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <details className="briefing-unknowns">
+        <summary>Known unknowns ({projection.unknowns.length})</summary>
+        <ul>
+          {projection.unknowns.map((unknown) => (
+            <li key={unknown}>{unknown}</li>
+          ))}
+        </ul>
+      </details>
+    </Card>
+  );
+}
+
+function VisitScheduleRow({ visit }: { visit: DemoVisit }) {
+  const clearance = describeVisitClearance(visit);
+  return (
+    <li className="schedule-row">
+      <span className="schedule-row__time">{visit.startsAt}</span>
+      <span className="schedule-row__line" aria-hidden="true" />
+      <div>
+        <p className="schedule-row__title">
+          {visit.customerName} · {visit.service}
+        </p>
+        <p className="schedule-row__detail">
+          {visit.date} · {visit.jobNumber} · {visit.address}
+        </p>
+        <p className="schedule-row__detail">{clearance.map((badge) => badge.label).join(' · ')}</p>
+      </div>
+      <Badge tone={visitStatusTone(visit.status)} dot>
+        {visit.status.replaceAll('_', ' ')}
+      </Badge>
+    </li>
+  );
+}
+
 export function DashboardPage() {
   const { state, actions } = useStoryOps();
   const ownerFirstName = state.setupProfile?.ownerName.trim().split(/\s+/u)[0] || 'Owner';
@@ -475,10 +590,13 @@ export function DashboardPage() {
     (sum, invoice) => sum + Number(invoice.balance.replaceAll(',', '')),
     0,
   );
+  const pastDueInvoices = state.invoices.filter((invoice) => invoice.status === 'past_due').length;
 
   if (state.dataMode === 'supabase') return <LiveDashboardPage />;
 
   const rehearsal = deriveSandboxPilotRehearsal(state);
+  const ownerProjection = deriveOwnerCommandCenter(state);
+  const stageOrder = ['new', 'qualified', 'estimated', 'quoted', 'booked'] as const;
 
   return (
     <div className="page">
@@ -504,32 +622,32 @@ export function DashboardPage() {
         }
       />
 
-      <section className="metrics-grid" aria-label="Business metrics">
+      <section className="metrics-grid" aria-label="Workspace record counts">
         <Metric
-          label="Booked this week"
-          value="$4,862"
-          delta="+18% vs. prior week"
-          icon={<TrendingUp size={18} />}
+          label="New leads"
+          value={String(newLeads)}
+          delta="role-visible sandbox records"
+          icon={<Inbox size={18} />}
         />
         <Metric
-          label="Qualified pipeline"
-          value="$7,348"
-          delta="14 active opportunities"
-          icon={<UsersRound size={18} />}
+          label="Pending approvals"
+          value={String(pendingApprovals)}
+          delta="exact-payload fixtures only"
+          icon={<ShieldAlert size={18} />}
           tone="blue"
         />
         <Metric
           label="Open receivables"
           value={money.format(outstanding)}
-          delta="1 invoice past due"
+          delta={`${pastDueInvoices} past-due invoice${pastDueInvoices === 1 ? '' : 's'} in this sandbox`}
           icon={<CircleDollarSign size={18} />}
           tone="orange"
         />
         <Metric
-          label="Gross margin"
-          value="58.7%"
-          delta="+2.4 points this month"
-          icon={<Gauge size={18} />}
+          label="Workspace visits"
+          value={String(state.visits.length)}
+          delta="synthetic schedule fixtures · not live capacity"
+          icon={<CalendarClock size={18} />}
           tone="plum"
         />
       </section>
@@ -596,140 +714,64 @@ export function DashboardPage() {
             )}
           </Card>
 
-          <Card className="briefing-card">
-            <div className="briefing-card__header">
-              <div>
-                <h2>Owner briefing</h2>
-                <p className="briefing-card__meta">
-                  Generated 7:45 AM · 23 synthetic records · no external reads or writes
-                </p>
-              </div>
-              <Badge tone="accent" dot>
-                Current
-              </Badge>
-            </div>
-            <ul className="briefing-list">
-              <li className="briefing-item">
-                <span className="briefing-item__icon">
-                  <Route size={14} />
-                </span>
-                <div>
-                  <p className="briefing-item__title">Demo route packet prepared</p>
-                  <p className="briefing-item__detail">
-                    Synthetic timing and weather scenario only. Verify live route, weather, and
-                    equipment evidence before leaving.
-                  </p>
-                </div>
-                <Badge tone="neutral">Fixture</Badge>
-              </li>
-              <li className="briefing-item">
-                <span className="briefing-item__icon">
-                  <ShieldAlert size={14} />
-                </span>
-                <div>
-                  <p className="briefing-item__title">
-                    {pendingApprovals} exact-payload approvals need you
-                  </p>
-                  <p className="briefing-item__detail">
-                    A negative-review response and a 34-recipient maintenance reminder are paused.
-                  </p>
-                </div>
-                <Badge tone="warning">Review</Badge>
-              </li>
-              <li className="briefing-item">
-                <span className="briefing-item__icon">
-                  <MessageSquareText size={14} />
-                </span>
-                <div>
-                  <p className="briefing-item__title">
-                    {newLeads} new leads are waiting on qualification
-                  </p>
-                  <p className="briefing-item__detail">
-                    One has full consent and scope. One needs an address and property photos.
-                  </p>
-                </div>
-                <Badge tone="info">Inbox</Badge>
-              </li>
-            </ul>
-          </Card>
+          <OwnerActionQueue projection={ownerProjection} heading="Owner action queue" />
 
           <Card className="section-card">
             <div className="section-card__header">
               <div>
-                <h2>Today’s work</h2>
+                <h2>Workspace visits</h2>
                 <p className="section-card__subtitle">
-                  Synthetic capacity, route, equipment, and weather scenario
+                  Records in this sandbox only · route and weather remain scenarios
                 </p>
               </div>
               <Link className="link-button" to="/dispatch">
                 Open dispatch <ArrowRight size={12} style={{ verticalAlign: 'middle' }} />
               </Link>
             </div>
-            <ul className="schedule-list">
-              <li className="schedule-row">
-                <span className="schedule-row__time">10:30</span>
-                <span className="schedule-row__line" aria-hidden="true" />
+            {state.visits.length > 0 ? (
+              <ul className="schedule-list">
+                {state.visits.map((visit) => (
+                  <VisitScheduleRow key={visit.id} visit={visit} />
+                ))}
+              </ul>
+            ) : (
+              <div className="incident-empty">
+                <CalendarClock size={22} />
                 <div>
-                  <p className="schedule-row__title">Riley Brooks · Whole-property clean</p>
-                  <p className="schedule-row__detail">Southlake · 4 hr · JOB-1032 · owner crew</p>
+                  <h3>No sandbox visits are projected</h3>
+                  <p>This list comes from local visit fixtures, not a live calendar.</p>
                 </div>
-                <Badge tone="neutral">Demo</Badge>
-              </li>
-              <li className="schedule-row">
-                <span className="schedule-row__time">3:00</span>
-                <span className="schedule-row__line schedule-row__line--blue" aria-hidden="true" />
-                <div>
-                  <p className="schedule-row__title">Quote follow-up · Sam Rivera</p>
-                  <p className="schedule-row__detail">
-                    Sandbox SMS receipt · synthetic consent fixture
-                  </p>
-                </div>
-                <Badge tone="info">Scheduled</Badge>
-              </li>
-              <li className="schedule-row">
-                <span className="schedule-row__time">4:30</span>
-                <span
-                  className="schedule-row__line schedule-row__line--orange"
-                  aria-hidden="true"
-                />
-                <div>
-                  <p className="schedule-row__title">Weekly equipment inspection</p>
-                  <p className="schedule-row__detail">
-                    Pressure washer, hoses, reels, PPE · evidence required
-                  </p>
-                </div>
-                <Badge tone="neutral">Routine</Badge>
-              </li>
-            </ul>
+              </div>
+            )}
           </Card>
 
           <Card className="section-card">
             <div className="section-card__header">
               <div>
-                <h2>Pipeline pulse</h2>
-                <p className="section-card__subtitle">
-                  Verified opportunity value by current stage
-                </p>
+                <h2>Lead stages</h2>
+                <p className="section-card__subtitle">Counts only; no guessed opportunity value</p>
               </div>
               <Link className="link-button" to="/pipeline">
                 View pipeline <ArrowRight size={12} style={{ verticalAlign: 'middle' }} />
               </Link>
             </div>
             <div className="pipeline-pulse">
-              {[
-                { label: 'New', count: 2, amount: '$0', width: 16 },
-                { label: 'Qualified', count: 3, amount: '$1,746', width: 37 },
-                { label: 'Estimated', count: 4, amount: '$2,638', width: 55 },
-                { label: 'Quoted', count: 3, amount: '$1,780', width: 48 },
-                { label: 'Booked', count: 2, amount: '$1,184', width: 31 },
-              ].map((stage) => (
-                <div className="pulse-row" key={stage.label}>
-                  <span>{stage.label}</span>
-                  <Progress value={stage.width} label={`${stage.label} pipeline`} tone="green" />
-                  <strong>{stage.amount}</strong>
-                  <small>{stage.count}</small>
-                </div>
-              ))}
+              {stageOrder.map((stage) => {
+                const count = state.leads.filter((lead) => lead.stage === stage).length;
+                return (
+                  <div className="pulse-row" key={stage}>
+                    <span>{stage.replaceAll('_', ' ')}</span>
+                    <Progress
+                      value={count}
+                      max={Math.max(1, state.leads.length)}
+                      label={`${stage} leads`}
+                      tone="green"
+                    />
+                    <strong>—</strong>
+                    <small>{count}</small>
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>
@@ -763,39 +805,6 @@ export function DashboardPage() {
           <Card className="section-card">
             <div className="section-card__header">
               <div>
-                <h2>Capacity</h2>
-                <p className="section-card__subtitle">Owner crew · this week</p>
-              </div>
-              <Badge tone="positive">Healthy</Badge>
-            </div>
-            <div className="capacity-meter">
-              <div className="capacity-meter__labels">
-                <span>19.5 hr booked</span>
-                <strong>72%</strong>
-              </div>
-              <Progress value={72} label="Weekly capacity booked" />
-            </div>
-            <div className="capacity-days">
-              {[
-                ['Tue', 86],
-                ['Wed', 64],
-                ['Thu', 42],
-                ['Fri', 78],
-                ['Sat', 24],
-              ].map(([day, value]) => (
-                <div key={day}>
-                  <span>{day}</span>
-                  <div className="capacity-day__bar">
-                    <i style={{ height: `${String(value)}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="section-card">
-            <div className="section-card__header">
-              <div>
                 <h2>AI office activity</h2>
                 <p className="section-card__subtitle">Actions are grounded and traced</p>
               </div>
@@ -821,17 +830,6 @@ export function DashboardPage() {
             <Link className="button button--secondary button--sm full-width" to="/office">
               Inspect traces
             </Link>
-          </Card>
-
-          <Card className="profit-card">
-            <div>
-              <span className="profit-card__icon">
-                <Sparkles size={16} />
-              </span>
-              <p>Projected July operating profit</p>
-              <strong>$8,420</strong>
-              <small>after labor, materials, and provider costs</small>
-            </div>
           </Card>
         </aside>
       </div>
@@ -955,21 +953,7 @@ function LiveDashboardPage() {
             {visibleDashboardVisits.length > 0 ? (
               <ul className="schedule-list">
                 {visibleDashboardVisits.map((visit) => (
-                  <li className="schedule-row" key={visit.id}>
-                    <span className="schedule-row__time">{visit.startsAt}</span>
-                    <span className="schedule-row__line" aria-hidden="true" />
-                    <div>
-                      <p className="schedule-row__title">
-                        {visit.customerName} · {visit.service}
-                      </p>
-                      <p className="schedule-row__detail">
-                        {visit.date} · {visit.jobNumber} · {visit.address}
-                      </p>
-                    </div>
-                    <Badge tone={visit.status === 'complete' ? 'positive' : 'neutral'} dot>
-                      {visit.status.replaceAll('_', ' ')}
-                    </Badge>
-                  </li>
+                  <VisitScheduleRow key={visit.id} visit={visit} />
                 ))}
               </ul>
             ) : (
@@ -1029,84 +1013,7 @@ function LiveDashboardPage() {
               timeZone={state.live?.companyTimezone ?? 'UTC'}
             />
           )}
-          {state.role === 'owner' && (
-            <Card className="section-card">
-              <div className="section-card__header">
-                <div>
-                  <h2>Owner action queue</h2>
-                  <p className="section-card__subtitle">
-                    {ownerProjection.mode} mode · sourced {ownerProjection.sourcedAt}
-                  </p>
-                </div>
-                <Badge tone="info">{ownerProjection.actions.length} actions</Badge>
-              </div>
-              {ownerProjection.actions.length > 0 ? (
-                <ul className="briefing-list">
-                  {ownerProjection.actions.map((item) => (
-                    <li className="briefing-item" key={item.id}>
-                      <span className="briefing-item__icon">
-                        <ShieldAlert size={14} />
-                      </span>
-                      <Link className="briefing-item__link" to={item.href}>
-                        <p className="briefing-item__title">{item.title}</p>
-                        <p className="briefing-item__detail">
-                          <strong>Fact:</strong> {item.fact}
-                        </p>
-                        <p className="briefing-item__detail">
-                          <strong>Next safe action:</strong> {item.recommendation}
-                        </p>
-                        {item.blockedBy && (
-                          <p className="briefing-item__detail">
-                            <strong>Blocked by:</strong> {item.blockedBy}
-                          </p>
-                        )}
-                        <small className="briefing-item__source">Source: {item.source}</small>
-                      </Link>
-                      <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>
-                        {item.priority}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="incident-empty">
-                  <CheckCircle2 size={22} />
-                  <div>
-                    <h3>No role-visible action is due</h3>
-                    <p>This does not claim that provider-side or hidden records are clear.</p>
-                  </div>
-                </div>
-              )}
-              {ownerProjection.actions[0] && (
-                <Link
-                  className="button button--dark button--sm full-width"
-                  to={ownerProjection.actions[0].href}
-                >
-                  Open highest-priority action <ArrowRight size={13} />
-                </Link>
-              )}
-              {ownerProjection.today.evidenceFacts.length > 0 && (
-                <details className="briefing-unknowns">
-                  <summary>
-                    Current visit evidence ({ownerProjection.today.evidenceFacts.length})
-                  </summary>
-                  <ul>
-                    {ownerProjection.today.evidenceFacts.map((fact) => (
-                      <li key={fact}>{fact}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              <details className="briefing-unknowns">
-                <summary>Known unknowns ({ownerProjection.unknowns.length})</summary>
-                <ul>
-                  {ownerProjection.unknowns.map((unknown) => (
-                    <li key={unknown}>{unknown}</li>
-                  ))}
-                </ul>
-              </details>
-            </Card>
-          )}
+          {state.role === 'owner' && <OwnerActionQueue projection={ownerProjection} />}
           {!profitabilityKpis && (
             <Card className="projection-warning">
               <ShieldAlert size={18} />

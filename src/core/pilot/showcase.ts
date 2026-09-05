@@ -114,11 +114,11 @@ export function deriveShowcaseManifest(state: DemoState): DemoShowcaseState {
       title: 'Owner dashboard review',
       role: ['owner'],
       summary: showSetup
-        ? 'Urgency, profitability, and route/weather flags are local and deterministic.'
+        ? 'The owner action queue and visit list are derived from sandbox records; no live profitability or dispatch evidence is shown.'
         : 'Publish sandbox configuration and setup completion before the guided run.',
       detail:
         'Sandbox markers are visible on all cards. This fixture intentionally avoids live provider, payment, and delivery truth.',
-      actions: ['Open command center', 'Open owner briefing'],
+      actions: ['Open command center', 'Review owner action queue'],
       roleHref: '/',
       requiresApproval: false,
       evidenceSources: ['setup', 'pricing', 'traces'],
