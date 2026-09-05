@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  deriveOwnerCommandCenter,
-  describeVisitClearance,
-} from '@/core/pilot/ownerCommandCenter';
+import { deriveOwnerCommandCenter, describeVisitClearance } from '@/core/pilot/ownerCommandCenter';
 import { createDemoState } from '@/state/demoSeed';
-import type {
-  BackOfficeQuoteChangeRequest,
-  PaymentAllocationConflict,
-} from '@/state/model';
+import type { BackOfficeQuoteChangeRequest, PaymentAllocationConflict } from '@/state/model';
 import type { DispatchOriginRetentionProjection } from '@/core/integrations/dispatchOriginRetention';
 import type { OutboundWorkerHealthProjection } from '@/core/integrations/outboundWorkerHealth';
 

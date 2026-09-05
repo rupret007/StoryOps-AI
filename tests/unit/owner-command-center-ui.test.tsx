@@ -102,7 +102,7 @@ describe('owner command-center UI', () => {
     expect(screen.queryByText('14 active opportunities')).not.toBeInTheDocument();
     expect(screen.queryByText('Weekly equipment inspection')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Workspace record counts')).toBeVisible();
-    expect(screen.getByText('Workspace visits')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Workspace visits' })).toBeVisible();
     expect(screen.getByText(state.visits[0]!.jobNumber, { exact: false })).toBeVisible();
     expect(screen.getByText(state.visits[1]!.jobNumber, { exact: false })).toBeVisible();
     expect(screen.getAllByText(/not dispatch evidence/i).length).toBeGreaterThan(0);
