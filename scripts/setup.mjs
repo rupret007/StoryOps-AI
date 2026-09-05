@@ -25,7 +25,7 @@ const withRouting = hasFlag(argv, '--with-routing');
 const verify = hasFlag(argv, '--verify');
 const resetSupabase = hasFlag(argv, '--reset-supabase');
 const unsafeAllowWildcardSupabasePorts = hasFlag(argv, '--unsafe-allow-wildcard-supabase-ports');
-const envTarget = resolve(REPO_ROOT, optionValue(argv, '--env-file', '.env.local'));
+const envTarget = resolve(REPO_ROOT, optionValue(argv, '--storyops-env-file', '.env.local'));
 const DOCKER_LOOPBACK_BINDING_OPTION = 'com.docker.network.bridge.host_binding_ipv4';
 const DOCKER_LOOPBACK_BINDING_ADDRESS = '127.0.0.1';
 
@@ -42,7 +42,7 @@ const unknown = unknownOptions(
     '--reset-supabase',
     '--unsafe-allow-wildcard-supabase-ports',
   ],
-  ['--env-file'],
+  ['--storyops-env-file'],
 );
 
 function usage() {
@@ -61,7 +61,8 @@ Options:
   --reset-supabase    With --with-supabase --verify, rebuild local DB before its release contract
   --unsafe-allow-wildcard-supabase-ports
                       Explicitly allow Docker wildcard bindings for the local Supabase stack
-  --env-file PATH     Environment file to create/read (default: .env.local)
+  --storyops-env-file PATH
+                      Environment file to create/read (default: .env.local)
   --help              Show this help
 
 No provider keys are required. The generated environment stays in sandbox mode.

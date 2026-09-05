@@ -320,7 +320,13 @@ where id = '10000000-0000-4000-8000-000000000233';
 
   runSql(`
 update public.companies
-set timezone = 'Pacific/Honolulu'
+set timezone = case
+  when extract(hour from now() at time zone 'UTC')::integer < 12
+    then format('Etc/GMT-%s', 12 - extract(hour from now() at time zone 'UTC')::integer)
+  when extract(hour from now() at time zone 'UTC')::integer > 12
+    then format('Etc/GMT+%s', extract(hour from now() at time zone 'UTC')::integer - 12)
+  else 'Etc/GMT'
+end
 where id = '${COMPANY_ID}';
 update public.post_service_followups
 set scheduled_at = now(), next_attempt_at = now()

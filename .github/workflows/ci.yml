@@ -147,8 +147,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright projects
         run: npm run test:e2e
@@ -192,7 +192,7 @@ jobs:
         run: npm ci
 
       - name: Start pinned local Supabase
-        run: node scripts/setup.mjs --skip-install --with-supabase --env-file .env.local
+        run: node scripts/setup.mjs --skip-install --with-supabase --storyops-env-file .env.local
 
       - name: Run migration, RLS, RPC, and Edge release contract
         run: npm run test:supabase -- --reset

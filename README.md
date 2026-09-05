@@ -136,6 +136,9 @@ sandbox** in the UI, or clear the `storyops-ai` IndexedDB database, to return to
 the starting state.
 
 `make setup` is the shorter setup-only alias. It does not run verification.
+To create or read a different owner-only environment file, pass
+`--storyops-env-file PATH`; Node 22 reserves its own `--env-file` option, so
+that Node flag is not a StoryOps setup argument.
 
 ### Optional local Supabase
 

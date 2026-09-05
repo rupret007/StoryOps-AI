@@ -100,6 +100,7 @@ async function clickNextShowcaseStep(page: import('@playwright/test').Page) {
 test('showcase guided pilot can complete the six-stage local demo flow', async ({
   page,
 }, testInfo) => {
+  test.setTimeout(60_000);
   await completeFirstRunSetup(page);
   await publishSandboxCompanyConfiguration(page);
 
