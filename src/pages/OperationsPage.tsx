@@ -16,8 +16,8 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from '@/router';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from '@/router';
 import { Badge, Button, Card, PageHeader, Progress } from '@/components/ui/Primitives';
 import { MaterialSdsRegistrationPanel } from '@/components/MaterialSdsRegistrationPanel';
 import { useStoryOps } from '@/state/StoryOpsProvider';
@@ -28,11 +28,27 @@ import {
 
 type OperationsTab = 'services' | 'resources' | 'safety' | 'recurring';
 
+const operationsTabs = ['services', 'resources', 'safety', 'recurring'] as const;
+
+function operationsTabFromHash(hash: string): OperationsTab | undefined {
+  const id = hash.replace(/^#/u, '');
+  return operationsTabs.find((tab) => tab === id);
+}
+
 export function OperationsPage() {
   const { state, can } = useStoryOps();
-  const [tab, setTab] = useState<OperationsTab>('services');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<OperationsTab>(
+    () => operationsTabFromHash(location.hash) ?? 'services',
+  );
   const [draftCreated, setDraftCreated] = useState(false);
   const pricing = deriveSandboxPricingPresentation(state.companyConfiguration?.published);
+
+  useEffect(() => {
+    const fromHash = operationsTabFromHash(location.hash);
+    if (fromHash && fromHash !== tab) setTab(fromHash);
+  }, [location.hash, tab]);
 
   if (state.dataMode === 'supabase') return <LiveOperationsPage />;
 
@@ -70,7 +86,10 @@ export function OperationsPage() {
             type="button"
             role="tab"
             aria-selected={tab === id}
-            onClick={() => setTab(id)}
+            onClick={() => {
+              setTab(id);
+              navigate(`/operations#${id}`, { replace: true });
+            }}
           >
             <Icon size={16} />
             {label}

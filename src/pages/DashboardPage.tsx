@@ -28,7 +28,11 @@ import {
   Progress,
 } from '@/components/ui/Primitives';
 import { deriveSandboxPilotRehearsal } from '@/core/pilot/rehearsal';
-import { deriveOwnerCommandCenter } from '@/core/pilot/ownerCommandCenter';
+import {
+  deriveOwnerCommandCenter,
+  type OwnerActionItem,
+  type OwnerCommandCenterProjection,
+} from '@/core/pilot/ownerCommandCenter';
 import { derivePilotReadiness, type PilotReadinessStatus } from '@/core/pilot/readiness';
 import type { DemoState } from '@/state/model';
 import {
@@ -350,6 +354,159 @@ const financialSourceLabels: Record<keyof LiveProfitabilityKpis['evidence']['sou
     providerEventIds: 'Processed provider events',
   };
 
+function ownerActionKindLabel(kind: OwnerActionItem['kind']): string {
+  return kind === 'follow_up' ? 'follow-up' : kind;
+}
+
+function OwnerActionEntities({ entities }: { entities?: OwnerActionItem['entities'] }) {
+  if (!entities || entities.length === 0) return null;
+  return (
+    <ul className="owner-action-entities" aria-label="Affected records">
+      {entities.map((entity) => (
+        <li key={`${entity.href}:${entity.label}`}>
+          <Link className="owner-action-entity" to={entity.href}>
+            {entity.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OwnerActionDetails({ item }: { item: OwnerActionItem }) {
+  return (
+    <>
+      <p className="briefing-item__title">{item.title}</p>
+      <p className="briefing-item__detail">
+        <strong>Fact:</strong> {item.fact}
+      </p>
+      <p className="briefing-item__detail">
+        <strong>Next safe action:</strong> {item.recommendation}
+      </p>
+      {item.blockedBy && (
+        <p className="briefing-item__detail">
+          <strong>Blocked by:</strong> {item.blockedBy}
+        </p>
+      )}
+      <small className="briefing-item__source">Source: {item.source}</small>
+    </>
+  );
+}
+
+function OwnerNextActionStrip({ action }: { action: OwnerActionItem }) {
+  return (
+    <div className="owner-next-action" aria-label="Do this next">
+      <div className="owner-next-action__header">
+        <div>
+          <p className="owner-next-action__eyebrow">Do this next</p>
+          <p className="owner-next-action__meta">
+            Highest-priority {ownerActionKindLabel(action.kind)} · {action.priority}
+          </p>
+        </div>
+        <Badge
+          tone={action.priority === 'P0' ? 'danger' : action.kind === 'hold' ? 'warning' : 'info'}
+        >
+          {action.kind === 'hold' ? 'Hold' : action.priority}
+        </Badge>
+      </div>
+      <Link className="owner-next-action__link" to={action.href}>
+        <OwnerActionDetails item={action} />
+      </Link>
+      <OwnerActionEntities entities={action.entities} />
+    </div>
+  );
+}
+
+function OwnerActionGroup({ heading, items }: { heading: string; items: OwnerActionItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="owner-queue-group" aria-label={heading}>
+      <h3 className="owner-queue-group__title">
+        {heading} <span>{items.length}</span>
+      </h3>
+      <ul className="briefing-list">
+        {items.map((item) => (
+          <li className="briefing-item" key={item.id}>
+            <span className="briefing-item__icon">
+              <ShieldAlert size={14} />
+            </span>
+            <div>
+              <Link className="briefing-item__link" to={item.href}>
+                <OwnerActionDetails item={item} />
+              </Link>
+              <OwnerActionEntities entities={item.entities} />
+            </div>
+            <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>{item.priority}</Badge>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function OwnerActionQueue({
+  projection,
+  heading = 'Owner action queue',
+}: {
+  projection: OwnerCommandCenterProjection;
+  heading?: string;
+}) {
+  return (
+    <Card className="section-card">
+      <div className="section-card__header">
+        <div>
+          <h2>{heading}</h2>
+          <p className="section-card__subtitle">
+            {projection.mode} mode · sourced {projection.sourcedAt}
+          </p>
+        </div>
+        <Badge tone={projection.holds.length > 0 ? 'danger' : 'info'}>
+          {projection.holds.length} hold{projection.holds.length === 1 ? '' : 's'}
+        </Badge>
+      </div>
+      {projection.nextAction && <OwnerNextActionStrip action={projection.nextAction} />}
+      {projection.actions.length > 0 ? (
+        <>
+          <OwnerActionGroup heading="Holds that stop work" items={projection.holds} />
+          <OwnerActionGroup heading="Decisions" items={projection.decisions} />
+          <OwnerActionGroup heading="Follow-ups" items={projection.followUps} />
+        </>
+      ) : (
+        <div className="incident-empty">
+          <CheckCircle2 size={22} />
+          <div>
+            <h3>No role-visible action is due</h3>
+            <p>This does not claim that provider-side or hidden records are clear.</p>
+          </div>
+        </div>
+      )}
+      {projection.nextAction && (
+        <Link className="button button--dark button--sm full-width" to={projection.nextAction.href}>
+          Open next: {projection.nextAction.title} <ArrowRight size={13} />
+        </Link>
+      )}
+      {projection.today.evidenceFacts.length > 0 && (
+        <details className="briefing-unknowns">
+          <summary>Current visit evidence ({projection.today.evidenceFacts.length})</summary>
+          <ul>
+            {projection.today.evidenceFacts.map((fact) => (
+              <li key={fact}>{fact}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <details className="briefing-unknowns">
+        <summary>Known unknowns ({projection.unknowns.length})</summary>
+        <ul>
+          {projection.unknowns.map((unknown) => (
+            <li key={unknown}>{unknown}</li>
+          ))}
+        </ul>
+      </details>
+    </Card>
+  );
+}
+
 function LiveFinancialEvidenceCard({
   kpis,
   timeZone,
@@ -479,6 +636,7 @@ export function DashboardPage() {
   if (state.dataMode === 'supabase') return <LiveDashboardPage />;
 
   const rehearsal = deriveSandboxPilotRehearsal(state);
+  const ownerProjection = deriveOwnerCommandCenter(state);
 
   return (
     <div className="page">
@@ -537,6 +695,29 @@ export function DashboardPage() {
       <div className="dashboard-grid">
         <div className="dashboard-stack">
           <PilotReadinessCard state={state} onRecord={actions.recordPilotReleaseEvidence} />
+          {ownerProjection.nextAction && (
+            <Card className="section-card">
+              <div className="section-card__header">
+                <div>
+                  <h2>Do this next</h2>
+                  <p className="section-card__subtitle">
+                    Derived from sandbox records · not live dispatch or payment evidence
+                  </p>
+                </div>
+                <Badge tone={ownerProjection.holds.length > 0 ? 'danger' : 'info'}>
+                  {ownerProjection.holds.length} hold
+                  {ownerProjection.holds.length === 1 ? '' : 's'}
+                </Badge>
+              </div>
+              <OwnerNextActionStrip action={ownerProjection.nextAction} />
+              <Link
+                className="button button--dark button--sm full-width"
+                to={ownerProjection.nextAction.href}
+              >
+                Open next: {ownerProjection.nextAction.title} <ArrowRight size={13} />
+              </Link>
+            </Card>
+          )}
           <Card className="section-card">
             <div className="section-card__header">
               <div>
@@ -1029,84 +1210,7 @@ function LiveDashboardPage() {
               timeZone={state.live?.companyTimezone ?? 'UTC'}
             />
           )}
-          {state.role === 'owner' && (
-            <Card className="section-card">
-              <div className="section-card__header">
-                <div>
-                  <h2>Owner action queue</h2>
-                  <p className="section-card__subtitle">
-                    {ownerProjection.mode} mode · sourced {ownerProjection.sourcedAt}
-                  </p>
-                </div>
-                <Badge tone="info">{ownerProjection.actions.length} actions</Badge>
-              </div>
-              {ownerProjection.actions.length > 0 ? (
-                <ul className="briefing-list">
-                  {ownerProjection.actions.map((item) => (
-                    <li className="briefing-item" key={item.id}>
-                      <span className="briefing-item__icon">
-                        <ShieldAlert size={14} />
-                      </span>
-                      <Link className="briefing-item__link" to={item.href}>
-                        <p className="briefing-item__title">{item.title}</p>
-                        <p className="briefing-item__detail">
-                          <strong>Fact:</strong> {item.fact}
-                        </p>
-                        <p className="briefing-item__detail">
-                          <strong>Next safe action:</strong> {item.recommendation}
-                        </p>
-                        {item.blockedBy && (
-                          <p className="briefing-item__detail">
-                            <strong>Blocked by:</strong> {item.blockedBy}
-                          </p>
-                        )}
-                        <small className="briefing-item__source">Source: {item.source}</small>
-                      </Link>
-                      <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>
-                        {item.priority}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="incident-empty">
-                  <CheckCircle2 size={22} />
-                  <div>
-                    <h3>No role-visible action is due</h3>
-                    <p>This does not claim that provider-side or hidden records are clear.</p>
-                  </div>
-                </div>
-              )}
-              {ownerProjection.actions[0] && (
-                <Link
-                  className="button button--dark button--sm full-width"
-                  to={ownerProjection.actions[0].href}
-                >
-                  Open highest-priority action <ArrowRight size={13} />
-                </Link>
-              )}
-              {ownerProjection.today.evidenceFacts.length > 0 && (
-                <details className="briefing-unknowns">
-                  <summary>
-                    Current visit evidence ({ownerProjection.today.evidenceFacts.length})
-                  </summary>
-                  <ul>
-                    {ownerProjection.today.evidenceFacts.map((fact) => (
-                      <li key={fact}>{fact}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              <details className="briefing-unknowns">
-                <summary>Known unknowns ({ownerProjection.unknowns.length})</summary>
-                <ul>
-                  {ownerProjection.unknowns.map((unknown) => (
-                    <li key={unknown}>{unknown}</li>
-                  ))}
-                </ul>
-              </details>
-            </Card>
-          )}
+          {state.role === 'owner' && <OwnerActionQueue projection={ownerProjection} />}
           {!profitabilityKpis && (
             <Card className="projection-warning">
               <ShieldAlert size={18} />

@@ -77,8 +77,110 @@ describe('owner command-center UI', () => {
     );
 
     for (const action of projection.actions) {
-      expect(screen.getByText(action.title)).toBeVisible();
+      expect(screen.getAllByText(action.title).length).toBeGreaterThan(0);
     }
     expect(screen.getByText('Resolve provider readiness')).toBeVisible();
+    expect(screen.getByLabelText('Do this next')).toBeVisible();
+    expect(screen.getByLabelText('Holds that stop work')).toBeVisible();
+    expect(screen.getByRole('link', { name: /Open next:/u })).toBeVisible();
+  });
+
+  it('renders leftover incident, field-change, and offline holds on the live queue', () => {
+    const state = createDemoState();
+    const visit = state.visits[0]!;
+    state.dataMode = 'supabase';
+    state.authStatus = 'signed_in';
+    state.role = 'owner';
+    visit.changeRequests = [
+      {
+        id: 'change-access',
+        reasonCode: 'access_blocked',
+        summary: 'Gate locked.',
+        status: 'submitted',
+        createdAt: '2026-07-29T12:00:00.000Z',
+        version: 1,
+      },
+    ];
+    state.incidents = [
+      {
+        id: 'incident-shutter',
+        visitId: visit.id,
+        jobNumber: visit.jobNumber,
+        kind: 'property_damage',
+        summary: 'Downspout dented a shutter.',
+        status: 'open',
+        reportedAt: '2026-07-29T12:00:00.000Z',
+        reportedBy: 'technician',
+        automationsPaused: true,
+      },
+    ];
+    state.offlineQueue = [
+      {
+        id: 'packet-complete',
+        idempotencyKey: 'packet-complete',
+        action: 'visit.complete',
+        entityId: visit.id,
+        createdAt: '2026-07-29T12:10:00.000Z',
+        status: 'failed',
+        kind: 'command',
+      },
+    ];
+    state.live = {
+      userId: '10000000-0000-4000-8000-000000000101',
+      companyId: '10000000-0000-4000-8000-000000000001',
+      companyName: 'Pilot Exterior Care',
+      companyTimezone: 'America/Chicago',
+      serverTime: '2026-07-31T14:00:00.000Z',
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+    };
+    mocked.state = state;
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByText('Open incidents pause automation').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Field change requests need office review').length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByText('Offline packets failed to reconcile').length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('link', { name: `${visit.jobNumber} · property damage` }),
+    ).toHaveAttribute('href', '/operations#safety');
+    expect(screen.getByRole('link', { name: /Open next:/u })).toHaveAttribute('href', '/field');
+  });
+
+  it('renders a sandbox next-action strip from workspace records', () => {
+    const state = createDemoState();
+    state.dataMode = 'sandbox';
+    state.role = 'owner';
+    state.setupComplete = true;
+    mocked.state = state;
+    const projection = deriveOwnerCommandCenter(state);
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(projection.nextAction?.id).toBe('estimate-evidence');
+    expect(screen.getAllByText('Do this next').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Finish estimate evidence').length).toBeGreaterThan(0);
+    expect(screen.getByText(state.estimate.estimateNumber)).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: /Open next: Finish estimate evidence/u }),
+    ).toHaveAttribute('href', `/estimates/${state.estimate.id}`);
   });
 });

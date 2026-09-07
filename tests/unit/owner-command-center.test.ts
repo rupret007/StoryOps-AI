@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { deriveOwnerCommandCenter } from '@/core/pilot/ownerCommandCenter';
+import {
+  deriveOwnerCommandCenter,
+  pickNextOwnerAction,
+  type OwnerActionItem,
+} from '@/core/pilot/ownerCommandCenter';
 import { createDemoState } from '@/state/demoSeed';
+import type { LiveTransactionalDelivery } from '@/state/model';
 
 describe('owner command center projection', () => {
   it('separates facts, safe next actions, blockers, and known unknowns', () => {
@@ -190,5 +195,174 @@ describe('owner command center projection', () => {
         expect.stringContaining(`${visit.jobNumber} service-window weather is unknown`),
       ]),
     );
+  });
+
+  it('names leftover operational holds and prefers the next P0 hold', () => {
+    const state = createDemoState();
+    const visit = state.visits[0]!;
+    state.dataMode = 'supabase';
+    state.estimate.status = 'quoted';
+    state.customerQuoteAccepted = true;
+    state.depositPaid = true;
+    visit.status = 'ready';
+    visit.changeRequests = [
+      {
+        id: 'change-access',
+        reasonCode: 'access_blocked',
+        summary: 'Gate locked; cannot reach the equipment pad.',
+        status: 'submitted',
+        createdAt: '2026-07-29T12:00:00.000Z',
+        version: 1,
+      },
+    ];
+    state.incidents = [
+      {
+        id: 'incident-shutter',
+        visitId: visit.id,
+        jobNumber: visit.jobNumber,
+        kind: 'property_damage',
+        summary: 'Downspout dented a shutter.',
+        status: 'open',
+        reportedAt: '2026-07-29T12:00:00.000Z',
+        reportedBy: 'technician',
+        automationsPaused: true,
+      },
+    ];
+    state.offlineQueue = [
+      {
+        id: 'packet-complete',
+        idempotencyKey: 'packet-complete',
+        action: 'visit.complete',
+        entityId: visit.id,
+        createdAt: '2026-07-29T12:10:00.000Z',
+        status: 'failed',
+        kind: 'command',
+      },
+    ];
+    const quoteDelivery: LiveTransactionalDelivery = {
+      id: 'delivery-quote',
+      action: 'quote.delivery',
+      entityId: 'quote-1048',
+      entityVersion: 1,
+      channel: 'sms',
+      status: 'submitted_unknown',
+      manualReconciliationRequired: true,
+      providerSubmissionAsserted: true,
+      externalDeliveryClaimed: false,
+      requestedAt: '2026-07-29T11:00:00.000Z',
+      version: 1,
+    };
+    state.live = {
+      userId: 'owner-user',
+      companyId: 'company-a',
+      companyName: 'Pilot Exterior Care',
+      companyTimezone: 'America/Chicago',
+      serverTime: '2026-07-29T12:00:00.000Z',
+      quoteDelivery,
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+    };
+
+    const projection = deriveOwnerCommandCenter(state);
+    const byId = Object.fromEntries(projection.actions.map((action) => [action.id, action]));
+
+    expect(byId['open-incidents']).toMatchObject({
+      priority: 'P0',
+      kind: 'hold',
+      href: '/operations#safety',
+      blockedBy: 'Owner incident review and factual closure',
+    });
+    expect(byId['open-incidents']?.entities).toEqual([
+      { label: `${visit.jobNumber} · property damage`, href: '/operations#safety' },
+    ]);
+    expect(byId['field-change-requests']).toMatchObject({
+      priority: 'P1',
+      kind: 'hold',
+      href: '/field',
+    });
+    expect(byId['field-change-requests']?.fact).toContain('access blocked');
+    expect(byId['offline-packet-holds']).toMatchObject({
+      priority: 'P0',
+      kind: 'hold',
+      href: '/field',
+      blockedBy: 'Failed device-to-server reconciliation',
+    });
+    expect(byId['transactional-delivery-holds']).toMatchObject({
+      priority: 'P0',
+      kind: 'hold',
+      href: `/estimates/${state.estimate.id}`,
+    });
+    expect(byId['transactional-delivery-holds']?.entities?.[0]?.label).toContain('Quote delivery');
+    expect(byId['past-due-invoices']?.entities).toEqual(
+      expect.arrayContaining([{ label: 'INV-1021', href: '/finance' }]),
+    );
+    expect(projection.nextAction?.id).toBe('offline-packet-holds');
+    expect(projection.holds.map((action) => action.id)).toEqual(
+      expect.arrayContaining([
+        'open-incidents',
+        'field-change-requests',
+        'offline-packet-holds',
+        'transactional-delivery-holds',
+        'past-due-invoices',
+      ]),
+    );
+  });
+
+  it('deepens weather-hold facts with the exact job numbers', () => {
+    const state = createDemoState();
+    state.visits[0]!.status = 'weather_hold';
+    const projection = deriveOwnerCommandCenter(state);
+    const weather = projection.actions.find((action) => action.id === 'weather-held-visits');
+    expect(weather).toMatchObject({
+      kind: 'hold',
+      href: '/dispatch',
+    });
+    expect(weather?.fact).toContain(state.visits[0]!.jobNumber);
+    expect(weather?.entities).toEqual([{ label: state.visits[0]!.jobNumber, href: '/dispatch' }]);
+  });
+
+  it('picks the first P0 hold before later decisions or follow-ups', () => {
+    const actions: OwnerActionItem[] = [
+      {
+        id: 'review-opportunity',
+        priority: 'P2',
+        kind: 'follow_up',
+        title: 'Review opportunity is eligible',
+        fact: 'Paid work exists.',
+        recommendation: 'Verify consent.',
+        source: 'test',
+        href: '/finance',
+      },
+      {
+        id: 'pending-approvals',
+        priority: 'P1',
+        kind: 'decision',
+        title: 'Review held actions',
+        fact: 'Approvals pending.',
+        recommendation: 'Approve the exact payload.',
+        source: 'test',
+        href: '/approvals',
+      },
+      {
+        id: 'open-incidents',
+        priority: 'P0',
+        kind: 'hold',
+        title: 'Open incidents pause automation',
+        fact: 'One open incident.',
+        recommendation: 'Review Safety & incidents.',
+        source: 'test',
+        href: '/operations#safety',
+      },
+    ];
+
+    expect(pickNextOwnerAction(actions)?.id).toBe('open-incidents');
   });
 });
