@@ -4,8 +4,63 @@ import {
   pickNextOwnerAction,
   type OwnerActionItem,
 } from '@/core/pilot/ownerCommandCenter';
+import { createExteriorServicesConfiguration } from '@/domain/companyConfiguration';
+import { createExteriorConfigurationPricing } from '@/data/exteriorServiceTemplates';
 import { createDemoState } from '@/state/demoSeed';
-import type { LiveTransactionalDelivery } from '@/state/model';
+import type { DemoState, LiveTransactionalDelivery } from '@/state/model';
+
+function withPublishedOperatingRecords(state: DemoState): DemoState {
+  const enabledServiceCodes = ['pressure-wash-flatwork', 'gutter-cleaning'] as const;
+  const configuration = createExteriorServicesConfiguration({
+    legalName: 'Pilot Exterior Care',
+    ownerName: 'Jeff Story',
+    publicEmail: 'owner@example.test',
+    publicPhone: '+18175550100',
+    addressLine1: '100 Sandbox Service Road',
+    city: 'Grapevine',
+    postalCode: '76051',
+    enabledServiceCodes: [...enabledServiceCodes],
+    ...createExteriorConfigurationPricing(enabledServiceCodes),
+  });
+  state.companyConfiguration = {
+    schemaVersion: 'storyops-company-config-record-v1',
+    status: 'published',
+    revision: 1,
+    draft: configuration,
+    published: configuration,
+    updatedAt: '2026-07-29T12:00:00.000Z',
+    publishedAt: '2026-07-29T12:00:00.000Z',
+    publicationMode: state.dataMode === 'supabase' ? 'live' : 'sandbox',
+    publicationReceipt: {
+      commandId: '11111111-1111-4111-8111-111111111111',
+      configurationHash: 'a'.repeat(64),
+      reviewReference: 'owner-config-review',
+      replayed: false,
+    },
+  };
+  state.operatingBaseline = {
+    schemaVersion: 'storyops-operating-baseline-state-v1',
+    status: 'active',
+    companyId: '22222222-2222-4222-8222-222222222222',
+    configurationRevision: 1,
+    configurationHash: 'a'.repeat(64),
+    baselineId: '33333333-3333-4333-8333-333333333333',
+    baselineHash: 'b'.repeat(64),
+    priceBookId: '44444444-4444-4444-8444-444444444444',
+    serviceTermsId: '55555555-5555-4555-8555-555555555555',
+    retentionPolicyId: '66666666-6666-4666-8666-666666666666',
+    reviewReference: 'owner-operating-review',
+    activatedAt: '2026-07-29T12:05:00.000Z',
+    providersActivated: false,
+    outboundEnabled: false,
+    launchAuthorized: false,
+    launchVersion: 0,
+    launchStatus: 'not_authorized',
+    launchProviderSnapshotHash: null,
+    launchProofSnapshotHash: null,
+  };
+  return state;
+}
 
 describe('owner command center projection', () => {
   it('separates facts, safe next actions, blockers, and known unknowns', () => {
@@ -198,7 +253,7 @@ describe('owner command center projection', () => {
   });
 
   it('names leftover operational holds and prefers the next P0 hold', () => {
-    const state = createDemoState();
+    const state = withPublishedOperatingRecords(createDemoState());
     const visit = state.visits[0]!;
     state.dataMode = 'supabase';
     state.estimate.status = 'quoted';

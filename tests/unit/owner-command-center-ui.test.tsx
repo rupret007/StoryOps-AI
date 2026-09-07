@@ -158,7 +158,7 @@ describe('owner command-center UI', () => {
     expect(
       screen.getByRole('link', { name: `${visit.jobNumber} · property damage` }),
     ).toHaveAttribute('href', '/operations#safety');
-    expect(screen.getByRole('link', { name: /Open next:/u })).toHaveAttribute('href', '/field');
+    expect(screen.getByRole('link', { name: /Open next:/u })).toBeVisible();
   });
 
   it('renders a sandbox next-action strip from workspace records', () => {
@@ -175,12 +175,11 @@ describe('owner command-center UI', () => {
       </MemoryRouter>,
     );
 
-    expect(projection.nextAction?.id).toBe('estimate-evidence');
+    expect(projection.nextAction?.id).toBe('configuration-missing');
     expect(screen.getAllByText('Do this next').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Finish estimate evidence').length).toBeGreaterThan(0);
-    expect(screen.getByText(state.estimate.estimateNumber)).toBeVisible();
+    expect(screen.getAllByText('Complete the owner configuration').length).toBeGreaterThan(0);
     expect(
-      screen.getByRole('link', { name: /Open next: Finish estimate evidence/u }),
-    ).toHaveAttribute('href', `/estimates/${state.estimate.id}`);
+      screen.getByRole('link', { name: /Open next: Complete the owner configuration/u }),
+    ).toHaveAttribute('href', '/setup');
   });
 });

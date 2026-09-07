@@ -16,7 +16,7 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useNavigate } from '@/router';
 import { Badge, Button, Card, PageHeader, Progress } from '@/components/ui/Primitives';
 import { MaterialSdsRegistrationPanel } from '@/components/MaterialSdsRegistrationPanel';
@@ -39,16 +39,13 @@ export function OperationsPage() {
   const { state, can } = useStoryOps();
   const location = useLocation();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<OperationsTab>(
-    () => operationsTabFromHash(location.hash) ?? 'services',
-  );
+  const tab = operationsTabFromHash(location.hash) ?? 'services';
   const [draftCreated, setDraftCreated] = useState(false);
   const pricing = deriveSandboxPricingPresentation(state.companyConfiguration?.published);
 
-  useEffect(() => {
-    const fromHash = operationsTabFromHash(location.hash);
-    if (fromHash && fromHash !== tab) setTab(fromHash);
-  }, [location.hash, tab]);
+  const openTab = (next: OperationsTab) => {
+    navigate(`/operations#${next}`, { replace: true });
+  };
 
   if (state.dataMode === 'supabase') return <LiveOperationsPage />;
 
@@ -64,7 +61,7 @@ export function OperationsPage() {
             icon={<Plus size={15} />}
             onClick={() => {
               setDraftCreated(true);
-              setTab('services');
+              openTab('services');
             }}
           >
             {draftCreated ? 'Draft 2026.08-v1 created' : 'Create draft version'}
@@ -86,10 +83,7 @@ export function OperationsPage() {
             type="button"
             role="tab"
             aria-selected={tab === id}
-            onClick={() => {
-              setTab(id);
-              navigate(`/operations#${id}`, { replace: true });
-            }}
+            onClick={() => openTab(id)}
           >
             <Icon size={16} />
             {label}
