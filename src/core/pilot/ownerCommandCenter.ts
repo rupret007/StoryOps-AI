@@ -204,11 +204,13 @@ export function deriveOwnerCommandGlance(input: {
     const behind = (holds ?? 0) - (p0Holds ?? 0);
     const extra =
       behind > 0 ? ` ${behind} more ${behind === 1 ? 'hold is' : 'holds are'} behind it.` : '';
+    const singleEntity =
+      next.entities?.length === 1 ? ` — ${next.entities[0]!.label}` : '';
     return {
       freshness: input.freshness,
       countsKnown,
       headline: stopping,
-      caveat: `First: ${next.title}.${extra} This is not a clearance of hidden records.`,
+      caveat: `First: ${next.title}${singleEntity}.${extra} This is not a clearance of hidden records.`,
       clockLabel,
       holds,
       decisions,

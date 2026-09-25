@@ -618,4 +618,58 @@ describe('owner command center projection', () => {
     expect(glance.holds).toBe(2);
     expect(glance.p0Holds).toBe(1);
   });
+
+  it('includes the single entity label in the caveat for a more actionable phone glance', () => {
+    const stoppingWithEntity: OwnerActionItem = {
+      id: 'open-incidents',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Open incidents pause automation',
+      fact: 'One open incident.',
+      recommendation: 'Review Safety & incidents.',
+      source: 'test',
+      href: '/operations#safety',
+      entities: [{ label: 'JOB-1048 · property damage', href: '/operations#safety' }],
+    };
+    const glance = deriveOwnerCommandGlance({
+      freshness: 'current',
+      sourcedAt: '2026-07-31T14:00:00.000Z',
+      holds: [stoppingWithEntity],
+      decisions: [],
+      followUps: [],
+      nextAction: stoppingWithEntity,
+    });
+    expect(glance.caveat).toBe(
+      'First: Open incidents pause automation — JOB-1048 · property damage. This is not a clearance of hidden records.',
+    );
+  });
+
+  it('omits entity label from caveat when there are multiple entities', () => {
+    const stoppingWithMultipleEntities: OwnerActionItem = {
+      id: 'weather-held-visits',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Visits are on weather hold',
+      fact: 'Two visits blocked.',
+      recommendation: 'Review weather evidence.',
+      source: 'test',
+      href: '/dispatch',
+      entities: [
+        { label: 'JOB-1048', href: '/dispatch' },
+        { label: 'JOB-1049', href: '/dispatch' },
+      ],
+    };
+    const glance = deriveOwnerCommandGlance({
+      freshness: 'current',
+      sourcedAt: '2026-07-31T14:00:00.000Z',
+      holds: [stoppingWithMultipleEntities],
+      decisions: [],
+      followUps: [],
+      nextAction: stoppingWithMultipleEntities,
+    });
+    expect(glance.caveat).toBe(
+      'First: Visits are on weather hold. This is not a clearance of hidden records.',
+    );
+    expect(glance.caveat).not.toContain('JOB-1048');
+  });
 });
