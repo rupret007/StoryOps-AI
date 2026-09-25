@@ -19,7 +19,7 @@ const serviceLabels: Record<SandboxServiceCode, string> = {
 export async function completeFirstRunSetup(page: Page, options: SetupOptions = {}): Promise<void> {
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: 'Tell StoryOps who it works for.' }),
+    page.getByRole('heading', { name: 'Tell WashOps who it works for.' }),
   ).toBeVisible();
 
   if (options.businessName) {

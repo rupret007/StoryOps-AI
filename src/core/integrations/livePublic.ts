@@ -155,7 +155,7 @@ export class NwsWeatherProvider implements WeatherProvider {
   ) {
     if (!userAgent.includes('@')) {
       throw new Error(
-        'NWS_USER_AGENT must identify StoryOps AI and include a monitored contact address.',
+        'NWS_USER_AGENT must identify WashOps and include a monitored contact address.',
       );
     }
     this.baseUrl = validatedProviderUrl(baseUrl, this.provider).replace(/\/$/u, '');

@@ -546,7 +546,7 @@ export function FieldPage() {
             <div>
               <strong>Weather and route evidence are unknown</strong>
               <p>
-                StoryOps will not claim safe conditions or route feasibility. Verify the approved
+                WashOps will not claim safe conditions or route feasibility. Verify the approved
                 dispatch/weather workflow before starting work.
               </p>
             </div>
@@ -561,7 +561,7 @@ export function FieldPage() {
               <p>
                 {state.dataMode === 'sandbox'
                   ? 'Demonstrates a state transition only. Verify live equipment, route, and weather before leaving.'
-                  : 'By choosing the departure action, you consent to share this device’s current location for this departure check. StoryOps makes the exact latitude/longitude available to the private dispatch workflow in unlogged database storage, deletes it after successful use, or marks it expired after two minutes for the five-second cleanup worker; operations stop if that worker is unhealthy. The durable receipt keeps accuracy, observation time, reading/source and consent metadata, and an opaque binding—but not latitude/longitude or a reusable verifier. Unlogged storage avoids WAL/PITR replication and is cleared by a database crash, but it is not a cryptographic-erasure guarantee for local database pages or host snapshots. The route provider receives the coordinate. Legal and provider-retention review is required before live use.'}
+                  : 'By choosing the departure action, you consent to share this device’s current location for this departure check. WashOps makes the exact latitude/longitude available to the private dispatch workflow in unlogged database storage, deletes it after successful use, or marks it expired after two minutes for the five-second cleanup worker; operations stop if that worker is unhealthy. The durable receipt keeps accuracy, observation time, reading/source and consent metadata, and an opaque binding—but not latitude/longitude or a reusable verifier. Unlogged storage avoids WAL/PITR replication and is cleared by a database crash, but it is not a cryptographic-erasure guarantee for local database pages or host snapshots. The route provider receives the coordinate. Legal and provider-retention review is required before live use.'}
               </p>
               {dispatchLocationError && (
                 <p role="alert" className="field-safety-warning">
@@ -1298,7 +1298,7 @@ export function FieldPage() {
               Capture private evidence
             </Button>
             <small>
-              StoryOps writes the original bytes and exact finalizer command to durable device
+              WashOps writes the original bytes and exact finalizer command to durable device
               storage first. Ordinary checklist, material, signature, before/after, timer, and
               completion controls remain locked.
             </small>

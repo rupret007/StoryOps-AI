@@ -20,7 +20,7 @@ async function completeSandboxSetup() {
   expect(
     await screen.findByRole(
       'heading',
-      { name: 'Tell StoryOps who it works for.' },
+      { name: 'Tell WashOps who it works for.' },
       lazyRouteTimeout,
     ),
   ).toBeVisible();

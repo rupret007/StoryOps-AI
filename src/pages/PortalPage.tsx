@@ -107,7 +107,7 @@ export function PortalPage() {
   const estimate = state.estimate;
   const invoice = state.invoices.find((item) => item.id === 'invoice-morgan');
   const accepted = state.customerQuoteAccepted;
-  const companyName = state.setupProfile?.businessName ?? 'StoryOps';
+  const companyName = state.setupProfile?.businessName ?? 'WashOps';
   const quoteReady = estimate.status === 'quoted';
   const sandboxVisitBooked =
     state.leads.find((lead) => lead.id === estimate.leadId)?.stage === 'booked';
@@ -358,7 +358,7 @@ export function PortalPage() {
                         [
                           'BEGIN:VCALENDAR',
                           'VERSION:2.0',
-                          `PRODID:-//${escapeIcsText(companyName)}//StoryOps AI//EN`,
+                          `PRODID:-//${escapeIcsText(companyName)}//WashOps//EN`,
                           'BEGIN:VEVENT',
                           'UID:job-1048@storyops.local',
                           'DTSTAMP:20260728T170000Z',
@@ -703,7 +703,7 @@ function LivePortalPage() {
           <span className="brand__mark">
             <Sparkles size={17} />
           </span>
-          {state.live?.companyName ?? 'StoryOps customer portal'}
+          {state.live?.companyName ?? 'WashOps customer portal'}
         </div>
         <div className="portal-header__actions">
           <button type="button" onClick={() => void actions.signOut()}>
@@ -1088,7 +1088,7 @@ function LivePortalPage() {
                           [
                             'BEGIN:VCALENDAR',
                             'VERSION:2.0',
-                            'PRODID:-//StoryOps AI//Customer Portal//EN',
+                            'PRODID:-//WashOps//Customer Portal//EN',
                             'BEGIN:VEVENT',
                             `UID:${escapeIcsText(visit.id)}@storyops.local`,
                             `DTSTAMP:${icsTimestamp(state.live?.serverTime ?? '') ?? startsAt}`,
@@ -1096,7 +1096,7 @@ function LivePortalPage() {
                             `DTEND:${endsAt}`,
                             `SUMMARY:${escapeIcsText(visit.service)}`,
                             `LOCATION:${escapeIcsText(visit.address)}`,
-                            `DESCRIPTION:${escapeIcsText(`StoryOps job ${visit.jobNumber}`)}`,
+                            `DESCRIPTION:${escapeIcsText(`WashOps job ${visit.jobNumber}`)}`,
                             'END:VEVENT',
                             'END:VCALENDAR',
                             '',
@@ -1231,7 +1231,7 @@ function LivePortalPage() {
                         downloadText(
                           `${invoice.number}-receipt.txt`,
                           [
-                            `${state.live?.companyName ?? 'StoryOps'} — PAYMENT RECEIPT`,
+                            `${state.live?.companyName ?? 'WashOps'} — PAYMENT RECEIPT`,
                             `Invoice: ${invoice.number}`,
                             `Customer: ${customer?.name ?? 'Authenticated customer'}`,
                             `Total: ${formatMoney(invoice.total)}`,
@@ -1274,7 +1274,7 @@ function LivePortalPage() {
               <p>
                 {hasAcceptedReconciliationExhaustion
                   ? 'The messaging provider accepted the message, but delivery is not confirmed. The office must reconcile the provider record before taking another action.'
-                  : 'Delivery cannot be confirmed yet. The office is reconciling the messaging-provider record, and StoryOps has not scheduled an automatic duplicate.'}
+                  : 'Delivery cannot be confirmed yet. The office is reconciling the messaging-provider record, and WashOps has not scheduled an automatic duplicate.'}
               </p>
             </div>
           </Card>
@@ -1672,7 +1672,7 @@ function CustomerPortalControls() {
               }
             />
             <span>
-              <strong>Opt out of all StoryOps SMS and email</strong>
+              <strong>Opt out of all WashOps SMS and email</strong>
               <small>
                 This withdraws every listed purpose and activates contact-level suppression.
               </small>

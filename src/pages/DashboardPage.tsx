@@ -1111,7 +1111,7 @@ function LiveDashboardPage() {
       {state.role === 'owner' && <OwnerCommandGlance projection={ownerProjection} />}
       <PageHeader
         eyebrow="Authenticated command center"
-        title={state.live?.companyName ?? 'StoryOps workspace'}
+        title={state.live?.companyName ?? 'WashOps workspace'}
         description={
           state.role === 'owner'
             ? `Do the next safe action first. Server-derived owner workspace · refreshed ${state.live?.serverTime ?? 'unknown time'}.`
@@ -1266,7 +1266,7 @@ function LiveDashboardPage() {
               <div>
                 <strong>No company financial projection for this role</strong>
                 <p>
-                  StoryOps will not derive profitability, receivables, or payment state from
+                  WashOps will not derive profitability, receivables, or payment state from
                   assignment-visible records. Route, weather, capacity, and AI activity also require
                   their own verified read models.
                 </p>

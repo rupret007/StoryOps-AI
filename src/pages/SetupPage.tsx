@@ -119,7 +119,7 @@ export function SetupPage() {
           <span className="brand__mark">
             <Sparkles size={17} />
           </span>
-          StoryOps AI
+          WashOps
         </div>
         <h1>Your back office, safely under control.</h1>
         <p>
@@ -148,7 +148,7 @@ export function SetupPage() {
 
           {step === 0 && (
             <>
-              <h1>Tell StoryOps who it works for.</h1>
+              <h1>Tell WashOps who it works for.</h1>
               <p className="setup-description">
                 Single-company V1. You can change these settings later; the audit trail records
                 policy-impacting changes.

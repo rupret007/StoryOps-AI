@@ -62,7 +62,7 @@ export function ShowcasePage() {
   return (
     <div className="page showcase-page">
       <PageHeader
-        eyebrow="StoryOps AI · v1.2 showcase"
+        eyebrow="WashOps · v1.2 showcase"
         title="8-0-1 Guided demo run"
         description="Use this deterministic, local-only route to rehearse the full exterior-services startup flow. No customer data is real and every external claim is explicitly sandbox-tagged."
         actions={

@@ -16,7 +16,7 @@ test('sandbox command center opens the next derived hold', async ({ page }) => {
 
   await page.getByRole('link', { name: 'Do this: Open Owner configuration' }).click();
   await expect(
-    page.getByRole('heading', { name: /Configure the company|Tell StoryOps who it works for/u }),
+    page.getByRole('heading', { name: /Configure the company|Tell WashOps who it works for/u }),
   ).toBeVisible();
 });
 

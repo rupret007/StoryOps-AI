@@ -257,7 +257,7 @@ export function CompanyConfigurationStudio() {
           <span className="brand__mark">
             <Sparkles size={17} />
           </span>
-          StoryOps AI
+          WashOps
         </div>
         <div className="configuration-header__actions">
           <Badge tone={state.dataMode === 'supabase' ? 'warning' : 'info'}>
@@ -1487,7 +1487,7 @@ export function OperationsPanel({
       </Panel>
       <Panel
         title="Materials and SDS gate"
-        description="StoryOps stores references and checksums, never invented chemical instructions."
+        description="WashOps stores references and checksums, never invented chemical instructions."
         icon={<ShieldCheck size={20} />}
       >
         <div className="configuration-resource-grid">

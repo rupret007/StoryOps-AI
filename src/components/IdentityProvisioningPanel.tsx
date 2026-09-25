@@ -238,7 +238,7 @@ export function IdentityProvisioningPanel({
             </div>
             <p className="company-control-note">
               Locate the exact identity after provider state may have changed. Until the displayed
-              retry time, StoryOps will not submit another invite for this email. Preparing the
+              retry time, WashOps will not submit another invite for this email. Preparing the
               action below does not contact the provider.
             </p>
             {state.unresolvedAttempts.map((attempt) => (

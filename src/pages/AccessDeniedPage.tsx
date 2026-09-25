@@ -13,7 +13,7 @@ export function AccessDeniedPage({ permission }: { permission: Permission }) {
         <EmptyState
           icon={<LockKeyhole size={22} />}
           title="This role has read-only or no access"
-          description={`The ${state.role} role does not have “${permission}”. StoryOps checks this in the UI and again inside every executor and database policy.`}
+          description={`The ${state.role} role does not have “${permission}”. WashOps checks this in the UI and again inside every executor and database policy.`}
           action={
             <Button variant="dark" onClick={() => navigate(-1)} icon={<ArrowLeft size={14} />}>
               Go back

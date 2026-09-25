@@ -498,7 +498,7 @@ describe('live server integration boundaries', () => {
 
     const request = {
       calendarId: 'calendar@example.com',
-      title: 'StoryOps job',
+      title: 'WashOps job',
       window,
       timeZone: 'America/Chicago',
       jobId: '10000000-0000-4000-8000-000000000501',

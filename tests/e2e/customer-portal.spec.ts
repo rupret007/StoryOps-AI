@@ -59,7 +59,7 @@ test('customer requests stay request-only and sandbox consent makes no provider 
   await page.getByRole('button', { name: 'Submit additional-service request' }).click();
   await expect(page.getByText('Additional-service request', { exact: true })).toBeVisible();
 
-  await page.getByLabel(/Opt out of all StoryOps SMS and email/u).check();
+  await page.getByLabel(/Opt out of all WashOps SMS and email/u).check();
   await page.getByRole('button', { name: 'Save communication choices' }).click();
   await expect(page.getByText('Contact suppressed', { exact: true })).toBeVisible();
   await expect(

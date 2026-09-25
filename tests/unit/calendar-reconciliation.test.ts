@@ -22,7 +22,7 @@ describe('Google Calendar cancellation reconciliation', () => {
     await expect(
       provider.createBooking({
         calendarId: 'operations@example.test',
-        title: 'StoryOps job',
+        title: 'WashOps job',
         window: {
           start: '2026-07-30T14:00:00.000Z',
           end: '2026-07-30T16:00:00.000Z',

@@ -500,7 +500,7 @@ describe('owner command center projection', () => {
       entities: [{ label: 'JOB-1 · property damage', href: '/operations#safety' }],
     };
     const line = ownerActionGlanceLine(hold);
-    expect(line).toBe('Stops work. 1 named record.');
+    expect(line).toBe('Stops work. Record: JOB-1 · property damage.');
     expect(line.length).toBeLessThan(80);
     expect(line).not.toContain('A long fact');
   });

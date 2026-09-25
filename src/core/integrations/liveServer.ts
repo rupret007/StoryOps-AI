@@ -1086,7 +1086,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       request.calendarIds.some((id) => !this.allowedCalendarIds.includes(id))
     ) {
       throw new IntegrationError(
-        'Calendar availability is restricted to the configured StoryOps calendar.',
+        'Calendar availability is restricted to the configured WashOps calendar.',
         this.provider,
         'CALENDAR_NOT_ALLOWED',
         false,
@@ -1178,7 +1178,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
   ): Promise<CalendarBookingState> {
     if (!this.allowedCalendarIds.includes(request.calendarId)) {
       throw new IntegrationError(
-        'Calendar reads are restricted to the configured StoryOps calendar.',
+        'Calendar reads are restricted to the configured WashOps calendar.',
         this.provider,
         'CALENDAR_NOT_ALLOWED',
         false,
@@ -1232,7 +1232,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       (status !== 'confirmed' && status !== 'cancelled')
     ) {
       throw new IntegrationError(
-        'Google Calendar booking read-back no longer matches the exact StoryOps event.',
+        'Google Calendar booking read-back no longer matches the exact WashOps event.',
         this.provider,
         'RECONCILIATION_CONFLICT',
         false,
@@ -1253,7 +1253,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
   async cancelBooking(request: CancelCalendarEntryRequest, signal?: AbortSignal): Promise<void> {
     if (!this.allowedCalendarIds.includes(request.calendarId)) {
       throw new IntegrationError(
-        'Calendar writes are restricted to the configured StoryOps calendar.',
+        'Calendar writes are restricted to the configured WashOps calendar.',
         this.provider,
         'CALENDAR_NOT_ALLOWED',
         false,
@@ -1287,7 +1287,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       stringValue(privateProperties, 'storyops_idempotency_key') !== request.idempotencyKey
     ) {
       throw new IntegrationError(
-        'Google Calendar cancellation read-back no longer matches the StoryOps event.',
+        'Google Calendar cancellation read-back no longer matches the WashOps event.',
         this.provider,
         'RECONCILIATION_CONFLICT',
         false,
@@ -1316,7 +1316,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
   ): Promise<CalendarEntry> {
     if (!this.allowedCalendarIds.includes(request.calendarId)) {
       throw new IntegrationError(
-        'Calendar writes are restricted to the configured StoryOps calendar.',
+        'Calendar writes are restricted to the configured WashOps calendar.',
         this.provider,
         'CALENDAR_NOT_ALLOWED',
         false,
@@ -1372,7 +1372,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       stringValue(privateProperties, 'storyops_kind') !== kind
     ) {
       throw new IntegrationError(
-        'Google Calendar read-back did not reconcile the exact StoryOps event.',
+        'Google Calendar read-back did not reconcile the exact WashOps event.',
         this.provider,
         'INVALID_RESPONSE',
         false,
@@ -1517,7 +1517,7 @@ export class SupabaseStorageProvider implements StorageProvider {
   ) {
     if (bucket !== 'job-media') {
       throw new IntegrationError(
-        'StoryOps V1 requires the private job-media bucket for both field evidence and signed targets.',
+        'WashOps V1 requires the private job-media bucket for both field evidence and signed targets.',
         'supabase_signed_storage_targets',
         'STORAGE_BUCKET_MISMATCH',
         false,

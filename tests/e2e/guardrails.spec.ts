@@ -113,7 +113,7 @@ test('pilot rehearsal shows the next local checkpoint and restart requires confi
   page.once('dialog', (dialog) => dialog.accept());
   await restartSandboxRehearsal(page);
   await expect(
-    page.getByRole('heading', { name: 'Tell StoryOps who it works for.' }),
+    page.getByRole('heading', { name: 'Tell WashOps who it works for.' }),
   ).toBeVisible();
 });
 

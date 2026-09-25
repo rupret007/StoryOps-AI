@@ -679,8 +679,8 @@ function LiveFinancePage() {
             </strong>
             <p>
               {hasAcceptedReconciliationExhaustion
-                ? 'Twilio accepted the message, but StoryOps exhausted its delivery-status checks. It is not marked failed or delivered. Reconcile the signed callback or exact provider SID before taking another action.'
-                : 'StoryOps cannot confirm whether Twilio accepted the request. No automatic resend is scheduled. Reconcile the signed callback or Twilio account and preserve the exact SID before taking another action.'}
+                ? 'Twilio accepted the message, but WashOps exhausted its delivery-status checks. It is not marked failed or delivered. Reconcile the signed callback or exact provider SID before taking another action.'
+                : 'WashOps cannot confirm whether Twilio accepted the request. No automatic resend is scheduled. Reconcile the signed callback or Twilio account and preserve the exact SID before taking another action.'}
             </p>
           </div>
         </Card>
