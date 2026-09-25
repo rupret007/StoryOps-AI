@@ -532,7 +532,7 @@ describe('owner command center projection', () => {
     expect(projection.today.status).toBe('unknown');
     expect(projection.glance.countsKnown).toBe(false);
     expect(projection.glance.holds).toBeNull();
-    expect(projection.glance.headline).toBe('This command center is not current.');
+    expect(projection.glance.headline).toBe('WashOps is not current.');
     expect(projection.glance.caveat).toContain('Do not read an empty list as all clear.');
     expect(projection.glance.headline).not.toMatch(/no holds/i);
     expect(ownerTodayVisitEmptyCopy(projection.today, projection.freshness).heading).toBe(

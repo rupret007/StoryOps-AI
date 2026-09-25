@@ -86,7 +86,7 @@ describe('AppShell keyboard and mobile accessibility', () => {
     const menu = screen.getByRole('dialog', { name: 'WashOps workspace' });
     const menuQueries = within(menu);
     for (const destination of [
-      'Command center',
+      'WashOps',
       'Pipeline',
       'Customers',
       'Dispatch',
@@ -162,7 +162,7 @@ describe('AppShell keyboard and mobile accessibility', () => {
       expect(menu.getByRole('link', { name: new RegExp(destination, 'u') })).toBeVisible();
     }
     for (const deniedDestination of [
-      'Command center',
+      'WashOps',
       'Finance',
       'AI office',
       'Approvals',

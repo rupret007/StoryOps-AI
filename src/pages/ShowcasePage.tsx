@@ -79,7 +79,7 @@ export function ShowcasePage() {
             </Button>
             <Link className="button button--dark button--sm" to="/">
               <ArrowLeft size={14} aria-hidden="true" />
-              Exit to command center
+              Exit to WashOps
             </Link>
           </>
         }

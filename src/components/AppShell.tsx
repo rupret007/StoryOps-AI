@@ -54,7 +54,7 @@ interface NavItem {
 }
 
 const primaryNav: NavItem[] = [
-  { to: '/', label: 'Command center', icon: LayoutDashboard, permission: 'analytics.read' },
+  { to: '/', label: 'WashOps', icon: LayoutDashboard, permission: 'analytics.read' },
   { to: '/pipeline', label: 'Pipeline', icon: Inbox, permission: 'customers.read', badge: 'inbox' },
   { to: '/customers', label: 'Customers', icon: ContactRound, permission: 'customers.read' },
   { to: '/dispatch', label: 'Dispatch', icon: CalendarDays, permission: 'jobs.read' },

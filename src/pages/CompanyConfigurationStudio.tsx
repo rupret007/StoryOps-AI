@@ -269,7 +269,7 @@ export function CompanyConfigurationStudio() {
             icon={<ArrowLeft size={15} />}
             onClick={() => navigate('/')}
           >
-            Command center
+            WashOps
           </Button>
         </div>
       </header>

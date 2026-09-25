@@ -843,7 +843,7 @@ export function DashboardPage() {
     <div className="page">
       <OwnerCommandGlance projection={ownerProjection} />
       <PageHeader
-        eyebrow="Command center"
+        eyebrow="WashOps"
         title={`Good morning, ${ownerFirstName}.`}
         description="Sandbox records only. Do the next safe action before anything else on this page. Nothing here is live payment, route, weather, or dispatch evidence."
         actions={
@@ -1110,7 +1110,7 @@ function LiveDashboardPage() {
     <div className="page">
       {state.role === 'owner' && <OwnerCommandGlance projection={ownerProjection} />}
       <PageHeader
-        eyebrow="Authenticated command center"
+        eyebrow="Authenticated WashOps"
         title={state.live?.companyName ?? 'WashOps workspace'}
         description={
           state.role === 'owner'

@@ -171,7 +171,7 @@ export function deriveOwnerCommandGlance(input: {
     return {
       freshness: input.freshness,
       countsKnown,
-      headline: 'This command center is not current.',
+      headline: 'WashOps is not current.',
       caveat:
         input.freshness === 'offline'
           ? 'This device is offline. Do not read these rows as a live tally, and do not read an empty list as all clear.'

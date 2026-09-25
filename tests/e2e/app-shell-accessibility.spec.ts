@@ -15,7 +15,7 @@ test('mobile navigation and command search remain complete and keyboard-containe
   const menu = page.getByRole('dialog', { name: 'WashOps workspace' });
   await expect(menu).toBeVisible();
   for (const destination of [
-    'Command center',
+    'WashOps',
     'Pipeline',
     'Customers',
     'Dispatch',
