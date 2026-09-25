@@ -48,7 +48,7 @@ function safeDestination(destination: string, current: StoryOpsLocation): StoryO
     destination.includes('\\') ||
     hasControlCharacter
   ) {
-    throw new Error('StoryOps navigation only accepts same-origin absolute paths.');
+    throw new Error('WashOps navigation only accepts same-origin absolute paths.');
   }
 
   const parsed = new URL(destination, 'https://storyops.local');
@@ -136,7 +136,7 @@ export function MemoryRouter({
 
 function useRouter() {
   const value = useContext(RouterContext);
-  if (!value) throw new Error('StoryOps router hooks must be used inside a router.');
+  if (!value) throw new Error('WashOps router hooks must be used inside a router.');
   return value;
 }
 

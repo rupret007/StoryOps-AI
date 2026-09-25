@@ -1616,7 +1616,7 @@ export function createLiveSetupRequiredState(setupState: LiveSetupState): DemoSt
     live: {
       userId: setupState.userId,
       companyId,
-      companyName: setupState.companyName ?? 'StoryOps setup workspace',
+      companyName: setupState.companyName ?? 'WashOps setup workspace',
       companyTimezone: 'America/Chicago',
       serverTime: '',
       invoiceVersions: {},

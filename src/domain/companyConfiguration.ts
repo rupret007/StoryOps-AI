@@ -1197,7 +1197,7 @@ export function assessCompanyConfiguration(
     add(
       'materials',
       'chemical_material_missing',
-      'Enabled soft-wash services require an owner-configured chemical material and SDS record; StoryOps cannot infer one.',
+      'Enabled soft-wash services require an owner-configured chemical material and SDS record; WashOps cannot infer one.',
       publicationMode === 'live' ? 'blocking' : 'warning',
     );
   }

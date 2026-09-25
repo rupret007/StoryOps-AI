@@ -53,7 +53,7 @@ ARG VROOM_VERSION=v1.15.0
 ARG VROOM_EXPRESS_REF=5475901e60ec13ed9eec6cc87c811206a779eb03
 ARG VROOM_EXPRESS_VERSION=v0.12.0
 
-LABEL org.opencontainers.image.title="StoryOps AI VROOM service" \
+LABEL org.opencontainers.image.title="WashOps VROOM service" \
       org.opencontainers.image.source="https://github.com/VROOM-Project/vroom" \
       org.opencontainers.image.version="${VROOM_VERSION}" \
       org.opencontainers.image.revision="${VROOM_REF}" \

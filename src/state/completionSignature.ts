@@ -71,7 +71,7 @@ export async function createCompletionSignaturePng(
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = '#183c35';
   context.font = '600 24px system-ui, sans-serif';
-  context.fillText('StoryOps completion acknowledgement', 48, 68, 864);
+  context.fillText('WashOps completion acknowledgement', 48, 68, 864);
   context.fillStyle = '#122a25';
   context.font = '52px cursive';
   context.fillText(signerName, 48, 172, 864);
