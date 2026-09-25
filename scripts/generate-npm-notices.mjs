@@ -9,14 +9,14 @@ const unknown = 'UNKNOWN';
 const noticeFilePattern = /^(?:licen[cs]e|copying|notice|copyright)(?:$|[._-].*)/i;
 const inventoryConfigurations = [
   {
-    title: 'STORYOPS AI — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
+    title: 'WASHOPS AI — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
     lockfilePath: join(repositoryRoot, 'package-lock.json'),
     packageRoot: repositoryRoot,
     outputPath: join(repositoryRoot, 'NPM_THIRD_PARTY_NOTICES.txt'),
     supplementalMaterialFiles: new Map(),
   },
   {
-    title: 'STORYOPS AI VROOM RUNTIME — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
+    title: 'WASHOPS AI VROOM RUNTIME — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY',
     lockfilePath: join(repositoryRoot, 'infra/vroom/runtime-package/package-lock.json'),
     packageRoot: join(repositoryRoot, 'infra/vroom/runtime-package'),
     outputPath: join(repositoryRoot, 'infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt'),

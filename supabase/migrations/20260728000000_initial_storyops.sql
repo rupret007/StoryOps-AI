@@ -1,4 +1,4 @@
--- StoryOps AI V1 initial schema.
+-- WashOps AI V1 initial schema.
 -- PostgreSQL 15 / Supabase. All currency is USD numeric(12,2); measurements remain
 -- numeric and are serialized as decimal strings at the application boundary.
 

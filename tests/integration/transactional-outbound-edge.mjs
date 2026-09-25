@@ -185,7 +185,7 @@ try {
   runSql(setupSql);
   const { error: authError } = await client.auth.signInWithPassword({
     email: 'owner@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(authError, null, 'Owner sign-in failed.');
 

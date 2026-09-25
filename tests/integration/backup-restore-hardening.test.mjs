@@ -2319,7 +2319,7 @@ test('restore proof refuses stale source authority before restoring', async () =
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      new RegExp(`exact StoryOps release migration ${REQUIRED_STORYOPS_MIGRATION}`, 'u'),
+      new RegExp(`exact WashOps release migration ${REQUIRED_STORYOPS_MIGRATION}`, 'u'),
     );
     await assertMissing(fixture.evidenceOutput);
     await assertMissing(fixture.commandLog);
