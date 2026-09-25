@@ -1,4 +1,4 @@
-STORYOPS AI — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY
+WASHOPS AI — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY
 
 This file is generated. Do not edit it by hand.
 Generator: scripts/generate-npm-notices.mjs
