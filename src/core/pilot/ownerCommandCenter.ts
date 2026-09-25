@@ -133,10 +133,12 @@ export function ownerActionGlanceLine(action: OwnerActionItem): string {
   const records = action.entities?.length ?? 0;
   const named =
     records === 0
-      ? 'No named record on this line.'
+      ? 'See the source for details.'
       : records === 1
         ? `Record: ${action.entities?.[0]?.label}.`
-        : `${records} named records.`;
+        : records <= 3
+          ? `Records: ${action.entities!.slice(0, 3).map((e) => e.label).join(', ')}.`
+          : `${action.entities![0]!.label} + ${records - 1} more.`;
   if (action.kind === 'hold' && action.priority === 'P0') return `Stops work. ${named}`;
   if (action.kind === 'hold') return `Still blocks a safe step. ${named}`;
   if (action.kind === 'decision') return `Needs your yes or no. ${named}`;

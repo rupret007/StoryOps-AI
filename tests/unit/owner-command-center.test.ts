@@ -505,6 +505,76 @@ describe('owner command center projection', () => {
     expect(line).not.toContain('A long fact');
   });
 
+  it('shows first few record labels when there are 2-3 entities for a more actionable glance', () => {
+    const twoEntities: OwnerActionItem = {
+      id: 'weather-held-visits',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Visits are on weather hold',
+      fact: 'Two visits blocked.',
+      recommendation: 'Review weather evidence.',
+      source: 'test',
+      href: '/dispatch',
+      entities: [
+        { label: 'JOB-1048', href: '/dispatch' },
+        { label: 'JOB-1049', href: '/dispatch' },
+      ],
+    };
+    expect(ownerActionGlanceLine(twoEntities)).toBe(
+      'Stops work. Records: JOB-1048, JOB-1049.',
+    );
+
+    const threeEntities: OwnerActionItem = {
+      ...twoEntities,
+      entities: [
+        { label: 'JOB-1048', href: '/dispatch' },
+        { label: 'JOB-1049', href: '/dispatch' },
+        { label: 'JOB-1050', href: '/dispatch' },
+      ],
+    };
+    expect(ownerActionGlanceLine(threeEntities)).toBe(
+      'Stops work. Records: JOB-1048, JOB-1049, JOB-1050.',
+    );
+  });
+
+  it('shows first entity plus count for 4+ entities to keep the line phone-length', () => {
+    const fourEntities: OwnerActionItem = {
+      id: 'weather-held-visits',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Visits are on weather hold',
+      fact: 'Four visits blocked.',
+      recommendation: 'Review weather evidence.',
+      source: 'test',
+      href: '/dispatch',
+      entities: [
+        { label: 'JOB-1048', href: '/dispatch' },
+        { label: 'JOB-1049', href: '/dispatch' },
+        { label: 'JOB-1050', href: '/dispatch' },
+        { label: 'JOB-1051', href: '/dispatch' },
+      ],
+    };
+    const line = ownerActionGlanceLine(fourEntities);
+    expect(line).toBe('Stops work. JOB-1048 + 3 more.');
+    expect(line.length).toBeLessThan(80);
+  });
+
+  it('directs to source when no entities are attached for an actionable next step', () => {
+    const noEntities: OwnerActionItem = {
+      id: 'configuration-missing',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Complete the owner configuration',
+      fact: 'No configuration record.',
+      recommendation: 'Record identity, territory, hours.',
+      source: 'test',
+      href: '/setup',
+    };
+    expect(ownerActionGlanceLine(noEntities)).toBe(
+      'Stops work. See the source for details.',
+    );
+  });
+
   it('withholds counts when the authenticated workspace has no server time', () => {
     const state = withPublishedOperatingRecords(createDemoState());
     state.dataMode = 'supabase';

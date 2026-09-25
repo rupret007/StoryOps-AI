@@ -193,7 +193,7 @@ describe('owner command-center UI', () => {
     const glance = screen.getByRole('region', { name: 'Phone glance' });
     expect(within(glance).getByRole('heading', { name: '1 hold stops work.' })).toBeVisible();
     expect(screen.getByText(/1 hold stops work · \d+ more holds/u)).toBeVisible();
-    expect(within(glance).getByText('Stops work. No named record on this line.')).toBeVisible();
+    expect(within(glance).getByText('Stops work. See the source for details.')).toBeVisible();
     expect(
       within(glance).getByRole('link', { name: 'Do this: Open Owner configuration' }),
     ).toHaveAttribute('href', '/setup');
