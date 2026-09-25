@@ -1538,7 +1538,7 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
           {
             id: uniqueId('toast'),
             title: 'Device copy cleared',
-            detail: 'Synced StoryOps workspace data and caches were removed from this device.',
+            detail: 'Synced WashOps workspace data and caches were removed from this device.',
           },
         ],
       };
@@ -2101,7 +2101,7 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
       return withToast(
         { ...current, role },
         'View changed',
-        `You are now viewing StoryOps as ${role}.`,
+        `You are now viewing WashOps as ${role}.`,
       );
     });
   }, []);
@@ -3925,7 +3925,7 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
             payload: {
               entityId: id,
               decision,
-              decisionNote: 'Decision submitted from the authenticated StoryOps workspace.',
+              decisionNote: 'Decision submitted from the authenticated WashOps workspace.',
             },
           },
           {
@@ -4042,8 +4042,8 @@ export function StoryOpsProvider({ children }: { children: ReactNode }) {
               result.replayed
                 ? 'The durable receipt confirms this exact action executed previously; no duplicate mutation occurred.'
                 : leadAction
-                  ? 'StoryOps applied the exact lead payload and consumed the approval in one database transaction.'
-                  : 'Stripe returned an authoritative receipt and StoryOps consumed the approval exactly once.',
+                  ? 'WashOps applied the exact lead payload and consumed the approval in one database transaction.'
+                  : 'Stripe returned an authoritative receipt and WashOps consumed the approval exactly once.',
             ),
           );
         })

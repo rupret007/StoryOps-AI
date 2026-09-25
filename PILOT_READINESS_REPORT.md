@@ -1,4 +1,4 @@
-# StoryOps AI V1.1 pilot readiness
+# WashOps V1.1 pilot readiness
 
 **Assessment date:** July 30, 2026 (America/Chicago); evidence collected
 through `2026-07-31T03:04Z`  
@@ -13,7 +13,7 @@ screenshots or hosted/provider evidence exists
 
 ## Executive decision
 
-StoryOps AI V1.1 is a production-shaped operating system with an exterior-
+WashOps V1.1 is a production-shaped operating system with an exterior-
 cleaning starter pack, not a claim of universal industry support. The reusable
 kernel owns CRM, property, deterministic pricing, approvals, dispatch, offline
 field execution, billing truth, portal access, AI governance, integrations,
@@ -185,12 +185,12 @@ no unattended agent scheduler is claimed.
 | Scope and field media                                 | Private Storage and exact evidence contracts implemented                                                                                                                                                                     | Hosted device, quota, lifecycle, malware/content process, signed-link expiry, loss/recovery, and representative-media canary.                                                                                                |
 | Scheduling                                            | Durable calendar/route/weather/equipment receipt and compensation contracts implemented                                                                                                                                      | Approved Google calendar, maps, NWS, and VROOM configuration; fresh provider canary; orphan-event compensation drill.                                                                                                        |
 | Communications                                        | Consent, opt-out, webhook, receipt, ambiguity, and reconciliation boundaries implemented                                                                                                                                     | Owned Twilio/email identities, registration/domain controls, approved language, signed callbacks, delivery/STOP/bounce/complaint canaries.                                                                                   |
-| Billing                                               | Checkout/invoice/payment/refund interfaces, checkout retirement, allocation quarantine, and exact approved current-balance resolution implemented                                                                            | Stripe account/configuration, tax/accounting review, signed webhook, expiry/replacement/late-success, amount/idempotency/reconciliation canaries; no real card data in StoryOps.                                             |
+| Billing                                               | Checkout/invoice/payment/refund interfaces, checkout retirement, allocation quarantine, and exact approved current-balance resolution implemented                                                                            | Stripe account/configuration, tax/accounting review, signed webhook, expiry/replacement/late-success, amount/idempotency/reconciliation canaries; no real card data in WashOps.                                              |
 | AI                                                    | Sandbox and disabled-without-key modes, guarded server execution, evaluations, budgets, and redacted traces implemented                                                                                                      | Model/privacy review, approved prompts/tools/budgets, representative staged canary, monitoring, kill switch, and incident owner.                                                                                             |
 | Backup and restore                                    | Executed isolated loopback restore passed for DB, roles, policies, and three byte-verified Storage objects; trusted detached manifest, HMAC proof, distinct database identities, `0600` evidence, and cleanup were verified. | Encrypted off-site destination, retention, recurring independent restore drill, measured RPO/RTO, and named operator.                                                                                                        |
 | Legal, safety, environmental, tax, insurance, privacy | Official-source DFW/Texas checklists supplied and explicitly marked for review                                                                                                                                               | Signed professional and jurisdiction-specific decisions, products/SDS/SOPs, wastewater/backflow/permit plan, terms, retention, consent, insurance, and tax treatment.                                                        |
 | Deployment and operations                             | Hardened app and pinned VROOM images passed local health/runtime and deterministic-route checks.                                                                                                                             | Reviewed hosting, TLS, secret manager, access restrictions, alerts, on-call, rollback, capacity/rate/spend limits, production canaries, immutable OS-package inputs, final image CVE scan, SBOM, and provenance attestation. |
-| Distribution license                                  | Upstream MIT/notices and third-party inventory preserved                                                                                                                                                                     | Select and record the root StoryOps AI distribution license before distribution.                                                                                                                                             |
+| Distribution license                                  | Upstream MIT/notices and third-party inventory preserved                                                                                                                                                                     | Select and record the root WashOps distribution license before distribution.                                                                                                                                                 |
 
 ## Bounded first-pilot conditions
 
@@ -235,7 +235,7 @@ pilot should remain limited to:
 - Ubuntu package repositories used during image construction are not pinned to
   an immutable snapshot, and no final OS/container CVE scan or signed SBOM
   attestation is release evidence.
-- The root StoryOps AI distribution license has not been selected. Preserved
+- The root WashOps distribution license has not been selected. Preserved
   upstream notices do not resolve that distribution decision.
 - Local synthetic and provider-contract tests do not prove a hosted deployment,
   external delivery, funds movement, legal compliance, or safe field work.

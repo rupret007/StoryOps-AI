@@ -141,7 +141,7 @@ export class SupabaseStripeBillingValidator implements StripeBillingValidator {
       invoice.due_date !== request.dueDate
     ) {
       throw new IntegrationError(
-        'Provider invoice requires a matching current StoryOps invoice and due date.',
+        'Provider invoice requires a matching current WashOps invoice and due date.',
         'stripe',
         'INVOICE_NOT_ISSUABLE',
         false,
@@ -149,7 +149,7 @@ export class SupabaseStripeBillingValidator implements StripeBillingValidator {
     }
     if (!lineTotal(request.lines).eq(new Decimal(invoice.total))) {
       throw new IntegrationError(
-        'Provider invoice lines do not equal the authoritative StoryOps invoice total.',
+        'Provider invoice lines do not equal the authoritative WashOps invoice total.',
         'stripe',
         'AMOUNT_MISMATCH',
         false,
@@ -183,7 +183,7 @@ export class SupabaseStripeBillingValidator implements StripeBillingValidator {
       new Decimal(request.amount.amount).gt(new Decimal(payment.amount))
     ) {
       throw new IntegrationError(
-        'Refund amount or provider payment does not match an eligible StoryOps payment.',
+        'Refund amount or provider payment does not match an eligible WashOps payment.',
         'stripe',
         'REFUND_NOT_ALLOWED',
         false,

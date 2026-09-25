@@ -5,7 +5,7 @@ import { hasFlag, optionValue, printErrorAndExit, unknownOptions } from '../scri
 const argv = process.argv.slice(2);
 
 function usage() {
-  process.stdout.write(`StoryOps AI health probe
+  process.stdout.write(`WashOps health probe
 
 Usage:
   node infra/observability/health-check.mjs [options]

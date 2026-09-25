@@ -1,4 +1,4 @@
-# StoryOps field safety and environmental incident playbook
+# WashOps field safety and environmental incident playbook
 
 **Purpose:** protect people, stop additional harm, preserve facts, and route
 required human decisions after a field incident  
@@ -182,7 +182,7 @@ eight hours and an in-patient hospitalization, amputation, or eye loss within
 [OSHA Report a Fatality or Severe Injury](https://www.osha.gov/report/).
 Partial routine-recordkeeping exemptions do not by themselves remove severe-
 event reporting. Counsel must determine employer/employee, work-relatedness,
-event, timing, and reporting applicability; StoryOps may preserve a deadline but
+event, timing, and reporting applicability; WashOps may preserve a deadline but
 must not decide or submit it.
 
 Texas DWC says private employers generally may choose workers’ compensation,
@@ -197,7 +197,7 @@ Notification to one authority may not satisfy another.
 
 ## Evidence packet
 
-Use [StoryOps Incident Report](../templates/INCIDENT_REPORT.md) and attach:
+Use [WashOps Incident Report](../templates/INCIDENT_REPORT.md) and attach:
 
 - exact location/jurisdiction, service, scope, task, people, witnesses, and
   responder/authority/claim identifiers;

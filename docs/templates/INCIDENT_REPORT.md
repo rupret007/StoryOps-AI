@@ -1,4 +1,4 @@
-# StoryOps Incident Report
+# WashOps Incident Report
 
 - This record captures facts and decisions; it is not medical, legal,
   environmental, insurance, or regulatory advice.

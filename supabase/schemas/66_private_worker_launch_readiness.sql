@@ -805,7 +805,7 @@ begin
           from public.communication_threads thread
           where thread.id = message_row.thread_id
         ),
-        'StoryOps follow-up'
+        'WashOps follow-up'
       );
     else
       subject_value := case followup_row.action_type
@@ -1872,7 +1872,7 @@ begin
         'recipient', message_snapshot.recipients[1],
         'subject', coalesce(
           nullif(btrim(message_snapshot.thread_subject), ''),
-          'StoryOps customer update'
+          'WashOps customer update'
         ),
         'body', message_snapshot.body,
         'consentSnapshotId', attempt_row.consent_record_id

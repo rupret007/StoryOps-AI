@@ -1,4 +1,4 @@
-# Next overnight goal — StoryOps AI V1.2
+# Next overnight goal — WashOps V1.2
 
 Copy the block below into a new Codex task after V1.1 is committed.
 
@@ -6,13 +6,13 @@ Copy the block below into a new Codex task after V1.1 is committed.
 /goal Act as principal engineer, product owner, service-business operator,
 AI systems engineer, security engineer, and release engineer.
 
-Turn the current StoryOps AI exterior-services pilot into a genuinely reusable
+Turn the current WashOps exterior-services pilot into a genuinely reusable
 service-business platform by proving a second, materially different vertical:
 recurring residential cleaning. Build working software, not merely a plan.
 
 STARTING POINT
 
-Repository: /Users/jeffstory/Documents/StoryOps-AI
+Repository: /Users/jeffstory/Documents/WashOps-AI
 Starting point: the final local V1.1 commit on
 codex/exterior-services-pilot-v1.1
 Working branch: codex/service-industry-packs-v1.2

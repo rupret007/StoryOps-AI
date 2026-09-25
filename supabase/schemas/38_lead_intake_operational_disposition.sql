@@ -459,7 +459,7 @@ begin
         end,
         case
           when handoff_reasons_value @> array['emergency_uncertainty']::text[]
-            then 'A verified inbound message mentioned an emergency. Review the lead immediately; StoryOps did not send advice.'
+            then 'A verified inbound message mentioned an emergency. Review the lead immediately; WashOps did not send advice.'
           when handoff_reasons_value @> array['business_hours_configuration_missing']::text[]
             then 'Business-hours evidence was unavailable. Review the lead and published company configuration.'
           when disposition_value = 'missed_call_recovery'

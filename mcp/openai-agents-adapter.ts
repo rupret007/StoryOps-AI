@@ -45,13 +45,13 @@ export class OpenAiAgentsServerModel implements StructuredModel, HealthCheckedIn
       }),
       tracingDisabled: false,
       traceIncludeSensitiveData: false,
-      workflowName: 'StoryOps AI Office',
+      workflowName: 'WashOps Office',
     });
   }
 
   async generate(request: StructuredGenerationRequest): Promise<unknown> {
     const agent = new Agent({
-      name: `StoryOps ${request.agent}`,
+      name: `WashOps ${request.agent}`,
       instructions: request.systemInstructions,
       model: this.config.model,
       modelSettings: {

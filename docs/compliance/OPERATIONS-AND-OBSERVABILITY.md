@@ -95,7 +95,7 @@ production shape, generate synthetic records or use an approved, irreversible
 deidentification process.
 
 Production promotion also requires an approved retention schedule, offline
-device/data policy, real provider canaries, and a selected StoryOps AI
+device/data policy, real provider canaries, and a selected WashOps
 root-project distribution license. None was supplied or exercised for this
 release.
 

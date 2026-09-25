@@ -61,7 +61,7 @@ const client = createClient(url, anonKey, {
 });
 const { error: authError } = await client.auth.signInWithPassword({
   email: 'owner@storyops.local',
-  password: 'StoryOpsDemo1!',
+  password: 'WashOpsDemo1!',
 });
 assert.equal(authError, null, authError?.message);
 
@@ -198,7 +198,7 @@ try {
   });
   const { error: technicianAuthError } = await technicianClient.auth.signInWithPassword({
     email: 'technician@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(technicianAuthError, null, technicianAuthError?.message);
   const forbiddenScheduling = await technicianClient.functions.invoke('scheduling-evidence', {

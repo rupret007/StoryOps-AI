@@ -23,7 +23,7 @@ export function LiveSignInPage() {
             <Sparkles size={18} />
           </span>
           <span>
-            <strong>StoryOps AI</strong>
+            <strong>WashOps</strong>
             <small>Authenticated company workspace</small>
           </span>
         </div>
@@ -54,7 +54,7 @@ export function LiveSignInPage() {
               <p className="eyebrow">Live Supabase mode</p>
               <h1>Sign in to your workspace</h1>
               <p>
-                StoryOps never accepts a client-selected role. The database derives access from the
+                WashOps never accepts a client-selected role. The database derives access from the
                 authenticated user and active company membership.
               </p>
             </div>

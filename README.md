@@ -1,6 +1,6 @@
-# StoryOps AI
+# WashOps (formerly StoryOps AI)
 
-StoryOps AI is an AI-first service-business operating system. V1.1 runs one
+WashOps is an AI-first service-business operating system. V1.1 runs one
 company and ships its first complete industry pack for an owner-operated
 exterior-cleaning business: pressure washing, soft washing, gutter/downspout
 cleaning, roof washing, and window cleaning. The reusable kernel owns identity,
@@ -138,7 +138,7 @@ the starting state.
 `make setup` is the shorter setup-only alias. It does not run verification.
 To create or read a different owner-only environment file, pass
 `--storyops-env-file PATH`; Node 22 reserves its own `--env-file` option, so
-that Node flag is not a StoryOps setup argument.
+that Node flag is not a WashOps setup argument.
 
 ### Optional local Supabase
 
@@ -306,7 +306,7 @@ invoice without treating sandbox or provider-accepted state as payment.
 The dedicated-token `post-service-worker` keeps the service role internal while
 leasing due review, referral, and recurring-maintenance messages. It rechecks the exact current marketing
 consent immediately before submission, and uses the provider adapters with a
-stable StoryOps correlation key. Before a live Twilio create call it commits a
+stable WashOps correlation key. Before a live Twilio create call it commits a
 fail-safe `submitted_unknown` boundary; an ambiguous result is excluded from
 automatic resend and requires provider reconciliation, while a returned
 authoritative SID advances to `submitted` until callback/poll delivery
@@ -584,6 +584,6 @@ reimplemented; no StoryLand code or text was copied. Transitive npm notices are
 generated in `NPM_THIRD_PARTY_NOTICES.txt`; the separately locked VROOM runtime
 graph is captured in
 `infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt` and that exact
-inventory is copied into the routing image. StoryOps AI itself has no release
+inventory is copied into the routing image. WashOps itself has no release
 license selected in this repository; choosing and documenting the root-project
 license is a manual YELLOW gate before distribution.

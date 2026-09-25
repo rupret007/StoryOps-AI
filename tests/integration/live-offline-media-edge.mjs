@@ -184,7 +184,7 @@ async function uploadAndFinalizeExact(purpose) {
 try {
   const { error: authError } = await client.auth.signInWithPassword({
     email: 'technician@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(authError, null, authError?.message);
 
@@ -392,7 +392,7 @@ try {
   await client.auth.signOut();
   const { error: customerAuthError } = await client.auth.signInWithPassword({
     email: 'customer@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(customerAuthError, null, customerAuthError?.message);
   const customerObjectPath =

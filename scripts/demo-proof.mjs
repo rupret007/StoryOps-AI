@@ -36,7 +36,7 @@ const startedAt = new Date().toISOString();
 let sourceEvidence;
 
 function usage() {
-  process.stdout.write(`StoryOps AI executable demo proof
+  process.stdout.write(`WashOps executable demo proof
 
 Usage:
   node scripts/demo-proof.mjs [options]
@@ -44,7 +44,7 @@ Usage:
 Options:
   --quick             Run setup checks, infra integration tests, unit tests, build
   --skip-e2e          Skip Playwright (recorded in the proof report)
-  --base-url URL      Smoke-test an already running StoryOps web application
+  --base-url URL      Smoke-test an already running WashOps web application
   --with-vroom        Exercise an already running VROOM custom-matrix route
   --report PATH       Write the machine-readable proof report to a new file
   --dry-run           Print all local commands without running or writing
@@ -139,8 +139,8 @@ async function checkApplication(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(8_000) });
   const body = await response.text();
   if (!response.ok) throw new Error(`Application smoke test returned HTTP ${response.status}.`);
-  if (!/StoryOps AI|id=["']root["']/iu.test(body)) {
-    throw new Error('Application smoke test did not return the StoryOps shell.');
+  if (!/WashOps|id=["']root["']/iu.test(body)) {
+    throw new Error('Application smoke test did not return the WashOps shell.');
   }
   return { url, status: response.status, bytes: Buffer.byteLength(body) };
 }
@@ -308,13 +308,11 @@ async function main() {
   }
 
   if (dryRun) {
-    process.stdout.write(
-      '\nStoryOps AI demo-proof plan validated; no proof checks were executed.\n',
-    );
+    process.stdout.write('\nWashOps demo-proof plan validated; no proof checks were executed.\n');
     return;
   }
   await writeReport('passed');
-  process.stdout.write('\nStoryOps AI demo proof passed.\n');
+  process.stdout.write('\nWashOps demo proof passed.\n');
 }
 
 main().catch(async (error) => {

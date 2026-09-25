@@ -83,7 +83,7 @@ async function errorPayload(error) {
 async function signIn(client, email) {
   const { error } = await client.auth.signInWithPassword({
     email,
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(error, null, `Unable to sign in ${email}.`);
 }

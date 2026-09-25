@@ -423,7 +423,7 @@ export function CustomersPage() {
                   <MapPinned aria-hidden="true" size={19} />
                 </div>
                 <p>
-                  StoryOps accepts coordinates only from a fresh live Maps result that an owner or
+                  WashOps accepts coordinates only from a fresh live Maps result that an owner or
                   dispatcher explicitly confirms. Typed addresses never become coordinates by
                   inference.
                 </p>

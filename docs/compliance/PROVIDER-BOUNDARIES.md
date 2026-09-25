@@ -1,6 +1,6 @@
 # Integration and provider boundaries
 
-StoryOps runs with every provider in `sandbox` by default. A live integration is
+WashOps runs with every provider in `sandbox` by default. A live integration is
 an explicit per-provider activation, not a global “production” switch. The
 integration-health screen must report `mode`, `status`, `checkedAt`, latency,
 message, and missing environment names without ever returning secret values.
@@ -31,7 +31,7 @@ remove an abandoned object; they may not initiate replacement customer work.
 1. Accept a typed request with company/resource IDs, actor, consent/approval
    references where relevant, and an idempotency key.
 2. Validate authorization and policy before entering the adapter. The provider
-   credential never expands the caller’s StoryOps permission.
+   credential never expands the caller’s WashOps permission.
 3. Apply a finite timeout, provider-specific rate limit, bounded retry policy,
    and abort signal.
 4. Retry only operations known to be safe/idempotent. Use the same idempotency
@@ -162,7 +162,7 @@ Boundary rules:
   `OPENAI_LIVE_ENABLED=true`. Photo analysis requires `OPENAI_MODE=live` and
   its separate `OPENAI_VISION_LIVE_ENABLED=true` switch.
 - `OPENAI_MODEL` has no implicit live default. The owner selects and evaluates a
-  currently available model before activation; StoryOps must not invent a model
+  currently available model before activation; WashOps must not invent a model
   name or silently upgrade one.
 - Each agent receives only the typed tools required for its role. Database,
   provider, and approval tools independently enforce identity, company, RBAC,
@@ -216,7 +216,7 @@ Boundary rules:
   resend and reconciled by authoritative SID/callback/account evidence.
 - Keep provider submission truth separate from provider read availability. If a
   known live SID cannot be read after the bounded reconciliation budget,
-  StoryOps retains `submitted`, the SID, communication record, and last known
+  WashOps retains `submitted`, the SID, communication record, and last known
   provider status; records `RECONCILIATION_EXHAUSTED` plus the read error;
   requires manual reconciliation; and excludes the action from automatic
   resend. A signed callback can still resolve it. It must not be rewritten as a
@@ -275,20 +275,20 @@ Boundary rules:
   pending reconciliation.
 - **REQUIRED TAX/FINANCIAL/LEGAL REVIEW:** taxability, tax sourcing, deposits,
   invoice terms, refunds, disputes/chargebacks, surcharges, and accounting
-  treatment require professional approval. StoryOps does not provide banking or
+  treatment require professional approval. WashOps does not provide banking or
   tax advice.
 
 ## Google Calendar
 
-- Read only the approved operations calendar(s); write only StoryOps holds/
-  bookings with a StoryOps job ID and idempotency key.
+- Read only the approved operations calendar(s); write only WashOps holds/
+  bookings with a WashOps job ID and idempotency key.
 - Availability is an observation with `observedAt`, source calendars, and
   timezone. Re-read immediately before committing; a stale free slot is not
   availability.
 - Create expiring tentative holds before customer commitment. A provider receipt
   must confirm the booking; conflict/timeout enters reconciliation.
 - Keep customer/chemical/safety detail out of third-party calendar descriptions.
-- Owner changes made outside StoryOps remain authoritative and must reconcile
+- Owner changes made outside WashOps remain authoritative and must reconcile
   without duplication.
 - The adapter allowlists one configured calendar and uses deterministic event
   IDs. It can use a short-lived access token for diagnostics or refresh through

@@ -1,6 +1,6 @@
 # Identity Provisioning Runbook
 
-**Purpose:** Safely invite, link, and revoke StoryOps staff and customer portal identities  
+**Purpose:** Safely invite, link, and revoke WashOps staff and customer portal identities  
 **Owner:** Company owner; technical operator for Supabase Auth configuration  
 **Last reviewed:** 2026-07-30  
 **Launch status:** Required before any non-owner pilot login
@@ -34,9 +34,9 @@ The lifecycle is deliberately literal:
 | `linked`  | The exact auth email is confirmed and the exact tenant binding is active | Authorization outside that company/binding   |
 | `revoked` | The exact tenant membership or portal binding was removed/deactivated    | Deletion of the shared Supabase auth user    |
 
-`provider_submission_accepted` is an API-submission fact only. StoryOps always returns
+`provider_submission_accepted` is an API-submission fact only. WashOps always returns
 `externalDeliveryClaimed=false`; the V1 provider boundary does not prove inbox delivery.
-`provider_submission_unknown` means the request may have reached Supabase Auth but StoryOps could
+`provider_submission_unknown` means the request may have reached Supabase Auth but WashOps could
 not durably prove acceptance or rejection. It grants no local access and must never be
 automatically resent.
 
@@ -187,7 +187,7 @@ revocation.
 | Suspected cross-company binding         | Pause identity changes, preserve audit evidence, and start an access incident.            |
 
 The external invite and local access grant are intentionally separate. If the provider accepts an
-invite and the owner/company changes during the distributed gap, StoryOps records that accepted
+invite and the owner/company changes during the distributed gap, WashOps records that accepted
 submission for reconciliation but does not silently activate membership.
 
 For an emergency stop, set `STORYOPS_IDENTITY_INVITE_LIVE_ENABLED=false` (or

@@ -46,7 +46,7 @@ const unknown = unknownOptions(
 );
 
 function usage() {
-  process.stdout.write(`StoryOps AI setup
+  process.stdout.write(`WashOps setup
 
 Usage:
   node scripts/setup.mjs [options]
@@ -88,7 +88,7 @@ function validateNode() {
   const minimum = [22, 22, 3];
   if (compareVersion(current, minimum) < 0 || current[0] >= 23) {
     throw new Error(
-      `Node ${process.version} is unsupported. StoryOps AI requires >=22.22.3 and <23; use the version in .nvmrc.`,
+      `Node ${process.version} is unsupported. WashOps requires >=22.22.3 and <23; use the version in .nvmrc.`,
     );
   }
   process.stdout.write(`OK Node ${process.version}\n`);
@@ -108,7 +108,7 @@ async function validateRepository() {
   }
   const packageJson = JSON.parse(await readFile(resolve(REPO_ROOT, 'package.json'), 'utf8'));
   if (packageJson.name !== 'storyops-ai') {
-    throw new Error('package.json is not the StoryOps AI package.');
+    throw new Error('package.json is not the WashOps package.');
   }
   process.stdout.write('OK repository structure\n');
 }
@@ -578,8 +578,8 @@ async function main() {
 
   process.stdout.write(
     checkOnly
-      ? 'StoryOps AI prerequisite check passed.\n'
-      : 'StoryOps AI setup completed. Sandbox mode is ready without provider keys.\n',
+      ? 'WashOps prerequisite check passed.\n'
+      : 'WashOps setup completed. Sandbox mode is ready without provider keys.\n',
   );
 }
 

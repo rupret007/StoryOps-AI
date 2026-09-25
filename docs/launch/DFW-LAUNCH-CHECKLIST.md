@@ -26,7 +26,7 @@ Use exactly one label in pilot notes and customer-facing status:
 | `LIVE CANARY VERIFIED` | Each provider and authenticated data-plane canary passed with retained local/provider/audit evidence. This does not resolve legal, safety, tax, insurance, or environmental gates.                        |
 | `PILOT AUTHORIZED`     | Every required professional/authority sign-off and hard gate is complete, and the owner signed the exact service area, services, price book, SOPs, providers, policies, and evidence for a bounded pilot. |
 
-StoryOps setup completion is not launch authorization. The authenticated setup
+WashOps setup completion is not launch authorization. The authenticated setup
 flow creates a company in `setup` status, inactive service drafts, unpublished
 pricing/terms/retention drafts, disabled integrations, and
 `launchAuthorized = false`. Do not relabel that state as live-ready.
@@ -43,7 +43,7 @@ pricing/terms/retention drafts, disabled integrations, and
 
 - [ ] **REQUIRED LEGAL/TAX REVIEW — EIN and tax accounts.** Obtain an EIN directly
       from the [IRS EIN service](https://www.irs.gov/businesses/employer-identification-number)
-      when required, and store the confirmation outside StoryOps. Never enter SSNs,
+      when required, and store the confirmation outside WashOps. Never enter SSNs,
       EIN application answers, or banking credentials into AI prompts.
 
 - [ ] **REQUIRED TAX REVIEW — Texas sales tax.** Obtain and display a Texas sales
@@ -68,7 +68,7 @@ pricing/terms/retention drafts, disabled integrations, and
       umbrella coverage the reviewers require. Confirm exclusions for roof work,
       ladders, overspray, chemical use, wastewater, subcontractors, and care/custody/
       control. Load only policy number, carrier, expiration, and certificate status
-      into StoryOps—not full underwriting files.
+      into WashOps—not full underwriting files.
 
 - [ ] **REQUIRED LEGAL REVIEW — consumer terms.** Counsel must approve quote,
       scope exclusions, access/water/electricity permissions, photo authorization,
@@ -128,7 +128,7 @@ pricing/terms/retention drafts, disabled integrations, and
 ## DFW jurisdiction gates
 
 The service address—not the mailing address, lead source, or company base—drives
-the local check. StoryOps must preserve the geocoder result, precision, human
+the local check. WashOps must preserve the geocoder result, precision, human
 verification, jurisdiction, rule version, and permit decision. Low-precision or
 conflicting geocodes require owner review.
 
@@ -198,7 +198,7 @@ conflicting geocodes require owner review.
 
 - [ ] **REQUIRED TAX REVIEW.** Confirm federal income/self-employment/payroll
       obligations, Texas franchise-tax/public-information reporting, and local
-      personal-property obligations for the chosen entity. StoryOps reminders do
+      personal-property obligations for the chosen entity. WashOps reminders do
       not file returns.
 
 - [ ] **REQUIRED LEGAL REVIEW.** Recheck federal beneficial-ownership reporting
@@ -208,7 +208,7 @@ conflicting geocodes require owner review.
       [FinCEN BOI reporting](https://www.fincen.gov/boi). Do not hard-code an
       exemption into an agent.
 
-- [ ] Use a business bank account and Stripe-hosted payment collection. StoryOps
+- [ ] Use a business bank account and Stripe-hosted payment collection. WashOps
       must never store full card data, bank credentials, or provider secret keys.
       Match payment state only from a verified provider response/webhook.
 
@@ -234,7 +234,7 @@ conflicting geocodes require owner review.
       registered and that title requirements vary by type and gross weight:
       [TxDMV trailer guidance](https://www.txdmv.gov/motorists/buying-or-selling-a-vehicle/trailers).
       **REQUIRED VEHICLE/INSURANCE LEGAL REVIEW:** confirm the actual truck,
-      trailer, weight, load, use, driver, and policy; StoryOps must not infer a
+      trailer, weight, load, use, driver, and policy; WashOps must not infer a
       registration or coverage class.
 
 - [ ] Record manufacturer model/serial, manual revision, maintenance interval,

@@ -1,4 +1,4 @@
-STORYOPS AI VROOM RUNTIME — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY
+WASHOPS AI VROOM RUNTIME — TRANSITIVE NPM LICENSE AND NOTICE INVENTORY
 
 This file is generated. Do not edit it by hand.
 Generator: scripts/generate-npm-notices.mjs
@@ -447,14 +447,14 @@ ipaddr.js@1.9.1
     integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==
     flags: runtime, required
 
-js-yaml@4.3.1
+js-yaml@4.3.2
   declared-license: MIT
   scope: direct-runtime; graph: runtime; optional-only: no
   installed-evidence: node_modules/js-yaml
   license-material: sha256:a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550
   lock-path: node_modules/js-yaml
-    resolved: https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.1.tgz
-    integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==
+    resolved: https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.2.tgz
+    integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==
     flags: runtime, required
 
 math-intrinsics@1.1.0
@@ -537,14 +537,14 @@ minimist@1.2.8
     integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==
     flags: runtime, required
 
-morgan@1.11.0
+morgan@1.12.1
   declared-license: MIT
   scope: direct-runtime; graph: runtime; optional-only: no
   installed-evidence: node_modules/morgan
   license-material: sha256:2f27c3aca40aec9c12d20ab0b7b35a3e01a8e6fe306e148b6bc89d2367fbad3d
   lock-path: node_modules/morgan
-    resolved: https://registry.npmjs.org/morgan/-/morgan-1.11.0.tgz
-    integrity: sha512-zSkVu3t18r39pw4ixfBKvfZi3y2UOqr7d4WYwcj3m8nXpEQK4rPO6GLzs/CExoRgmX3y9EjmmcXqv6jq0SK46g==
+    resolved: https://registry.npmjs.org/morgan/-/morgan-1.12.1.tgz
+    integrity: sha512-tljKC0ex20AjO58Ob/eZ53JloycbVswbVNCHx6V6VLGzqt/w8dIynVGL0G8qVjNKwiA7sYSogCrN6QtJ82IV+g==
     flags: runtime, required
 
 ms@2.0.0
@@ -1187,7 +1187,7 @@ SOFTWARE.
 ----- END MATERIAL sha256:2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1 -----
 
 ----- BEGIN MATERIAL sha256:2f27c3aca40aec9c12d20ab0b7b35a3e01a8e6fe306e148b6bc89d2367fbad3d -----
-Package: morgan@1.11.0; installed file(s): infra/vroom/runtime-package/node_modules/morgan/LICENSE
+Package: morgan@1.12.1; installed file(s): infra/vroom/runtime-package/node_modules/morgan/LICENSE
 
 (The MIT License)
 
@@ -1929,7 +1929,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ----- END MATERIAL sha256:98c970de440dcfc77471610aec2377c9d9b0db2b3be6d1add524a586e1d7f422 -----
 
 ----- BEGIN MATERIAL sha256:a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550 -----
-Package: js-yaml@4.3.1; installed file(s): infra/vroom/runtime-package/node_modules/js-yaml/LICENSE
+Package: js-yaml@4.3.2; installed file(s): infra/vroom/runtime-package/node_modules/js-yaml/LICENSE
 
 (The MIT License)
 

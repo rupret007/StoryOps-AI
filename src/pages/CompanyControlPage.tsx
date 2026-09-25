@@ -79,7 +79,7 @@ function RecoveryFrame({ children }: { children: ReactNode }) {
           <span className="brand__mark">
             <Sparkles size={17} aria-hidden="true" />
           </span>
-          StoryOps AI
+          WashOps
         </div>
         <Badge tone="warning">Owner recovery</Badge>
       </header>

@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  Copy,
   Bot,
   CalendarClock,
   CheckCircle2,
@@ -8,7 +9,6 @@ import {
   Droplets,
   Gauge,
   Inbox,
-  MessageSquareText,
   Route,
   ShieldAlert,
   Sparkles,
@@ -28,7 +28,17 @@ import {
   Progress,
 } from '@/components/ui/Primitives';
 import { deriveSandboxPilotRehearsal } from '@/core/pilot/rehearsal';
-import { deriveOwnerCommandCenter } from '@/core/pilot/ownerCommandCenter';
+import {
+  deriveOwnerCommandCenter,
+  explainNextOwnerAction,
+  formatOwnerPhoneGlanceShare,
+  ownerActionGlanceLine,
+  ownerActionSurface,
+  ownerTodayVisitEmptyCopy,
+  ownerTodayVisitGapNote,
+  type OwnerActionItem,
+  type OwnerCommandCenterProjection,
+} from '@/core/pilot/ownerCommandCenter';
 import { derivePilotReadiness, type PilotReadinessStatus } from '@/core/pilot/readiness';
 import type { DemoState } from '@/state/model';
 import {
@@ -350,6 +360,402 @@ const financialSourceLabels: Record<keyof LiveProfitabilityKpis['evidence']['sou
     providerEventIds: 'Processed provider events',
   };
 
+function ownerActionKindLabel(kind: OwnerActionItem['kind']): string {
+  return kind === 'follow_up' ? 'follow-up' : kind;
+}
+
+function ownerQueueCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function OwnerActionEntities({ entities }: { entities?: OwnerActionItem['entities'] }) {
+  if (!entities || entities.length === 0) return null;
+  return (
+    <ul className="owner-action-entities" aria-label="Affected records">
+      {entities.map((entity) => (
+        <li key={`${entity.href}:${entity.label}`}>
+          <Link className="owner-action-entity" to={entity.href}>
+            {entity.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OwnerActionKindIcon({ kind }: { kind: OwnerActionItem['kind'] }) {
+  if (kind === 'decision') return <CheckCircle2 size={14} />;
+  if (kind === 'follow_up') return <ArrowRight size={14} />;
+  return <ShieldAlert size={14} />;
+}
+
+function OwnerNextActionStrip({ action }: { action: OwnerActionItem }) {
+  return (
+    <section className="owner-next-action" aria-labelledby="owner-next-action-heading">
+      <div className="owner-next-action__header">
+        <div>
+          <p className="owner-next-action__eyebrow">Next safe action</p>
+          <h2 id="owner-next-action-heading">Do this next</h2>
+          <p className="owner-next-action__why">{explainNextOwnerAction(action)}</p>
+        </div>
+        <Badge
+          tone={action.priority === 'P0' ? 'danger' : action.kind === 'hold' ? 'warning' : 'info'}
+        >
+          {action.priority} {ownerActionKindLabel(action.kind)}
+        </Badge>
+      </div>
+      <h3 className="owner-next-action__title">{action.title}</h3>
+      <dl className="owner-next-action__facts">
+        <div>
+          <dt>What is true</dt>
+          <dd>{action.fact}</dd>
+        </div>
+        <div>
+          <dt>Do this</dt>
+          <dd className="owner-next-action__do">{action.recommendation}</dd>
+        </div>
+        {action.blockedBy && (
+          <div>
+            <dt>Still blocked by</dt>
+            <dd>{action.blockedBy}</dd>
+          </div>
+        )}
+      </dl>
+      <OwnerActionEntities entities={action.entities} />
+      <p className="owner-next-action__source">Source: {action.source}</p>
+    </section>
+  );
+}
+
+function OwnerCommandGlance({ projection }: { projection: OwnerCommandCenterProjection }) {
+  const { glance, nextAction } = projection;
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const countLabel = (value: number | null) => (value === null ? 'withheld' : String(value));
+  const countText = (value: number | null) => (value === null ? '—' : String(value));
+  const shareText = formatOwnerPhoneGlanceShare({
+    glance,
+    nextAction,
+    mode: projection.mode,
+  });
+
+  const copyShare = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+      } else {
+        throw new Error('clipboard unavailable');
+      }
+      setCopyState('copied');
+      window.setTimeout(() => setCopyState('idle'), 2000);
+    } catch {
+      setCopyState('failed');
+      window.setTimeout(() => setCopyState('idle'), 2500);
+    }
+  };
+
+  return (
+    <section
+      className={glance.countsKnown ? 'owner-glance' : 'owner-glance owner-glance--stale'}
+      aria-label="Phone glance"
+    >
+      <p className="owner-glance__eyebrow">Phone glance</p>
+      <h2>{glance.headline}</h2>
+      <p className="owner-glance__caveat">{glance.caveat}</p>
+      {!glance.countsKnown && (
+        <p className="owner-glance__alert" role="alert">
+          Fail closed. Do not treat this screen as current.
+        </p>
+      )}
+      <dl className="owner-glance__counts">
+        <div>
+          <dt>Holds</dt>
+          <dd aria-label={countLabel(glance.holds)}>{countText(glance.holds)}</dd>
+        </div>
+        <div>
+          <dt>Decisions</dt>
+          <dd aria-label={countLabel(glance.decisions)}>{countText(glance.decisions)}</dd>
+        </div>
+        <div>
+          <dt>Follow-ups</dt>
+          <dd aria-label={countLabel(glance.followUps)}>{countText(glance.followUps)}</dd>
+        </div>
+      </dl>
+      {nextAction && (
+        <>
+          <p className="owner-glance__next">{nextAction.title}</p>
+          <p className="owner-glance__line">{ownerActionGlanceLine(nextAction)}</p>
+          <p className="owner-glance__do">
+            <span>Do: </span>
+            {nextAction.recommendation}
+          </p>
+          <Link className="button button--dark button--md full-width" to={nextAction.href}>
+            Do this: Open {ownerActionSurface(nextAction.href)}{' '}
+            <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        </>
+      )}
+      <div className="owner-glance__share">
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          className="full-width"
+          icon={<Copy size={15} aria-hidden="true" />}
+          onClick={() => void copyShare()}
+        >
+          {copyState === 'copied'
+            ? 'Copied for SMS'
+            : copyState === 'failed'
+              ? 'Copy failed — select text'
+              : 'Copy for SMS'}
+        </Button>
+        <p className="owner-glance__share-hint" aria-live="polite">
+          {copyState === 'copied'
+            ? 'Paste into Messages. Counts only when WashOps is current.'
+            : 'One paste for the road: holds, next record, and where to open.'}
+        </p>
+      </div>
+      <p className="owner-glance__clock">{glance.clockLabel}</p>
+    </section>
+  );
+}
+
+const ownerQueueGroups = [
+  {
+    key: 'holds',
+    heading: 'Holds that stop work',
+    detail: 'These block completion, automation, or money until you clear them.',
+  },
+  {
+    key: 'decisions',
+    heading: 'Decisions',
+    detail: 'These wait on your yes or no. They do not stop field work by themselves.',
+  },
+  {
+    key: 'followUps',
+    heading: 'Follow-ups',
+    detail: 'Do these after holds. A follow-up is not proof that a provider already succeeded.',
+  },
+] as const;
+
+function OwnerActionGroup({
+  heading,
+  detail,
+  items,
+  nextActionId,
+  countsKnown,
+}: {
+  heading: string;
+  detail: string;
+  items: OwnerActionItem[];
+  nextActionId?: string;
+  countsKnown: boolean;
+}) {
+  return (
+    <section className="owner-queue-group" aria-label={heading}>
+      <h3 className="owner-queue-group__title">
+        {heading} <span>{countsKnown ? items.length : '—'}</span>
+      </h3>
+      <p className="owner-queue-group__detail">{detail}</p>
+      {items.length === 0 ? (
+        <p className="owner-queue-empty">
+          {countsKnown
+            ? 'None in this projection. This is not a clearance.'
+            : 'Count withheld. Zero would be a guess until the workspace is current.'}
+        </p>
+      ) : (
+        <ul className="owner-queue-list">
+          {items.map((item) => {
+            const isNext = item.id === nextActionId;
+            return (
+              <li
+                className={isNext ? 'owner-queue-row owner-queue-row--next' : 'owner-queue-row'}
+                key={item.id}
+              >
+                <span className="owner-queue-row__icon" aria-hidden="true">
+                  <OwnerActionKindIcon kind={item.kind} />
+                </span>
+                <div>
+                  <div className="owner-queue-row__headline">
+                    <Link to={item.href}>{item.title}</Link>
+                    {isNext && <Badge tone="danger">Doing this next</Badge>}
+                    <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>
+                      {item.priority}
+                    </Badge>
+                  </div>
+                  <p className="owner-queue-row__glance">{ownerActionGlanceLine(item)}</p>
+                  <p className="owner-queue-row__fact">{item.fact}</p>
+                  <p className="owner-queue-row__do">
+                    <span>Do: </span>
+                    {item.recommendation}
+                  </p>
+                  {item.blockedBy && (
+                    <p className="owner-queue-row__block">Blocked by {item.blockedBy}</p>
+                  )}
+                  <OwnerActionEntities entities={item.entities} />
+                  <small className="owner-queue-row__source">Source: {item.source}</small>
+                </div>
+                <Link className="owner-queue-row__go" to={item.href}>
+                  {ownerActionSurface(item.href)}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function OwnerActionQueue({
+  projection,
+  heading = 'What is waiting',
+}: {
+  projection: OwnerCommandCenterProjection;
+  heading?: string;
+}) {
+  const stoppingHolds = projection.glance.p0Holds ?? 0;
+  const otherHolds = projection.holds.length - stoppingHolds;
+  const stoppingLabel =
+    stoppingHolds === 1 ? '1 hold stops work' : `${stoppingHolds} holds stop work`;
+  const behindLabel =
+    otherHolds === 0
+      ? ''
+      : stoppingHolds === 0
+        ? otherHolds === 1
+          ? '1 hold still blocks a safe step'
+          : `${otherHolds} holds still block a safe step`
+        : ` · ${otherHolds} more ${otherHolds === 1 ? 'hold' : 'holds'}`;
+  const holdTally = !projection.glance.countsKnown
+    ? 'Counts withheld · not a live tally'
+    : stoppingHolds === 0
+      ? behindLabel || '0 holds stop work'
+      : `${stoppingLabel}${behindLabel}`;
+  return (
+    <Card className="section-card owner-command-center">
+      <div className="section-card__header">
+        <div>
+          <h2>{heading}</h2>
+          <p className="owner-queue-tally">
+            {projection.glance.countsKnown ? (
+              <>
+                {holdTally}
+                {' · '}
+                {ownerQueueCount(projection.decisions.length, 'decision')}
+                {' · '}
+                {ownerQueueCount(projection.followUps.length, 'follow-up')}
+              </>
+            ) : (
+              holdTally
+            )}
+          </p>
+          <p className="section-card__subtitle">
+            {projection.mode} workspace · sourced {projection.sourcedAt}
+          </p>
+        </div>
+        <Badge
+          tone={projection.glance.countsKnown && projection.holds.length === 0 ? 'info' : 'danger'}
+        >
+          {!projection.glance.countsKnown
+            ? 'Not current'
+            : projection.holds.length === 0
+              ? 'None in view'
+              : 'Holds first'}
+        </Badge>
+      </div>
+      {projection.nextAction && <OwnerNextActionStrip action={projection.nextAction} />}
+      {!projection.glance.countsKnown && (
+        <p className="owner-queue-stale">
+          These rows are the last projection. They are not a live tally.
+        </p>
+      )}
+      {ownerQueueGroups.map((group) => (
+        <OwnerActionGroup
+          key={group.key}
+          heading={group.heading}
+          detail={group.detail}
+          items={projection[group.key]}
+          nextActionId={projection.nextAction?.id}
+          countsKnown={projection.glance.countsKnown}
+        />
+      ))}
+      {projection.actions.length === 0 && projection.glance.countsKnown && (
+        <div className="incident-empty">
+          <ShieldAlert size={22} />
+          <div>
+            <h3>No role-visible action is due</h3>
+            <p>This does not claim that provider-side or hidden records are clear.</p>
+          </div>
+        </div>
+      )}
+      {projection.today.evidenceFacts.length > 0 && (
+        <details className="briefing-unknowns">
+          <summary>Current visit evidence ({projection.today.evidenceFacts.length})</summary>
+          <ul>
+            {projection.today.evidenceFacts.map((fact) => (
+              <li key={fact}>{fact}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <details className="briefing-unknowns">
+        <summary>Known unknowns ({projection.unknowns.length})</summary>
+        <ul>
+          {projection.unknowns.map((unknown) => (
+            <li key={unknown}>{unknown}</li>
+          ))}
+        </ul>
+      </details>
+    </Card>
+  );
+}
+
+const leadStages = ['new', 'qualified', 'estimated', 'quoted', 'booked'] as const;
+
+function LeadStageCounts({ leads }: { leads: DemoState['leads'] }) {
+  return (
+    <Card className="section-card">
+      <div className="section-card__header">
+        <div>
+          <h2>Lead stages</h2>
+          <p className="section-card__subtitle">Counts only. No guessed opportunity dollars.</p>
+        </div>
+        <Link className="link-button" to="/pipeline">
+          Open pipeline <ArrowRight size={12} />
+        </Link>
+      </div>
+      {leads.length === 0 ? (
+        <div className="incident-empty">
+          <Inbox size={22} />
+          <div>
+            <h3>No leads in this projection</h3>
+            <p>This is not an empty pipeline. Hidden or unscoped leads are not counted here.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="pipeline-pulse">
+          {leadStages.map((stage) => {
+            const count = leads.filter((lead) => lead.stage === stage).length;
+            return (
+              <div className="pulse-row" key={stage}>
+                <span>{stage}</span>
+                <Progress
+                  value={count}
+                  max={Math.max(1, leads.length)}
+                  label={`${stage} leads`}
+                  tone="green"
+                />
+                <strong>—</strong>
+                <small>{count}</small>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function LiveFinancialEvidenceCard({
   kpis,
   timeZone,
@@ -475,17 +881,20 @@ export function DashboardPage() {
     (sum, invoice) => sum + Number(invoice.balance.replaceAll(',', '')),
     0,
   );
+  const pastDueInvoices = state.invoices.filter((invoice) => invoice.status === 'past_due').length;
 
   if (state.dataMode === 'supabase') return <LiveDashboardPage />;
 
   const rehearsal = deriveSandboxPilotRehearsal(state);
+  const ownerProjection = deriveOwnerCommandCenter(state);
 
   return (
     <div className="page">
+      <OwnerCommandGlance projection={ownerProjection} />
       <PageHeader
-        eyebrow="Command center"
+        eyebrow="WashOps"
         title={`Good morning, ${ownerFirstName}.`}
-        description="Synthetic sandbox workspace: no live provider, payment, route, weather, or dispatch truth is shown. Two approval fixtures need review."
+        description="Sandbox records only. Do the next safe action before anything else on this page. Nothing here is live payment, route, weather, or dispatch evidence."
         actions={
           <>
             <Link className="button button--secondary button--md" to="/dispatch">
@@ -504,32 +913,34 @@ export function DashboardPage() {
         }
       />
 
-      <section className="metrics-grid" aria-label="Business metrics">
+      <OwnerActionQueue projection={ownerProjection} />
+
+      <section className="metrics-grid" aria-label="Sandbox record counts">
         <Metric
-          label="Booked this week"
-          value="$4,862"
-          delta="+18% vs. prior week"
-          icon={<TrendingUp size={18} />}
+          label="New leads"
+          value={String(newLeads)}
+          delta="sandbox records · not a pipeline dollar value"
+          icon={<Inbox size={18} />}
         />
         <Metric
-          label="Qualified pipeline"
-          value="$7,348"
-          delta="14 active opportunities"
-          icon={<UsersRound size={18} />}
+          label="Pending approvals"
+          value={String(pendingApprovals)}
+          delta="exact payloads waiting on you"
+          icon={<ShieldAlert size={18} />}
           tone="blue"
         />
         <Metric
-          label="Open receivables"
+          label="Open invoice balances"
           value={money.format(outstanding)}
-          delta="1 invoice past due"
+          delta={`${pastDueInvoices} past due in this sandbox · not a ledger`}
           icon={<CircleDollarSign size={18} />}
           tone="orange"
         />
         <Metric
-          label="Gross margin"
-          value="58.7%"
-          delta="+2.4 points this month"
-          icon={<Gauge size={18} />}
+          label="Visits"
+          value={String(state.visits.length)}
+          delta="sandbox schedule · not live capacity"
+          icon={<CalendarClock size={18} />}
           tone="plum"
         />
       </section>
@@ -596,142 +1007,59 @@ export function DashboardPage() {
             )}
           </Card>
 
-          <Card className="briefing-card">
-            <div className="briefing-card__header">
-              <div>
-                <h2>Owner briefing</h2>
-                <p className="briefing-card__meta">
-                  Generated 7:45 AM · 23 synthetic records · no external reads or writes
-                </p>
-              </div>
-              <Badge tone="accent" dot>
-                Current
-              </Badge>
-            </div>
-            <ul className="briefing-list">
-              <li className="briefing-item">
-                <span className="briefing-item__icon">
-                  <Route size={14} />
-                </span>
-                <div>
-                  <p className="briefing-item__title">Demo route packet prepared</p>
-                  <p className="briefing-item__detail">
-                    Synthetic timing and weather scenario only. Verify live route, weather, and
-                    equipment evidence before leaving.
-                  </p>
-                </div>
-                <Badge tone="neutral">Fixture</Badge>
-              </li>
-              <li className="briefing-item">
-                <span className="briefing-item__icon">
-                  <ShieldAlert size={14} />
-                </span>
-                <div>
-                  <p className="briefing-item__title">
-                    {pendingApprovals} exact-payload approvals need you
-                  </p>
-                  <p className="briefing-item__detail">
-                    A negative-review response and a 34-recipient maintenance reminder are paused.
-                  </p>
-                </div>
-                <Badge tone="warning">Review</Badge>
-              </li>
-              <li className="briefing-item">
-                <span className="briefing-item__icon">
-                  <MessageSquareText size={14} />
-                </span>
-                <div>
-                  <p className="briefing-item__title">
-                    {newLeads} new leads are waiting on qualification
-                  </p>
-                  <p className="briefing-item__detail">
-                    One has full consent and scope. One needs an address and property photos.
-                  </p>
-                </div>
-                <Badge tone="info">Inbox</Badge>
-              </li>
-            </ul>
-          </Card>
-
           <Card className="section-card">
             <div className="section-card__header">
               <div>
-                <h2>Today’s work</h2>
+                <h2>Sandbox visits</h2>
                 <p className="section-card__subtitle">
-                  Synthetic capacity, route, equipment, and weather scenario
+                  Records in this workspace. Status here is not live dispatch evidence.
                 </p>
               </div>
               <Link className="link-button" to="/dispatch">
                 Open dispatch <ArrowRight size={12} style={{ verticalAlign: 'middle' }} />
               </Link>
             </div>
-            <ul className="schedule-list">
-              <li className="schedule-row">
-                <span className="schedule-row__time">10:30</span>
-                <span className="schedule-row__line" aria-hidden="true" />
+            {state.visits.length > 0 ? (
+              <ul className="schedule-list">
+                {state.visits.map((visit) => (
+                  <li className="schedule-row" key={visit.id}>
+                    <span className="schedule-row__time">{visit.startsAt}</span>
+                    <span className="schedule-row__line" aria-hidden="true" />
+                    <div>
+                      <p className="schedule-row__title">
+                        {visit.customerName} · {visit.service}
+                      </p>
+                      <p className="schedule-row__detail">
+                        {visit.date} · {visit.jobNumber} · {visit.address}
+                      </p>
+                    </div>
+                    <Badge
+                      tone={
+                        visit.status === 'weather_hold' || visit.status === 'paused'
+                          ? 'danger'
+                          : visit.status === 'complete'
+                            ? 'positive'
+                            : 'neutral'
+                      }
+                      dot
+                    >
+                      {visit.status.replaceAll('_', ' ')}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="incident-empty">
+                <CalendarClock size={22} />
                 <div>
-                  <p className="schedule-row__title">Riley Brooks · Whole-property clean</p>
-                  <p className="schedule-row__detail">Southlake · 4 hr · JOB-1032 · owner crew</p>
+                  <h3>No sandbox visits are projected</h3>
+                  <p>This list comes from local visit fixtures, not a live calendar.</p>
                 </div>
-                <Badge tone="neutral">Demo</Badge>
-              </li>
-              <li className="schedule-row">
-                <span className="schedule-row__time">3:00</span>
-                <span className="schedule-row__line schedule-row__line--blue" aria-hidden="true" />
-                <div>
-                  <p className="schedule-row__title">Quote follow-up · Sam Rivera</p>
-                  <p className="schedule-row__detail">
-                    Sandbox SMS receipt · synthetic consent fixture
-                  </p>
-                </div>
-                <Badge tone="info">Scheduled</Badge>
-              </li>
-              <li className="schedule-row">
-                <span className="schedule-row__time">4:30</span>
-                <span
-                  className="schedule-row__line schedule-row__line--orange"
-                  aria-hidden="true"
-                />
-                <div>
-                  <p className="schedule-row__title">Weekly equipment inspection</p>
-                  <p className="schedule-row__detail">
-                    Pressure washer, hoses, reels, PPE · evidence required
-                  </p>
-                </div>
-                <Badge tone="neutral">Routine</Badge>
-              </li>
-            </ul>
+              </div>
+            )}
           </Card>
 
-          <Card className="section-card">
-            <div className="section-card__header">
-              <div>
-                <h2>Pipeline pulse</h2>
-                <p className="section-card__subtitle">
-                  Verified opportunity value by current stage
-                </p>
-              </div>
-              <Link className="link-button" to="/pipeline">
-                View pipeline <ArrowRight size={12} style={{ verticalAlign: 'middle' }} />
-              </Link>
-            </div>
-            <div className="pipeline-pulse">
-              {[
-                { label: 'New', count: 2, amount: '$0', width: 16 },
-                { label: 'Qualified', count: 3, amount: '$1,746', width: 37 },
-                { label: 'Estimated', count: 4, amount: '$2,638', width: 55 },
-                { label: 'Quoted', count: 3, amount: '$1,780', width: 48 },
-                { label: 'Booked', count: 2, amount: '$1,184', width: 31 },
-              ].map((stage) => (
-                <div className="pulse-row" key={stage.label}>
-                  <span>{stage.label}</span>
-                  <Progress value={stage.width} label={`${stage.label} pipeline`} tone="green" />
-                  <strong>{stage.amount}</strong>
-                  <small>{stage.count}</small>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <LeadStageCounts leads={state.leads} />
         </div>
 
         <aside className="dashboard-stack">
@@ -760,36 +1088,14 @@ export function DashboardPage() {
             </div>
           </Card>
 
-          <Card className="section-card">
-            <div className="section-card__header">
-              <div>
-                <h2>Capacity</h2>
-                <p className="section-card__subtitle">Owner crew · this week</p>
-              </div>
-              <Badge tone="positive">Healthy</Badge>
-            </div>
-            <div className="capacity-meter">
-              <div className="capacity-meter__labels">
-                <span>19.5 hr booked</span>
-                <strong>72%</strong>
-              </div>
-              <Progress value={72} label="Weekly capacity booked" />
-            </div>
-            <div className="capacity-days">
-              {[
-                ['Tue', 86],
-                ['Wed', 64],
-                ['Thu', 42],
-                ['Fri', 78],
-                ['Sat', 24],
-              ].map(([day, value]) => (
-                <div key={day}>
-                  <span>{day}</span>
-                  <div className="capacity-day__bar">
-                    <i style={{ height: `${String(value)}%` }} />
-                  </div>
-                </div>
-              ))}
+          <Card className="projection-warning">
+            <ShieldAlert size={18} />
+            <div>
+              <strong>No invented profit or capacity</strong>
+              <p>
+                This sandbox does not show booked dollars, margin, or crew utilization. Those
+                numbers are not in the workspace records. Use the next safe action above.
+              </p>
             </div>
           </Card>
 
@@ -822,17 +1128,6 @@ export function DashboardPage() {
               Inspect traces
             </Link>
           </Card>
-
-          <Card className="profit-card">
-            <div>
-              <span className="profit-card__icon">
-                <Sparkles size={16} />
-              </span>
-              <p>Projected July operating profit</p>
-              <strong>$8,420</strong>
-              <small>after labor, materials, and provider costs</small>
-            </div>
-          </Card>
         </aside>
       </div>
     </div>
@@ -843,18 +1138,34 @@ function LiveDashboardPage() {
   const { state, actions } = useStoryOps();
   const pendingApprovals = state.approvals.filter((item) => item.status === 'pending').length;
   const newLeads = state.leads.filter((lead) => lead.stage === 'new').length;
-  const stageOrder = ['new', 'qualified', 'estimated', 'quoted', 'booked'] as const;
   const ownerProjection = deriveOwnerCommandCenter(state);
   const profitabilityKpis = state.live?.profitabilityKpis;
   const visibleDashboardVisits =
     state.role === 'owner' ? ownerProjection.today.visits : state.visits;
 
+  const todayGap =
+    state.role === 'owner'
+      ? ownerTodayVisitGapNote(ownerProjection.today, ownerProjection.freshness)
+      : undefined;
+  const todayEmpty =
+    state.role === 'owner'
+      ? ownerTodayVisitEmptyCopy(ownerProjection.today, ownerProjection.freshness)
+      : {
+          heading: 'No visits in this projection',
+          detail: 'Technicians see assigned visits only; other roles receive company scope.',
+        };
+
   return (
     <div className="page">
+      {state.role === 'owner' && <OwnerCommandGlance projection={ownerProjection} />}
       <PageHeader
-        eyebrow="Authenticated command center"
-        title={state.live?.companyName ?? 'StoryOps workspace'}
-        description={`Server-derived ${state.role} membership · workspace refreshed ${state.live?.serverTime ?? 'unknown time'}.`}
+        eyebrow="Authenticated WashOps"
+        title={state.live?.companyName ?? 'WashOps workspace'}
+        description={
+          state.role === 'owner'
+            ? `Do the next safe action first. Server-derived owner workspace · refreshed ${state.live?.serverTime ?? 'unknown time'}.`
+            : `Server-derived ${state.role} membership · workspace refreshed ${state.live?.serverTime ?? 'unknown time'}.`
+        }
         actions={
           <>
             <Link className="button button--secondary button--md" to="/dispatch">
@@ -866,6 +1177,8 @@ function LiveDashboardPage() {
           </>
         }
       />
+
+      {state.role === 'owner' && <OwnerActionQueue projection={ownerProjection} />}
 
       {profitabilityKpis ? (
         <section className="metrics-grid" aria-label="Server-authoritative financial metrics">
@@ -944,7 +1257,9 @@ function LiveDashboardPage() {
                 </h2>
                 <p className="section-card__subtitle">
                   {state.role === 'owner'
-                    ? `${ownerProjection.today.localDate ?? 'Date unavailable'} · ${ownerProjection.today.timeZone}`
+                    ? ownerProjection.freshness === 'untimed'
+                      ? `Today is unknown · ${ownerProjection.today.timeZone}`
+                      : `${ownerProjection.today.localDate ?? 'Date unavailable'} · ${ownerProjection.today.timeZone}`
                     : 'No availability, route, or weather state is inferred'}
                 </p>
               </div>
@@ -976,50 +1291,15 @@ function LiveDashboardPage() {
               <div className="incident-empty">
                 <CalendarClock size={22} />
                 <div>
-                  <h3>
-                    {state.role === 'owner'
-                      ? 'No company-local visits today'
-                      : 'No visits in this projection'}
-                  </h3>
-                  <p>
-                    {state.role === 'owner'
-                      ? 'This uses exact server visit starts in the company timezone; it does not claim future capacity.'
-                      : 'Technicians see assigned visits only; other roles receive company scope.'}
-                  </p>
+                  <h3>{todayEmpty.heading}</h3>
+                  <p>{todayEmpty.detail}</p>
                 </div>
               </div>
             )}
+            {todayGap && <p className="owner-queue-stale">{todayGap}</p>}
           </Card>
 
-          <Card className="section-card">
-            <div className="section-card__header">
-              <div>
-                <h2>Lead stages</h2>
-                <p className="section-card__subtitle">Counts only; no guessed opportunity value</p>
-              </div>
-              <Link className="link-button" to="/pipeline">
-                Open pipeline <ArrowRight size={12} />
-              </Link>
-            </div>
-            <div className="pipeline-pulse">
-              {stageOrder.map((stage) => {
-                const count = state.leads.filter((lead) => lead.stage === stage).length;
-                return (
-                  <div className="pulse-row" key={stage}>
-                    <span>{stage.replaceAll('_', ' ')}</span>
-                    <Progress
-                      value={count}
-                      max={Math.max(1, state.leads.length)}
-                      label={`${stage} leads`}
-                      tone="green"
-                    />
-                    <strong>—</strong>
-                    <small>{count}</small>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+          <LeadStageCounts leads={state.leads} />
         </div>
 
         <aside className="dashboard-stack">
@@ -1029,91 +1309,13 @@ function LiveDashboardPage() {
               timeZone={state.live?.companyTimezone ?? 'UTC'}
             />
           )}
-          {state.role === 'owner' && (
-            <Card className="section-card">
-              <div className="section-card__header">
-                <div>
-                  <h2>Owner action queue</h2>
-                  <p className="section-card__subtitle">
-                    {ownerProjection.mode} mode · sourced {ownerProjection.sourcedAt}
-                  </p>
-                </div>
-                <Badge tone="info">{ownerProjection.actions.length} actions</Badge>
-              </div>
-              {ownerProjection.actions.length > 0 ? (
-                <ul className="briefing-list">
-                  {ownerProjection.actions.map((item) => (
-                    <li className="briefing-item" key={item.id}>
-                      <span className="briefing-item__icon">
-                        <ShieldAlert size={14} />
-                      </span>
-                      <Link className="briefing-item__link" to={item.href}>
-                        <p className="briefing-item__title">{item.title}</p>
-                        <p className="briefing-item__detail">
-                          <strong>Fact:</strong> {item.fact}
-                        </p>
-                        <p className="briefing-item__detail">
-                          <strong>Next safe action:</strong> {item.recommendation}
-                        </p>
-                        {item.blockedBy && (
-                          <p className="briefing-item__detail">
-                            <strong>Blocked by:</strong> {item.blockedBy}
-                          </p>
-                        )}
-                        <small className="briefing-item__source">Source: {item.source}</small>
-                      </Link>
-                      <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>
-                        {item.priority}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="incident-empty">
-                  <CheckCircle2 size={22} />
-                  <div>
-                    <h3>No role-visible action is due</h3>
-                    <p>This does not claim that provider-side or hidden records are clear.</p>
-                  </div>
-                </div>
-              )}
-              {ownerProjection.actions[0] && (
-                <Link
-                  className="button button--dark button--sm full-width"
-                  to={ownerProjection.actions[0].href}
-                >
-                  Open highest-priority action <ArrowRight size={13} />
-                </Link>
-              )}
-              {ownerProjection.today.evidenceFacts.length > 0 && (
-                <details className="briefing-unknowns">
-                  <summary>
-                    Current visit evidence ({ownerProjection.today.evidenceFacts.length})
-                  </summary>
-                  <ul>
-                    {ownerProjection.today.evidenceFacts.map((fact) => (
-                      <li key={fact}>{fact}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              <details className="briefing-unknowns">
-                <summary>Known unknowns ({ownerProjection.unknowns.length})</summary>
-                <ul>
-                  {ownerProjection.unknowns.map((unknown) => (
-                    <li key={unknown}>{unknown}</li>
-                  ))}
-                </ul>
-              </details>
-            </Card>
-          )}
           {!profitabilityKpis && (
             <Card className="projection-warning">
               <ShieldAlert size={18} />
               <div>
                 <strong>No company financial projection for this role</strong>
                 <p>
-                  StoryOps will not derive profitability, receivables, or payment state from
+                  WashOps will not derive profitability, receivables, or payment state from
                   assignment-visible records. Route, weather, capacity, and AI activity also require
                   their own verified read models.
                 </p>

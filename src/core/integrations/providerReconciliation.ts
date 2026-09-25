@@ -222,7 +222,7 @@ function failureCode(object: JsonObject): string | undefined {
 }
 
 /**
- * Parses only identifiers, statuses, integer provider amounts, and StoryOps
+ * Parses only identifiers, statuses, integer provider amounts, and WashOps
  * metadata. The returned receipt intentionally excludes customer, card,
  * address, body, email, and phone fields before durable storage.
  */
@@ -280,7 +280,7 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
   const safeFailureCode = failureCode(object);
   if (currency && currency !== 'usd') {
     throw new ProviderReconciliationError(
-      'StoryOps V1 accepts only USD Stripe reconciliation.',
+      'WashOps V1 accepts only USD Stripe reconciliation.',
       'UNSUPPORTED_CURRENCY',
     );
   }
@@ -313,13 +313,13 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
 
   if (action !== 'ignore' && objectKind === 'checkout' && !quoteId) {
     throw new ProviderReconciliationError(
-      'StoryOps checkout event omitted quote_id metadata.',
+      'WashOps checkout event omitted quote_id metadata.',
       'MISSING_REFERENCE',
     );
   }
   if (action !== 'ignore' && objectKind === 'payment_intent' && !quoteId) {
     throw new ProviderReconciliationError(
-      'StoryOps payment intent omitted quote_id metadata.',
+      'WashOps payment intent omitted quote_id metadata.',
       'MISSING_REFERENCE',
     );
   }
@@ -329,7 +329,7 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
     (!checkoutPurpose || checkoutAttempt === undefined)
   ) {
     throw new ProviderReconciliationError(
-      'StoryOps payment event omitted valid checkout_purpose or checkout_attempt metadata.',
+      'WashOps payment event omitted valid checkout_purpose or checkout_attempt metadata.',
       rawCheckoutPurpose && metadata.checkout_attempt !== undefined
         ? 'INVALID_REFERENCE'
         : 'MISSING_REFERENCE',
@@ -342,7 +342,7 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
     (!invoiceId || invoiceVersion === undefined)
   ) {
     throw new ProviderReconciliationError(
-      'StoryOps invoice-balance event omitted invoice_id or invoice_version metadata.',
+      'WashOps invoice-balance event omitted invoice_id or invoice_version metadata.',
       'MISSING_REFERENCE',
     );
   }
@@ -353,19 +353,19 @@ export function parseStripeReconciliation(payload: unknown): StripeReconciliatio
     (invoiceId !== undefined || invoiceVersion !== undefined)
   ) {
     throw new ProviderReconciliationError(
-      'StoryOps deposit event contained invoice-balance metadata.',
+      'WashOps deposit event contained invoice-balance metadata.',
       'INVALID_REFERENCE',
     );
   }
   if (action !== 'ignore' && objectKind === 'invoice' && !jobId) {
     throw new ProviderReconciliationError(
-      'StoryOps invoice event omitted job_id metadata.',
+      'WashOps invoice event omitted job_id metadata.',
       'MISSING_REFERENCE',
     );
   }
   if (action !== 'ignore' && objectKind === 'refund' && !approvalId) {
     throw new ProviderReconciliationError(
-      'StoryOps refund event omitted approval_id metadata.',
+      'WashOps refund event omitted approval_id metadata.',
       'MISSING_REFERENCE',
     );
   }

@@ -80,7 +80,7 @@ const completeProviderCredentials = {
   GOOGLE_CALENDAR_ID: 'calendar@example.com',
   GOOGLE_CALENDAR_ACCESS_TOKEN: 'google-redacted',
   GOOGLE_MAPS_API_KEY: 'maps-redacted',
-  NWS_USER_AGENT: 'StoryOps tests operations@example.com',
+  NWS_USER_AGENT: 'WashOps tests operations@example.com',
   VROOM_URL: 'http://127.0.0.1:3000',
   STORAGE_BUCKET_JOB_PHOTOS: 'job-media',
 };
@@ -498,7 +498,7 @@ describe('live server integration boundaries', () => {
 
     const request = {
       calendarId: 'calendar@example.com',
-      title: 'StoryOps job',
+      title: 'WashOps job',
       window,
       timeZone: 'America/Chicago',
       jobId: '10000000-0000-4000-8000-000000000501',

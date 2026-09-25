@@ -18,9 +18,7 @@ const serviceLabels: Record<SandboxServiceCode, string> = {
 
 export async function completeFirstRunSetup(page: Page, options: SetupOptions = {}): Promise<void> {
   await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: 'Tell StoryOps who it works for.' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tell WashOps who it works for.' })).toBeVisible();
 
   if (options.businessName) {
     await page.getByLabel('Business name').fill(options.businessName);
@@ -103,7 +101,7 @@ export async function publishSandboxCompanyConfiguration(page: Page): Promise<vo
 
 async function openMobileNavigation(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Open navigation menu' }).click();
-  const menu = page.getByRole('dialog', { name: 'StoryOps workspace' });
+  const menu = page.getByRole('dialog', { name: 'WashOps workspace' });
   await expect(menu).toBeVisible();
   return menu;
 }

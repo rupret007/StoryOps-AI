@@ -584,7 +584,7 @@ begin
   )
   values (
     customer_id_value, p_company_id, 'business',
-    'StoryOps controlled rehearsal', 'inactive',
+    'WashOps controlled rehearsal', 'inactive',
     array['storyops-controlled-rehearsal'],
     'system_controlled_rehearsal', true,
     'Non-customer, non-outbound field-media authorization canary fixture.'
@@ -595,7 +595,7 @@ begin
   )
   values (
     property_id_value, p_company_id, customer_id_value,
-    'StoryOps controlled rehearsal property', 'other',
+    'WashOps controlled rehearsal property', 'other',
     jsonb_build_object(
       'line1', 'Internal controlled rehearsal only',
       'city', 'Internal',
@@ -657,7 +657,7 @@ begin
   )
   values (
     crew_id_value, p_company_id,
-    'StoryOps controlled rehearsal ' || left(run_id_value::text, 8),
+    'WashOps controlled rehearsal ' || left(run_id_value::text, 8),
     false, p_field_worker_user_id, '{}', '00000'
   );
   insert into public.crew_members(

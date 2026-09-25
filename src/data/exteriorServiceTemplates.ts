@@ -598,7 +598,7 @@ export const exteriorServicesIndustryPack = {
   name: 'Exterior services',
   version: EXTERIOR_STARTER_PACK_VERSION,
   description:
-    'Pressure washing, soft washing, gutter/downspout cleaning, roof washing, and window cleaning on the shared StoryOps field-service kernel.',
+    'Pressure washing, soft washing, gutter/downspout cleaning, roof washing, and window cleaning on the shared WashOps field-service kernel.',
   serviceCodes: EXTERIOR_SERVICE_CODES,
   serviceTemplates: exteriorServiceTemplates,
   supportedKernelCapabilities: [

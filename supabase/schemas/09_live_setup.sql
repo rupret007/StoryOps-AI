@@ -1,5 +1,5 @@
 -- Authenticated single-company onboarding. A signed-in user with no existing
--- StoryOps scope may create exactly one setup-mode company. The wizard installs
+-- WashOps scope may create exactly one setup-mode company. The wizard installs
 -- all five supported service templates inactive, records the selected initial
 -- scope, and creates review-required drafts and disabled integrations; it never
 -- publishes prices, terms, retention policy, providers, or launch authorization.

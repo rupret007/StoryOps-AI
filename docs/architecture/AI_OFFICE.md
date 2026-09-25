@@ -1,4 +1,4 @@
-# StoryOps AI Office
+# WashOps Office
 
 **Status:** V1 production boundary  
 **Owner:** Company owner (business policy), principal engineer (technical policy)  
@@ -82,7 +82,7 @@ report `schedulerConfigured: false`.
 
 OpenAI’s Agents SDK describes an agent as a focused unit containing instructions, tools,
 guardrails, handoffs, and structured output. It also distinguishes local application context from
-model-visible conversation context. StoryOps uses that separation and keeps authenticated runtime
+model-visible conversation context. WashOps uses that separation and keeps authenticated runtime
 state outside model input unless it was loaded from an authoritative record. See the official
 [agent definitions guide](https://developers.openai.com/api/docs/guides/agents/define-agents).
 
@@ -158,7 +158,7 @@ supply quantity, attributes, price-book rules, tax status, discount amount, or t
 
 ## Prompt-injection defense
 
-StoryOps assumes every external text field can be hostile. Defense is layered:
+WashOps assumes every external text field can be hostile. Defense is layered:
 
 - external content is structurally separated and explicitly marked as inert data;
 - common injection signals are detected before model execution;
@@ -247,7 +247,7 @@ rejection, policy decisions, approval creation, and tool start/completion/failur
 persists spans to `ai_traces`; database mutation triggers persist the durable audit trail.
 
 The OpenAI Agents SDK adapter keeps SDK tracing enabled but sets
-`traceIncludeSensitiveData: false`. StoryOps traces carry redacted attributes and no credentials.
+`traceIncludeSensitiveData: false`. WashOps traces carry redacted attributes and no credentials.
 OpenAI documents that SDK traces cover model calls, tool calls, handoffs, guardrails, and custom
 spans in [Integrations and observability](https://developers.openai.com/api/docs/guides/agents/integrations-observability#tracing).
 

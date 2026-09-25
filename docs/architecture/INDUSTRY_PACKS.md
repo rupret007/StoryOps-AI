@@ -1,18 +1,18 @@
-# StoryOps service-industry packs
+# WashOps service-industry packs
 
 **Status:** V1.1 exterior contract plus draft residential-foundation candidate  
 **Last reviewed:** 2026-08-24  
 **Registered packs:** `exterior-services` / `storyops-exterior-dfw-v1.1.0` and
 `residential-cleaning` / `storyops-residential-cleaning-v1.0.0`
 
-StoryOps is a service-business operating kernel with versioned industry packs.
+WashOps is a service-business operating kernel with versioned industry packs.
 The first pack is deliberately complete for pressure washing, soft washing,
 gutter/downspout cleaning, roof washing, and window cleaning. The core is not
 named or coupled to an exterior-cleaning company.
 
 ## Stable kernel versus industry pack
 
-| Stable StoryOps kernel                                          | Versioned industry pack                                                      |
+| Stable WashOps kernel                                           | Versioned industry pack                                                      |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | Auth, company membership, RBAC, RLS, audit                      | Service codes, names, categories, and aliases                                |
 | Leads, customers, properties, communications, consent           | Required scope inputs and measurement units                                  |

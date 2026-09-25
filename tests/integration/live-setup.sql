@@ -589,4 +589,4 @@ $$;
 
 rollback;
 
-\echo 'StoryOps authenticated live setup contract passed.'
+\echo 'WashOps authenticated live setup contract passed.'

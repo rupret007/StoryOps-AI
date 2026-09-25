@@ -118,7 +118,7 @@ export function deriveShowcaseManifest(state: DemoState): DemoShowcaseState {
         : 'Publish sandbox configuration and setup completion before the guided run.',
       detail:
         'Sandbox markers are visible on all cards. This fixture intentionally avoids live provider, payment, and delivery truth.',
-      actions: ['Open command center', 'Open owner briefing'],
+      actions: ['Open WashOps', 'Open owner briefing'],
       roleHref: '/',
       requiresApproval: false,
       evidenceSources: ['setup', 'pricing', 'traces'],

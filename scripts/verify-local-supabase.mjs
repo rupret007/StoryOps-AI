@@ -341,7 +341,7 @@ async function main() {
   } finally {
     await stopEdgeFunctions(edge.child, edge.detached, edge.environmentDirectory);
   }
-  process.stdout.write('\nStoryOps local Supabase release contract passed.\n');
+  process.stdout.write('\nWashOps local Supabase release contract passed.\n');
 }
 
 main().catch((error) => {

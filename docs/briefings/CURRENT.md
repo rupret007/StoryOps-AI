@@ -1,4 +1,4 @@
-# StoryOps AI owner briefing — current
+# WashOps owner briefing — current
 
 **Generated:** 2026-07-30  
 **Source window:** frozen V1.1 implementation
@@ -11,7 +11,7 @@ commit is separate
 
 - Real provider activation, customer contact, and money movement remain
   **NO-GO**.
-- StoryOps AI V1.1 is an exterior-cleaning operating slice plus a reusable
+- WashOps V1.1 is an exterior-cleaning operating slice plus a reusable
   service-business kernel. It is ready for bounded synthetic rehearsal, not a
   claim of universal industry support or production authorization.
 - The frozen local matrix passed: static/source gates including Edge 128/128,
@@ -28,7 +28,7 @@ commit is separate
   privacy/retention, consent/communications, and municipal decisions remain
   unsigned. Official-source links were reviewed; their applicability was not
   verified.
-- The StoryOps AI root-project distribution license is undecided. Preserve all
+- The WashOps root-project distribution license is undecided. Preserve all
   upstream notices and do not distribute until the decision is recorded.
 - No push, deployment, purchase, provider activation, customer contact, or
   secret exposure is authorized.
@@ -160,7 +160,7 @@ provider is connected.
 5. Retain the required Texas/DFW professional reviewers and close legal, tax,
    insurance, environmental, privacy/retention, communications, wastewater/
    backflow/permit, and safety/SDS/SOP decisions.
-6. Select and record the StoryOps AI root-project distribution license.
+6. Select and record the WashOps root-project distribution license.
 7. Complete production TLS/secrets/network restrictions, alerting/on-call,
    capacity/rate/spend controls, rollback proof, encrypted off-site recovery
    with accepted RPO/RTO, and immutable-base/container CVE plus SBOM/provenance

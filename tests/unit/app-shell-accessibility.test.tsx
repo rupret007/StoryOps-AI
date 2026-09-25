@@ -17,7 +17,7 @@ const mocked = vi.hoisted(() => ({
 
 vi.mock('@/state/StoryOpsProvider', () => ({
   useStoryOps: () => {
-    if (!mocked.value) throw new Error('Test StoryOps context was not initialized.');
+    if (!mocked.value) throw new Error('Test WashOps context was not initialized.');
     return mocked.value;
   },
 }));
@@ -83,10 +83,10 @@ describe('AppShell keyboard and mobile accessibility', () => {
     menuTrigger.focus();
     fireEvent.click(menuTrigger);
 
-    const menu = screen.getByRole('dialog', { name: 'StoryOps workspace' });
+    const menu = screen.getByRole('dialog', { name: 'WashOps workspace' });
     const menuQueries = within(menu);
     for (const destination of [
-      'Command center',
+      'WashOps',
       'Pipeline',
       'Customers',
       'Dispatch',
@@ -103,7 +103,7 @@ describe('AppShell keyboard and mobile accessibility', () => {
     ]) {
       expect(menuQueries.getByRole('link', { name: new RegExp(destination, 'u') })).toBeVisible();
     }
-    expect(menuQueries.getByRole('button', { name: 'Sign out of StoryOps' })).toBeVisible();
+    expect(menuQueries.getByRole('button', { name: 'Sign out of WashOps' })).toBeVisible();
     expect(screen.getByLabelText('Server verified · 0 queued · 0 failed')).toBeVisible();
     expect(screen.queryByText('Synced', { exact: true })).not.toBeInTheDocument();
 
@@ -116,12 +116,12 @@ describe('AppShell keyboard and mobile accessibility', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(menuTrigger).toHaveFocus());
-    expect(screen.queryByRole('dialog', { name: 'StoryOps workspace' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'WashOps workspace' })).not.toBeInTheDocument();
 
     fireEvent.click(menuTrigger);
     fireEvent.click(
-      within(screen.getByRole('dialog', { name: 'StoryOps workspace' })).getByRole('button', {
-        name: 'Sign out of StoryOps',
+      within(screen.getByRole('dialog', { name: 'WashOps workspace' })).getByRole('button', {
+        name: 'Sign out of WashOps',
       }),
     );
     expect(signOut).toHaveBeenCalledOnce();
@@ -129,12 +129,12 @@ describe('AppShell keyboard and mobile accessibility', () => {
 
   it('contains command-palette focus, makes the background inert, and restores its trigger', async () => {
     renderLiveShell();
-    const trigger = screen.getByRole('button', { name: 'Search StoryOps' });
+    const trigger = screen.getByRole('button', { name: 'Search WashOps' });
 
     trigger.focus();
     fireEvent.click(trigger);
 
-    const dialog = screen.getByRole('dialog', { name: 'Search StoryOps' });
+    const dialog = screen.getByRole('dialog', { name: 'Search WashOps' });
     const search = within(dialog).getByRole('textbox', { name: 'Search' });
     const background = document.querySelector('.app-shell__chrome');
     expect(search).toHaveFocus();
@@ -148,7 +148,7 @@ describe('AppShell keyboard and mobile accessibility', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(trigger).toHaveFocus());
-    expect(screen.queryByRole('dialog', { name: 'Search StoryOps' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Search WashOps' })).not.toBeInTheDocument();
     expect(background).not.toHaveAttribute('inert');
     expect(background).not.toHaveAttribute('aria-hidden');
   });
@@ -157,12 +157,12 @@ describe('AppShell keyboard and mobile accessibility', () => {
     renderLiveShell('technician');
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
 
-    const menu = within(screen.getByRole('dialog', { name: 'StoryOps workspace' }));
+    const menu = within(screen.getByRole('dialog', { name: 'WashOps workspace' }));
     for (const destination of ['Pipeline', 'Customers', 'Dispatch', 'Field mode', 'Operations']) {
       expect(menu.getByRole('link', { name: new RegExp(destination, 'u') })).toBeVisible();
     }
     for (const deniedDestination of [
-      'Command center',
+      'WashOps',
       'Finance',
       'AI office',
       'Approvals',
@@ -176,7 +176,7 @@ describe('AppShell keyboard and mobile accessibility', () => {
         menu.queryByRole('link', { name: new RegExp(deniedDestination, 'u') }),
       ).not.toBeInTheDocument();
     }
-    expect(menu.getByRole('button', { name: 'Sign out of StoryOps' })).toBeVisible();
+    expect(menu.getByRole('button', { name: 'Sign out of WashOps' })).toBeVisible();
   });
 
   it('does not confuse browser connectivity with authenticated server verification', () => {

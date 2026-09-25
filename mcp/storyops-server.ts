@@ -32,7 +32,7 @@ const server = new McpServer({
 server.registerTool(
   'storyops_integration_health',
   {
-    title: 'StoryOps integration health',
+    title: 'WashOps integration health',
     description:
       'Read integration status. This tool has no external side effects and returns sandbox status when keys are absent.',
     inputSchema: {},
@@ -79,7 +79,7 @@ server.registerTool(
 server.registerTool(
   'storyops_sandbox_ai_run',
   {
-    title: 'Run a no-key StoryOps specialist',
+    title: 'Run a no-key WashOps specialist',
     description:
       'Exercise the structured AI-office contract in sandbox mode. The default sandbox model proposes no actions.',
     inputSchema: {
@@ -135,7 +135,7 @@ server.registerTool(
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('StoryOps AI MCP server ready on stdio (read-only/sandbox tools).');
+  console.error('WashOps MCP server ready on stdio (read-only/sandbox tools).');
 }
 
 main().catch((error: unknown) => {

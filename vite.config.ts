@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'StoryOps AI',
-        short_name: 'StoryOps',
+        name: 'WashOps',
+        short_name: 'WashOps',
         description: 'AI-first operations for exterior-service companies',
         theme_color: '#0d3b32',
         background_color: '#f4f5ef',

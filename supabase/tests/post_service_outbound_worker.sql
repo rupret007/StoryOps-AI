@@ -863,7 +863,7 @@ begin
     inserted_thread.id,
     'email',
     'outbound',
-    'StoryOps Local Fixture',
+    'WashOps Local Fixture',
     array['customer@storyops.local'],
     'Synthetic queued worker-exhaustion fixture.',
     'routine',

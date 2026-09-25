@@ -1091,7 +1091,7 @@ test('static runtime reports compiled mode and revision and rejects expected-mod
       resolve(repositoryRoot, 'infra/runtime/server.mjs'),
       resolve(directory, 'server.mjs'),
     );
-    await writeFile(resolve(distDirectory, 'index.html'), '<!doctype html><title>StoryOps</title>');
+    await writeFile(resolve(distDirectory, 'index.html'), '<!doctype html><title>WashOps</title>');
     await writeFile(
       resolve(distDirectory, 'storyops-build.json'),
       '{"dataMode":"sandbox","revision":"test-revision-123"}\n',

@@ -173,7 +173,7 @@ try {
 
   const { error: ownerAuthError } = await ownerClient.auth.signInWithPassword({
     email: 'owner@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(ownerAuthError, null, ownerAuthError?.message);
 
@@ -220,7 +220,7 @@ try {
 
   const { error: technicianAuthError } = await technicianClient.auth.signInWithPassword({
     email: 'technician@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(technicianAuthError, null, technicianAuthError?.message);
   const forbidden = await technicianClient.functions.invoke('scheduling-suggestions', {

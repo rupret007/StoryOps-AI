@@ -924,7 +924,7 @@ begin
           from public.communication_threads thread
           where thread.id = message_row.thread_id
         ),
-        'StoryOps follow-up'
+        'WashOps follow-up'
       );
     else
       subject_value := case followup_row.action_type

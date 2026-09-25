@@ -1,4 +1,4 @@
-# StoryOps AI V1.1 release-candidate build report
+# WashOps V1.1 release-candidate build report
 
 **Report state:** **LOCAL RELEASE EVIDENCE COMPLETE — live launch gates remain**  
 **Report date:** 2026-07-30 (CDT); evidence completed 2026-07-31 (UTC)  
@@ -24,7 +24,7 @@ customer contact, or movement of money occurred.
 
 ## Outcome
 
-StoryOps AI V1.1 is a production-shaped operating system for one
+WashOps V1.1 is a production-shaped operating system for one
 owner-operated exterior-cleaning company. Its first repository-controlled
 industry pack covers pressure/soft washing, gutter/downspout cleaning, roof
 washing, exterior window cleaning, and related exterior add-ons.
@@ -103,7 +103,7 @@ Authoritative operating rules live in
   accepted. Stable identities, exact values, signatures, idempotency, and
   authoritative reconciliation are required.
 - A provider read or reconciliation failure is not provider delivery failure.
-  If StoryOps has a stable live provider message ID but cannot determine the
+  If WashOps has a stable live provider message ID but cannot determine the
   final outcome after bounded reads, the attempt remains `submitted` with
   `RECONCILIATION_EXHAUSTED`; the provider identity and communication record
   are preserved, automatic resend is excluded, and only a verified provider
@@ -266,7 +266,7 @@ execution, and AI Office from the reviewed hosted candidate.
 ## Backup and recovery posture
 
 The local recovery proof is executable, not a mocked success. At
-`backups/restore-drill-20260731T025435Z`, StoryOps verified the independently
+`backups/restore-drill-20260731T025435Z`, WashOps verified the independently
 retained manifest digest, staged authenticated bytes without following
 symlinks, restored the complete logical database/roles and three private
 Storage objects to a fresh loopback-only target, and derived the fingerprints
@@ -285,7 +285,7 @@ measured RPO/RTO, and a named recovery operator remain manual YELLOW gates.
   `LICENSE.atomic-crm.md` and `NOTICE.md`.
 - `rupret007/StoryLand-Driving-School` supplied operating-pattern inspiration.
   No unlicensed source or text is claimed as copied.
-- `OCA/field-service` was used only as an AGPL domain checklist; StoryOps does
+- `OCA/field-service` was used only as an AGPL domain checklist; WashOps does
   not copy its code/schema/assets or adopt AGPL.
 - VROOM/vroom-express and OpenAI Agents JS are pinned dependencies with their
   licenses and revisions recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
@@ -296,7 +296,7 @@ measured RPO/RTO, and a named recovery operator remain manual YELLOW gates.
   and copied into the routing image.
 
 Exact pins and generated inventory were rechecked in the final license run, and
-the final license check passed for both npm graphs. However, StoryOps AI's own
+the final license check passed for both npm graphs. However, WashOps's own
 distribution license remains undecided, the VROOM image's Ubuntu apt
 repositories are not pinned to an immutable snapshot, and no final OS/container
 CVE scan or signed SBOM attestation was captured. Those are distribution and
@@ -374,7 +374,7 @@ treatment remain unsigned launch gates.
   clean-reset and SQL regressions, but a separate disposable pre-66 data upgrade
   rehearsal was not executed. That is a non-blocking hardening gap, not hosted
   upgrade evidence.
-- The root StoryOps AI distribution license remains undecided.
+- The root WashOps distribution license remains undecided.
 - Local verification does not authorize a pilot.
 
 ## Next priorities

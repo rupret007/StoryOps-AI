@@ -21,13 +21,13 @@ export class EdgeOpenAiAgentsModel implements StructuredModel {
       modelProvider: new OpenAIProvider({ apiKey }),
       tracingDisabled: false,
       traceIncludeSensitiveData: false,
-      workflowName: 'StoryOps AI Office Edge',
+      workflowName: 'WashOps Office Edge',
     });
   }
 
   async generate(request: StructuredGenerationRequest): Promise<unknown> {
     const specialist = new Agent({
-      name: `StoryOps ${request.agent}`,
+      name: `WashOps ${request.agent}`,
       instructions: request.systemInstructions,
       model: this.model,
       modelSettings: {

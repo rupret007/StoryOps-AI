@@ -61,7 +61,7 @@ function adapter(
   };
 }
 
-describe('live StoryOps repository', () => {
+describe('live WashOps repository', () => {
   it('uses a cached live workspace only for an explicit connectivity failure', () => {
     const revoked = new LiveRepositoryError(
       'Setup-state load',

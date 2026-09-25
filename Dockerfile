@@ -47,7 +47,7 @@ RUN case "${VITE_STORYOPS_DATA_MODE}" in \
 
 FROM node:22.22.3-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8 AS runtime
 
-LABEL org.opencontainers.image.title="StoryOps AI" \
+LABEL org.opencontainers.image.title="WashOps" \
       org.opencontainers.image.description="AI-first operations system for an owner-operated exterior-services company"
 
 ENV NODE_ENV=production \

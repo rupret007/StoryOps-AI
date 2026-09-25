@@ -1,4 +1,4 @@
-# StoryOps Integration Operations Runbook
+# WashOps Integration Operations Runbook
 
 **Purpose:** Keep external communications, payments, calendar, weather, routing, storage, and
 accounting state accurate.  
@@ -178,7 +178,7 @@ submitted provider action may still move through signed callback/retrieval
 reconciliation; do not confuse that truth-preserving transition with permission
 to start another send.
 
-`post-service:<followup UUID>` is a durable StoryOps correlation key. It is not
+`post-service:<followup UUID>` is a durable WashOps correlation key. It is not
 a Twilio Message-create idempotency guarantee. Immediately before a live
 Twilio create call, the worker commits `submitted_unknown` under the exact
 lease. A returned authoritative Twilio SID advances the row to `submitted`;
@@ -283,7 +283,7 @@ customer contact to trust. Reconcile those rows from authoritative provider
 evidence before retrying the upgrade.
 
 Scheduled refresh snapshots are bounded operational telemetry, not canonical
-audit evidence. StoryOps retains the 2,048 most recent scheduled refreshes and
+audit evidence. WashOps retains the 2,048 most recent scheduled refreshes and
 prunes in batches only after the unprotected set exceeds 2,111. Staff probes,
 the latest snapshot, and every launch-event-bound evidence version are never
 pruned by this worker. The four current heartbeat rows and canonical launch/
@@ -341,7 +341,7 @@ suppressed decision must stop before any provider or rate-budget call.
 
 ## Provider outage
 
-1. Confirm health from StoryOps and the provider status page.
+1. Confirm health from WashOps and the provider status page.
 2. Disable the affected auto-action; keep unrelated integrations running.
 3. Use manual fallback with a written list of provider actions and IDs.
 4. Tell customers only what is known. Do not promise a provider recovery time.
@@ -385,7 +385,7 @@ For approved Stripe refunds, the owner decides the exact persisted approval and
 then invokes the approved-action executor once. A replay with the same approval
 returns the durable receipt; changed amount/payment/payload, stale approval,
 ineligible state, or another role must fail. If the provider may have completed
-but StoryOps completion is uncertain, keep the same idempotency key and
+but WashOps completion is uncertain, keep the same idempotency key and
 reconcile before retry.
 
 For exact payment allocation, never use the generic approved-action executor.

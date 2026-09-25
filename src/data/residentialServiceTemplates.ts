@@ -640,7 +640,7 @@ export const residentialCleaningIndustryPack = {
   name: 'Residential cleaning',
   version: RESIDENTIAL_STARTER_PACK_VERSION,
   description:
-    'Recurring home-care cleaning with maintenance, deep, and turnover workflows on the shared StoryOps kernel.',
+    'Recurring home-care cleaning with maintenance, deep, and turnover workflows on the shared WashOps kernel.',
   serviceCodes: RESIDENTIAL_SERVICE_CODES,
   serviceTemplates: residentialServiceTemplates,
   supportedKernelCapabilities: [

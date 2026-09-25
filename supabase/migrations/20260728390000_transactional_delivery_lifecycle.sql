@@ -362,7 +362,7 @@ begin
     for share;
     subject_value := 'Quote ' || quote_row.quote_number || ' is ready';
     body_value := 'Your quote ' || quote_row.quote_number
-      || ' is ready in your StoryOps customer portal. '
+      || ' is ready in your WashOps customer portal. '
       || 'Review the exact scope, price, and terms there before accepting.';
   else
     if actor_role not in ('owner', 'dispatcher', 'technician') then
@@ -399,8 +399,8 @@ begin
       and job.company_id = p_company_id
       and customer.lifecycle = 'active'
     for share of customer;
-    subject_value := 'Your StoryOps crew is on the way';
-    body_value := 'Your StoryOps crew is on the way for the scheduled visit. '
+    subject_value := 'Your WashOps crew is on the way';
+    body_value := 'Your WashOps crew is on the way for the scheduled visit. '
       || 'This message does not promise an arrival time; check the customer '
       || 'portal or contact the office if access conditions changed.';
   end if;
@@ -1091,7 +1091,7 @@ begin
         'recipient', message_snapshot.recipients[1],
         'subject', coalesce(
           nullif(btrim(message_snapshot.thread_subject), ''),
-          'StoryOps customer update'
+          'WashOps customer update'
         ),
         'body', message_snapshot.body,
         'consentSnapshotId', attempt_row.consent_record_id

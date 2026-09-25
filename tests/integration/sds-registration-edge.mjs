@@ -215,7 +215,7 @@ const bootstrapSql = `
 insert into public.companies(id, name, timezone, settings, status)
 values (
   ${sqlLiteral(companyId)}::uuid,
-  'StoryOps SDS Edge Canary',
+  'WashOps SDS Edge Canary',
   'America/Chicago',
   '{}'::jsonb,
   'active'
@@ -266,7 +266,7 @@ try {
   runSql(bootstrapSql);
   const { error: authError } = await client.auth.signInWithPassword({
     email: 'owner@storyops.local',
-    password: 'StoryOpsDemo1!',
+    password: 'WashOpsDemo1!',
   });
   assert.equal(authError, null, authError?.message);
 

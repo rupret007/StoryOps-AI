@@ -96,7 +96,7 @@ export function MaterialSdsRegistrationPanel() {
             <span>
               <strong>Exact evidence boundary.</strong> Revision {registry.configurationRevision} is
               identified by {registry.configurationHash.slice(0, 12)}…. The private upload is read
-              back byte-for-byte before registration. StoryOps does not generate chemical, mixing,
+              back byte-for-byte before registration. WashOps does not generate chemical, mixing,
               application, PPE, disposal, or emergency instructions.
             </span>
           </div>
