@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveOwnerCommandCenter,
+  explainNextOwnerAction,
+  ownerActionSurface,
   pickNextOwnerAction,
   type OwnerActionItem,
 } from '@/core/pilot/ownerCommandCenter';
@@ -419,6 +421,25 @@ describe('owner command center projection', () => {
     ];
 
     expect(pickNextOwnerAction(actions)?.id).toBe('open-incidents');
+    expect(explainNextOwnerAction(actions[2]!)).toBe(
+      'This hold stops work. Handle it before any decision or follow-up.',
+    );
+    expect(explainNextOwnerAction(actions[1]!)).toBe(
+      'No hold is in front of this. It needs your yes or no on the exact record.',
+    );
+    expect(explainNextOwnerAction(actions[0]!)).toBe(
+      'No hold is in front of this. This follow-up can wait behind anything that stops work.',
+    );
+  });
+
+  it('names the surface a hold opens', () => {
+    expect(ownerActionSurface('/operations#safety')).toBe('Safety & incidents');
+    expect(ownerActionSurface('/operations#recurring')).toBe('Recurring care');
+    expect(ownerActionSurface('/estimates/new')).toBe('New estimate');
+    expect(ownerActionSurface('/estimates/estimate-1048')).toBe('Estimate');
+    expect(ownerActionSurface('/setup')).toBe('Owner configuration');
+    expect(ownerActionSurface('/field')).toBe('Field');
+    expect(ownerActionSurface('/unknown')).toBe('Workspace');
   });
 
   it('returns undefined next action and empty groups when no actions exist', () => {

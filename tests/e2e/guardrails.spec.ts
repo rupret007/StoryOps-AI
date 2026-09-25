@@ -70,7 +70,10 @@ test('sandbox operational state is labeled synthetic and never presented as prov
   page,
 }) => {
   await completeFirstRunSetup(page);
-  await expect(page.getByText(/Synthetic sandbox workspace/)).toBeVisible();
+  await expect(page.getByText(/Sandbox records only/)).toBeVisible();
+  await expect(
+    page.getByText(/Nothing here is live payment, route, weather, or dispatch evidence/),
+  ).toBeVisible();
   await expect(page.getByText('Not dispatch evidence', { exact: true })).toBeVisible();
   await expect(page.locator('#main-content')).not.toContainText('NWS sandbox checked');
   await expect(page.locator('#main-content')).not.toContainText('In policy');

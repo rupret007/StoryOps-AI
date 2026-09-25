@@ -39,7 +39,7 @@ describe('StoryOps application shell', () => {
     vi.unstubAllEnvs();
   });
 
-  it('renders a grounded owner briefing and sandbox status', async () => {
+  it('renders the next safe action and sandbox status', async () => {
     renderApp('/');
     await completeSandboxSetup();
     expect(screen.getByText('Good morning, Jeff.')).toBeVisible();
@@ -49,7 +49,13 @@ describe('StoryOps application shell', () => {
     );
     expect(screen.getByText('AI office ready · manual runs')).toBeVisible();
     expect(screen.getByText(/sandbox adapters ready/)).toBeVisible();
-    expect(screen.getByText(/Synthetic sandbox workspace/)).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Do this next' })).toBeVisible();
+    expect(screen.getByText(/Sandbox records only/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Do this: Open Owner configuration' })).toHaveAttribute(
+      'href',
+      '/setup',
+    );
+    expect(screen.queryByText('$4,862')).not.toBeInTheDocument();
     expect(screen.getByText('Not dispatch evidence', { exact: true })).toBeVisible();
     expect(screen.queryByText('NWS sandbox checked')).not.toBeInTheDocument();
     expect(screen.queryByText('In policy', { exact: true })).not.toBeInTheDocument();

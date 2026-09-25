@@ -69,6 +69,45 @@ export function pickNextOwnerAction(actions: OwnerActionItem[]): OwnerActionItem
   );
 }
 
+const ownerActionSurfaces: ReadonlyArray<readonly [string, string]> = [
+  ['/operations#safety', 'Safety & incidents'],
+  ['/operations#recurring', 'Recurring care'],
+  ['/operations', 'Operations'],
+  ['/estimates/new', 'New estimate'],
+  ['/estimates/', 'Estimate'],
+  ['/setup', 'Owner configuration'],
+  ['/field', 'Field'],
+  ['/dispatch', 'Dispatch'],
+  ['/finance', 'Finance'],
+  ['/approvals', 'Approvals'],
+  ['/pipeline', 'Pipeline'],
+  ['/portal', 'Customer portal'],
+  ['/integrations', 'Integrations'],
+  ['/office', 'AI office'],
+];
+
+export function ownerActionSurface(href: string): string {
+  return ownerActionSurfaces.find(([prefix]) => href.startsWith(prefix))?.[1] ?? 'Workspace';
+}
+
+export function explainNextOwnerAction(action: OwnerActionItem): string {
+  if (action.kind === 'hold' && action.priority === 'P0') {
+    return 'This hold stops work. Handle it before any decision or follow-up.';
+  }
+  if (action.kind === 'hold') {
+    return action.priority === 'P1'
+      ? 'No P0 item is waiting. This hold is the next thing that still blocks a safe step.'
+      : 'No higher-priority item is waiting. This hold still blocks a safe step.';
+  }
+  if (action.priority === 'P0') {
+    return 'This is the highest-priority item. No P0 hold is waiting in front of it.';
+  }
+  if (action.kind === 'decision') {
+    return 'No hold is in front of this. It needs your yes or no on the exact record.';
+  }
+  return 'No hold is in front of this. This follow-up can wait behind anything that stops work.';
+}
+
 function transactionalDeliveryIsHeld(delivery: LiveTransactionalDelivery): boolean {
   return (
     delivery.manualReconciliationRequired ||

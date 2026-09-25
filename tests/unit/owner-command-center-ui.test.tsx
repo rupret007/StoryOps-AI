@@ -80,9 +80,10 @@ describe('owner command-center UI', () => {
       expect(screen.getAllByText(action.title).length).toBeGreaterThan(0);
     }
     expect(screen.getByText('Resolve provider readiness')).toBeVisible();
-    expect(screen.getByLabelText('Do this next')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Do this next' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Do this next' })).toBeVisible();
     expect(screen.getByLabelText('Holds that stop work')).toBeVisible();
-    expect(screen.getByRole('link', { name: /Open next:/u })).toBeVisible();
+    expect(screen.getByRole('link', { name: /^Do this: Open /u })).toBeVisible();
   });
 
   it('renders leftover incident, field-change, and offline holds on the live queue', () => {
@@ -158,7 +159,8 @@ describe('owner command-center UI', () => {
     expect(
       screen.getByRole('link', { name: `${visit.jobNumber} · property damage` }),
     ).toHaveAttribute('href', '/operations#safety');
-    expect(screen.getByRole('link', { name: /Open next:/u })).toBeVisible();
+    expect(screen.getByRole('link', { name: /^Do this: Open /u })).toBeVisible();
+    expect(screen.getByText('Doing this next')).toBeVisible();
   });
 
   it('renders a sandbox next-action strip from workspace records', () => {
@@ -176,10 +178,17 @@ describe('owner command-center UI', () => {
     );
 
     expect(projection.nextAction?.id).toBe('configuration-missing');
-    expect(screen.getAllByText('Do this next').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Do this next' })).toBeVisible();
     expect(screen.getAllByText('Complete the owner configuration').length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole('link', { name: /Open next: Complete the owner configuration/u }),
-    ).toHaveAttribute('href', '/setup');
+    expect(screen.getByText(/This hold stops work/u)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Do this: Open Owner configuration' })).toHaveAttribute(
+      'href',
+      '/setup',
+    );
+    expect(screen.queryByText('$4,862')).not.toBeInTheDocument();
+    expect(screen.queryByText('$7,348')).not.toBeInTheDocument();
+    expect(screen.queryByText('$8,420')).not.toBeInTheDocument();
+    expect(screen.queryByText('58.7%')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Owner briefing' })).not.toBeInTheDocument();
   });
 });
