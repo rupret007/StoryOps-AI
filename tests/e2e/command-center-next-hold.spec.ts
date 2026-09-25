@@ -4,6 +4,10 @@ import { completeFirstRunSetup, publishSandboxCompanyConfiguration } from './hel
 test('sandbox command center opens the next derived hold', async ({ page }) => {
   await completeFirstRunSetup(page);
 
+  const glance = page.getByRole('region', { name: 'Phone glance' });
+  await expect(glance).toBeVisible();
+  await expect(glance.getByRole('heading', { name: /hold stops work/u })).toBeVisible();
+  await expect(glance.getByText('Stops work. No named record on this line.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Do this next' })).toBeVisible();
   await expect(page.getByText('Complete the owner configuration').first()).toBeVisible();
   await expect(
@@ -35,6 +39,27 @@ test('published sandbox configuration advances the next hold to estimate evidenc
   await page.getByRole('link', { name: 'Do this: Open Estimate' }).click();
   await expect(page.getByRole('heading', { name: 'Build a verified estimate' })).toBeVisible();
   await expect(page.getByText('Decimal arithmetic')).toBeVisible();
+});
+
+test('phone glance fits above the greeting', async ({ page }, testInfo) => {
+  testInfo.skip(testInfo.project.name !== 'mobile', 'phone viewport only');
+  await completeFirstRunSetup(page);
+
+  const glance = page.getByRole('region', { name: 'Phone glance' });
+  const greeting = page.getByRole('heading', { name: 'Good morning, Jeff.' });
+  await expect(glance).toBeVisible();
+  await expect(greeting).toBeVisible();
+
+  const glanceBox = await glance.boundingBox();
+  const greetingBox = await greeting.boundingBox();
+  const viewport = page.viewportSize();
+  expect(glanceBox).not.toBeNull();
+  expect(greetingBox).not.toBeNull();
+  expect(glanceBox!.y).toBeLessThan(greetingBox!.y);
+  expect(glanceBox!.y + glanceBox!.height).toBeLessThan((viewport?.height ?? 844) * 0.92);
+  await expect(
+    glance.getByRole('link', { name: 'Do this: Open Owner configuration' }),
+  ).toBeVisible();
 });
 
 test('operations safety hash lands on the incident hold surface', async ({ page }) => {

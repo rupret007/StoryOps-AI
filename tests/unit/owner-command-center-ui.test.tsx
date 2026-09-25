@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from '@/router';
 import { createDemoState } from '@/state/demoSeed';
@@ -190,5 +190,93 @@ describe('owner command-center UI', () => {
     expect(screen.queryByText('$8,420')).not.toBeInTheDocument();
     expect(screen.queryByText('58.7%')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Owner briefing' })).not.toBeInTheDocument();
+    const glance = screen.getByRole('region', { name: 'Phone glance' });
+    expect(within(glance).getByRole('heading', { name: '1 hold stops work.' })).toBeVisible();
+    expect(screen.getByText(/1 hold stops work · \d+ more holds/u)).toBeVisible();
+    expect(within(glance).getByText('Stops work. No named record on this line.')).toBeVisible();
+    expect(
+      within(glance).getByRole('link', { name: 'Do this: Open Owner configuration' }),
+    ).toHaveAttribute('href', '/setup');
+    expect(
+      glance.compareDocumentPosition(screen.getByRole('heading', { name: /Good morning/u })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+  });
+
+  it('fails closed on an untimed owner workspace instead of calling the day empty', () => {
+    const state = createDemoState();
+    state.dataMode = 'supabase';
+    state.authStatus = 'signed_in';
+    state.role = 'owner';
+    state.online = true;
+    state.live = {
+      userId: '10000000-0000-4000-8000-000000000101',
+      companyId: '10000000-0000-4000-8000-000000000001',
+      companyName: 'Pilot Exterior Care',
+      companyTimezone: 'America/Chicago',
+      serverTime: 'not-a-time',
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+    };
+    mocked.state = state;
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    const glance = screen.getByRole('region', { name: 'Phone glance' });
+    expect(
+      within(glance).getByRole('heading', { name: 'This command center is not current.' }),
+    ).toBeVisible();
+    expect(within(glance).getByRole('alert')).toHaveTextContent('Fail closed');
+    expect(within(glance).getAllByLabelText('withheld')).toHaveLength(3);
+    expect(screen.getByText('Not current')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Today is unknown' })).toBeVisible();
+    expect(
+      screen.queryByRole('heading', { name: 'No company-local visits today' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('No holds')).not.toBeInTheDocument();
+    expect(screen.getByText('Counts withheld · not a live tally')).toBeVisible();
+    expect(screen.getByText(/These rows are the last projection/u)).toBeVisible();
+  });
+
+  it('shows fail-closed empty groups and an empty lead projection', () => {
+    const state = createDemoState();
+    state.dataMode = 'sandbox';
+    state.role = 'owner';
+    state.setupComplete = true;
+    state.leads = [];
+    state.approvals = [];
+    state.invoices = state.invoices.map((invoice) => ({ ...invoice, status: 'open' }));
+    state.traces = state.traces.map((trace) => ({ ...trace, result: 'succeeded' }));
+    state.reviewRequested = true;
+    state.recurringPlanActive = true;
+    mocked.state = state;
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'No leads in this projection' })).toBeVisible();
+    expect(screen.getByText(/not an empty pipeline/u)).toBeVisible();
+    expect(screen.getByLabelText('Decisions')).toHaveTextContent(
+      'None in this projection. This is not a clearance.',
+    );
+    expect(screen.getByLabelText('Follow-ups')).toHaveTextContent(
+      'None in this projection. This is not a clearance.',
+    );
+    expect(screen.queryByText('No holds')).not.toBeInTheDocument();
   });
 });

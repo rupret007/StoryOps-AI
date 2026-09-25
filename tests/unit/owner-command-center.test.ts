@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveOwnerCommandCenter,
+  deriveOwnerCommandGlance,
   explainNextOwnerAction,
+  ownerActionGlanceLine,
   ownerActionSurface,
+  ownerTodayVisitEmptyCopy,
   pickNextOwnerAction,
   type OwnerActionItem,
 } from '@/core/pilot/ownerCommandCenter';
@@ -482,5 +485,137 @@ describe('owner command center projection', () => {
     const p1Actions = projection.actions.filter((a) => a.priority === 'P1');
     const p1Ids = p1Actions.map((a) => a.id);
     expect(p1Ids).toEqual([...p1Ids].sort());
+  });
+
+  it('gives a phone-length line that says whether a hold stops work', () => {
+    const hold: OwnerActionItem = {
+      id: 'open-incidents',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Open incidents pause automation',
+      fact: 'A long fact that should not be the glance line.',
+      recommendation: 'Review Safety & incidents.',
+      source: 'test',
+      href: '/operations#safety',
+      entities: [{ label: 'JOB-1 · property damage', href: '/operations#safety' }],
+    };
+    const line = ownerActionGlanceLine(hold);
+    expect(line).toBe('Stops work. 1 named record.');
+    expect(line.length).toBeLessThan(80);
+    expect(line).not.toContain('A long fact');
+  });
+
+  it('withholds counts when the authenticated workspace has no server time', () => {
+    const state = withPublishedOperatingRecords(createDemoState());
+    state.dataMode = 'supabase';
+    state.online = true;
+    state.live = {
+      userId: 'owner-user',
+      companyId: 'company-a',
+      companyName: 'Pilot Exterior Care',
+      companyTimezone: 'America/Chicago',
+      serverTime: 'not-a-time',
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+    };
+
+    const projection = deriveOwnerCommandCenter(state);
+    expect(projection.freshness).toBe('untimed');
+    expect(projection.today.status).toBe('unknown');
+    expect(projection.glance.countsKnown).toBe(false);
+    expect(projection.glance.holds).toBeNull();
+    expect(projection.glance.headline).toBe('This command center is not current.');
+    expect(projection.glance.caveat).toContain('Do not read an empty list as all clear.');
+    expect(projection.glance.headline).not.toMatch(/no holds/i);
+    expect(ownerTodayVisitEmptyCopy(projection.today, projection.freshness).heading).toBe(
+      'Today is unknown',
+    );
+  });
+
+  it('fails closed when the device is offline even if a server time is stored', () => {
+    const state = createDemoState();
+    state.dataMode = 'supabase';
+    state.online = false;
+    state.live = {
+      userId: 'owner-user',
+      companyId: 'company-a',
+      companyName: 'Pilot Exterior Care',
+      companyTimezone: 'America/Chicago',
+      serverTime: '2026-07-31T14:00:00.000Z',
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+    };
+
+    const projection = deriveOwnerCommandCenter(state);
+    expect(projection.freshness).toBe('offline');
+    expect(projection.glance.countsKnown).toBe(false);
+    expect(projection.glance.caveat).toContain('offline');
+    expect(projection.glance.holds).toBeNull();
+  });
+
+  it('names an empty current projection as not a clearance', () => {
+    const glance = deriveOwnerCommandGlance({
+      freshness: 'current',
+      sourcedAt: '2026-07-31T14:00:00.000Z',
+      holds: [],
+      decisions: [],
+      followUps: [],
+    });
+    expect(glance.headline).toBe('Nothing in this projection is waiting.');
+    expect(glance.caveat).toContain('not a clearance');
+    expect(glance.holds).toBe(0);
+    expect(glance.p0Holds).toBe(0);
+  });
+
+  it('counts only P0 holds as stopping work and names the first one', () => {
+    const stopping: OwnerActionItem = {
+      id: 'open-incidents',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Open incidents pause automation',
+      fact: 'One open incident.',
+      recommendation: 'Review Safety & incidents.',
+      source: 'test',
+      href: '/operations#safety',
+    };
+    const behind: OwnerActionItem = {
+      id: 'past-due-invoices',
+      priority: 'P1',
+      kind: 'hold',
+      title: 'Review past-due invoices',
+      fact: 'One invoice.',
+      recommendation: 'Reconcile payment.',
+      source: 'test',
+      href: '/finance',
+    };
+    const glance = deriveOwnerCommandGlance({
+      freshness: 'sandbox',
+      sourcedAt: 'fixed local fixture',
+      holds: [stopping, behind],
+      decisions: [],
+      followUps: [],
+      nextAction: stopping,
+    });
+    expect(glance.headline).toBe('1 hold stops work.');
+    expect(glance.caveat).toContain('First: Open incidents pause automation.');
+    expect(glance.caveat).toContain('1 more hold is behind it.');
+    expect(glance.holds).toBe(2);
+    expect(glance.p0Holds).toBe(1);
   });
 });

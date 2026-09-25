@@ -21,14 +21,34 @@ export interface OwnerActionItem {
   entities?: OwnerActionEntity[];
 }
 
+export type OwnerCommandFreshness = 'sandbox' | 'current' | 'offline' | 'untimed';
+
+export type OwnerTodayStatus = 'fixture' | 'dated' | 'unknown' | 'incomplete';
+
+export interface OwnerCommandGlance {
+  freshness: OwnerCommandFreshness;
+  countsKnown: boolean;
+  headline: string;
+  caveat: string;
+  clockLabel: string;
+  holds: number | null;
+  decisions: number | null;
+  followUps: number | null;
+  p0Holds: number | null;
+}
+
 export interface OwnerCommandCenterProjection {
   mode: 'sandbox' | 'authenticated';
   sourcedAt: string;
+  freshness: OwnerCommandFreshness;
+  glance: OwnerCommandGlance;
   today: {
     localDate?: string;
     timeZone: string;
     visits: DemoState['visits'];
     evidenceFacts: string[];
+    status: OwnerTodayStatus;
+    missingExactStarts: number;
   };
   actions: OwnerActionItem[];
   nextAction?: OwnerActionItem;
@@ -58,6 +78,7 @@ type OwnerProjectionState = Pick<
   | 'recurringDueWork'
   | 'offlineQueue'
   | 'live'
+  | 'online'
 >;
 
 export function pickNextOwnerAction(actions: OwnerActionItem[]): OwnerActionItem | undefined {
@@ -106,6 +127,158 @@ export function explainNextOwnerAction(action: OwnerActionItem): string {
     return 'No hold is in front of this. It needs your yes or no on the exact record.';
   }
   return 'No hold is in front of this. This follow-up can wait behind anything that stops work.';
+}
+
+export function ownerActionGlanceLine(action: OwnerActionItem): string {
+  const records = action.entities?.length ?? 0;
+  const named =
+    records === 0
+      ? 'No named record on this line.'
+      : records === 1
+        ? '1 named record.'
+        : `${records} named records.`;
+  if (action.kind === 'hold' && action.priority === 'P0') return `Stops work. ${named}`;
+  if (action.kind === 'hold') return `Still blocks a safe step. ${named}`;
+  if (action.kind === 'decision') return `Needs your yes or no. ${named}`;
+  return `Can wait behind holds. ${named}`;
+}
+
+export function deriveOwnerCommandGlance(input: {
+  freshness: OwnerCommandFreshness;
+  sourcedAt: string;
+  holds: readonly OwnerActionItem[];
+  decisions: readonly OwnerActionItem[];
+  followUps: readonly OwnerActionItem[];
+  nextAction?: OwnerActionItem;
+}): OwnerCommandGlance {
+  const countsKnown = input.freshness === 'sandbox' || input.freshness === 'current';
+  const clockLabel =
+    input.freshness === 'sandbox'
+      ? 'Sandbox fixture. Not a live tally.'
+      : input.freshness === 'current'
+        ? `Server time ${input.sourcedAt}.`
+        : input.freshness === 'offline'
+          ? 'Offline. The last read is not a live tally.'
+          : 'Server time unavailable.';
+  const holds = countsKnown ? input.holds.length : null;
+  const decisions = countsKnown ? input.decisions.length : null;
+  const followUps = countsKnown ? input.followUps.length : null;
+  const p0Holds = countsKnown
+    ? input.holds.filter((action) => action.priority === 'P0').length
+    : null;
+
+  if (!countsKnown) {
+    return {
+      freshness: input.freshness,
+      countsKnown,
+      headline: 'This command center is not current.',
+      caveat:
+        input.freshness === 'offline'
+          ? 'This device is offline. Do not read these rows as a live tally, and do not read an empty list as all clear.'
+          : 'Server time is missing. Do not read an empty list as all clear. Refresh the workspace before you act.',
+      clockLabel,
+      holds,
+      decisions,
+      followUps,
+      p0Holds,
+    };
+  }
+
+  const next = input.nextAction;
+  if (!next) {
+    return {
+      freshness: input.freshness,
+      countsKnown,
+      headline: 'Nothing in this projection is waiting.',
+      caveat: 'This is not a clearance. Hidden records and provider state can still block work.',
+      clockLabel,
+      holds,
+      decisions,
+      followUps,
+      p0Holds,
+    };
+  }
+
+  if ((p0Holds ?? 0) > 0) {
+    const stopping = p0Holds === 1 ? '1 hold stops work.' : `${p0Holds} holds stop work.`;
+    const behind = (holds ?? 0) - (p0Holds ?? 0);
+    const extra =
+      behind > 0 ? ` ${behind} more ${behind === 1 ? 'hold is' : 'holds are'} behind it.` : '';
+    return {
+      freshness: input.freshness,
+      countsKnown,
+      headline: stopping,
+      caveat: `First: ${next.title}.${extra} This is not a clearance of hidden records.`,
+      clockLabel,
+      holds,
+      decisions,
+      followUps,
+      p0Holds,
+    };
+  }
+
+  const headline =
+    next.kind === 'decision'
+      ? 'No hold stops work. A decision is waiting.'
+      : next.kind === 'follow_up'
+        ? 'No hold stops work. A follow-up is waiting.'
+        : 'A hold still blocks the next safe step.';
+  return {
+    freshness: input.freshness,
+    countsKnown,
+    headline,
+    caveat: `${next.title}. This is not a clearance of hidden records.`,
+    clockLabel,
+    holds,
+    decisions,
+    followUps,
+    p0Holds,
+  };
+}
+
+export function ownerTodayVisitEmptyCopy(
+  today: OwnerCommandCenterProjection['today'],
+  freshness: OwnerCommandFreshness,
+): { heading: string; detail: string } {
+  if (today.status === 'unknown' || freshness === 'untimed') {
+    return {
+      heading: 'Today is unknown',
+      detail:
+        'Server time is missing. An empty list is not an empty day, and it does not claim future capacity.',
+    };
+  }
+  if (freshness === 'offline') {
+    return {
+      heading: 'No visits on the last server day',
+      detail: `The last server day was ${today.localDate ?? 'unknown'}. This device is offline, so this is not a live empty day.`,
+    };
+  }
+  if (today.status === 'incomplete') {
+    const count = today.missingExactStarts;
+    return {
+      heading: 'Today is incomplete',
+      detail: `${count} role-visible visit${count === 1 ? ' has' : 's have'} no exact server start. An empty list is not an empty day.`,
+    };
+  }
+  return {
+    heading: 'No company-local visits today',
+    detail:
+      'This uses exact server visit starts in the company timezone. It does not claim future capacity.',
+  };
+}
+
+export function ownerTodayVisitGapNote(
+  today: OwnerCommandCenterProjection['today'],
+  freshness: OwnerCommandFreshness,
+): string | undefined {
+  if (freshness === 'offline' && today.visits.length > 0) {
+    return 'Offline. These visits use the last server time, not a live calendar.';
+  }
+  if (today.status !== 'incomplete' || today.visits.length === 0) return undefined;
+  const count = today.missingExactStarts;
+  return `${count} role-visible visit${count === 1 ? ' has' : 's have'} no exact server start and ${
+    count === 1 ? 'is' : 'are'
+  } left off this day.`;
 }
 
 function transactionalDeliveryIsHeld(delivery: LiveTransactionalDelivery): boolean {
@@ -176,9 +349,15 @@ export function deriveOwnerCommandCenter(
     state.live?.companyTimezone ??
     state.companyConfiguration?.published?.territory.timezone ??
     'UTC';
-  const localDate = state.live?.serverTime
-    ? localDateKey(state.live.serverTime, timeZone)
-    : undefined;
+  const rawServerTime = state.live?.serverTime?.trim() ?? '';
+  const localDate = rawServerTime ? localDateKey(rawServerTime, timeZone) : undefined;
+  const freshness: OwnerCommandFreshness = !live
+    ? 'sandbox'
+    : state.online !== true
+      ? 'offline'
+      : !rawServerTime || !localDate
+        ? 'untimed'
+        : 'current';
   const todayVisits = localDate
     ? state.visits.filter((visit) => {
         const exactStart = state.live?.fieldVisitReferences?.[visit.id]?.visitStartsAt;
@@ -226,15 +405,22 @@ export function deriveOwnerCommandCenter(
       );
     }
   }
-  if (
-    live &&
-    localDate &&
-    state.visits.some((visit) => !state.live?.fieldVisitReferences?.[visit.id]?.visitStartsAt)
-  ) {
+  const missingExactStarts = live
+    ? state.visits.filter((visit) => !state.live?.fieldVisitReferences?.[visit.id]?.visitStartsAt)
+        .length
+    : 0;
+  if (live && localDate && missingExactStarts > 0) {
     visitEvidenceUnknowns.push(
       'At least one role-visible visit lacks an exact server-projected start, so its company-local today status is unknown.',
     );
   }
+  const todayStatus: OwnerTodayStatus = !live
+    ? 'fixture'
+    : !localDate
+      ? 'unknown'
+      : missingExactStarts > 0
+        ? 'incomplete'
+        : 'dated';
 
   if (!state.companyConfiguration) {
     actions.push({
@@ -673,17 +859,34 @@ export function deriveOwnerCommandCenter(
   const holds = actions.filter((action) => action.kind === 'hold');
   const decisions = actions.filter((action) => action.kind === 'decision');
   const followUps = actions.filter((action) => action.kind === 'follow_up');
+  const nextAction = pickNextOwnerAction(actions);
+  const sourcedAt = !live
+    ? 'fixed local fixture'
+    : freshness === 'untimed'
+      ? 'server time unavailable'
+      : rawServerTime;
   return {
     mode: live ? 'authenticated' : 'sandbox',
-    sourcedAt: live ? (state.live?.serverTime ?? 'server time unavailable') : 'fixed local fixture',
+    sourcedAt,
+    freshness,
+    glance: deriveOwnerCommandGlance({
+      freshness,
+      sourcedAt,
+      holds,
+      decisions,
+      followUps,
+      nextAction,
+    }),
     today: {
       localDate,
       timeZone,
       visits: todayVisits,
       evidenceFacts: todayEvidenceFacts,
+      status: todayStatus,
+      missingExactStarts,
     },
     actions,
-    nextAction: pickNextOwnerAction(actions),
+    nextAction,
     holds,
     decisions,
     followUps,

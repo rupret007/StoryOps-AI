@@ -30,7 +30,10 @@ import { deriveSandboxPilotRehearsal } from '@/core/pilot/rehearsal';
 import {
   deriveOwnerCommandCenter,
   explainNextOwnerAction,
+  ownerActionGlanceLine,
   ownerActionSurface,
+  ownerTodayVisitEmptyCopy,
+  ownerTodayVisitGapNote,
   type OwnerActionItem,
   type OwnerCommandCenterProjection,
 } from '@/core/pilot/ownerCommandCenter';
@@ -385,7 +388,6 @@ function OwnerActionKindIcon({ kind }: { kind: OwnerActionItem['kind'] }) {
 }
 
 function OwnerNextActionStrip({ action }: { action: OwnerActionItem }) {
-  const surface = ownerActionSurface(action.href);
   return (
     <section className="owner-next-action" aria-labelledby="owner-next-action-heading">
       <div className="owner-next-action__header">
@@ -418,10 +420,53 @@ function OwnerNextActionStrip({ action }: { action: OwnerActionItem }) {
         )}
       </dl>
       <OwnerActionEntities entities={action.entities} />
-      <Link className="button button--dark button--md full-width" to={action.href}>
-        Do this: Open {surface} <ArrowRight size={15} aria-hidden="true" />
-      </Link>
       <p className="owner-next-action__source">Source: {action.source}</p>
+    </section>
+  );
+}
+
+function OwnerCommandGlance({ projection }: { projection: OwnerCommandCenterProjection }) {
+  const { glance, nextAction } = projection;
+  const countLabel = (value: number | null) => (value === null ? 'withheld' : String(value));
+  const countText = (value: number | null) => (value === null ? '—' : String(value));
+  return (
+    <section
+      className={glance.countsKnown ? 'owner-glance' : 'owner-glance owner-glance--stale'}
+      aria-label="Phone glance"
+    >
+      <p className="owner-glance__eyebrow">Phone glance</p>
+      <h2>{glance.headline}</h2>
+      <p className="owner-glance__caveat">{glance.caveat}</p>
+      {!glance.countsKnown && (
+        <p className="owner-glance__alert" role="alert">
+          Fail closed. Do not treat this screen as current.
+        </p>
+      )}
+      <dl className="owner-glance__counts">
+        <div>
+          <dt>Holds</dt>
+          <dd aria-label={countLabel(glance.holds)}>{countText(glance.holds)}</dd>
+        </div>
+        <div>
+          <dt>Decisions</dt>
+          <dd aria-label={countLabel(glance.decisions)}>{countText(glance.decisions)}</dd>
+        </div>
+        <div>
+          <dt>Follow-ups</dt>
+          <dd aria-label={countLabel(glance.followUps)}>{countText(glance.followUps)}</dd>
+        </div>
+      </dl>
+      {nextAction && (
+        <>
+          <p className="owner-glance__next">{nextAction.title}</p>
+          <p className="owner-glance__line">{ownerActionGlanceLine(nextAction)}</p>
+          <Link className="button button--dark button--md full-width" to={nextAction.href}>
+            Do this: Open {ownerActionSurface(nextAction.href)}{' '}
+            <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        </>
+      )}
+      <p className="owner-glance__clock">{glance.clockLabel}</p>
     </section>
   );
 }
@@ -449,56 +494,66 @@ function OwnerActionGroup({
   detail,
   items,
   nextActionId,
+  countsKnown,
 }: {
   heading: string;
   detail: string;
   items: OwnerActionItem[];
   nextActionId?: string;
+  countsKnown: boolean;
 }) {
-  if (items.length === 0) return null;
   return (
     <section className="owner-queue-group" aria-label={heading}>
       <h3 className="owner-queue-group__title">
-        {heading} <span>{items.length}</span>
+        {heading} <span>{countsKnown ? items.length : '—'}</span>
       </h3>
       <p className="owner-queue-group__detail">{detail}</p>
-      <ul className="owner-queue-list">
-        {items.map((item) => {
-          const isNext = item.id === nextActionId;
-          return (
-            <li
-              className={isNext ? 'owner-queue-row owner-queue-row--next' : 'owner-queue-row'}
-              key={item.id}
-            >
-              <span className="owner-queue-row__icon" aria-hidden="true">
-                <OwnerActionKindIcon kind={item.kind} />
-              </span>
-              <div>
-                <div className="owner-queue-row__headline">
-                  <Link to={item.href}>{item.title}</Link>
-                  {isNext && <Badge tone="danger">Doing this next</Badge>}
-                  <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>
-                    {item.priority}
-                  </Badge>
+      {items.length === 0 ? (
+        <p className="owner-queue-empty">
+          {countsKnown
+            ? 'None in this projection. This is not a clearance.'
+            : 'Count withheld. Zero would be a guess until the workspace is current.'}
+        </p>
+      ) : (
+        <ul className="owner-queue-list">
+          {items.map((item) => {
+            const isNext = item.id === nextActionId;
+            return (
+              <li
+                className={isNext ? 'owner-queue-row owner-queue-row--next' : 'owner-queue-row'}
+                key={item.id}
+              >
+                <span className="owner-queue-row__icon" aria-hidden="true">
+                  <OwnerActionKindIcon kind={item.kind} />
+                </span>
+                <div>
+                  <div className="owner-queue-row__headline">
+                    <Link to={item.href}>{item.title}</Link>
+                    {isNext && <Badge tone="danger">Doing this next</Badge>}
+                    <Badge tone={item.priority === 'P0' ? 'danger' : 'warning'}>
+                      {item.priority}
+                    </Badge>
+                  </div>
+                  <p className="owner-queue-row__glance">{ownerActionGlanceLine(item)}</p>
+                  <p className="owner-queue-row__fact">{item.fact}</p>
+                  <p className="owner-queue-row__do">
+                    <span>Do: </span>
+                    {item.recommendation}
+                  </p>
+                  {item.blockedBy && (
+                    <p className="owner-queue-row__block">Blocked by {item.blockedBy}</p>
+                  )}
+                  <OwnerActionEntities entities={item.entities} />
+                  <small className="owner-queue-row__source">Source: {item.source}</small>
                 </div>
-                <p className="owner-queue-row__fact">{item.fact}</p>
-                <p className="owner-queue-row__do">
-                  <span>Do: </span>
-                  {item.recommendation}
-                </p>
-                {item.blockedBy && (
-                  <p className="owner-queue-row__block">Blocked by {item.blockedBy}</p>
-                )}
-                <OwnerActionEntities entities={item.entities} />
-                <small className="owner-queue-row__source">Source: {item.source}</small>
-              </div>
-              <Link className="owner-queue-row__go" to={item.href}>
-                {ownerActionSurface(item.href)}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                <Link className="owner-queue-row__go" to={item.href}>
+                  {ownerActionSurface(item.href)}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
@@ -510,44 +565,74 @@ function OwnerActionQueue({
   projection: OwnerCommandCenterProjection;
   heading?: string;
 }) {
-  const holdTally =
-    projection.holds.length === 1
-      ? '1 hold stops work'
-      : `${projection.holds.length} holds stop work`;
+  const stoppingHolds = projection.glance.p0Holds ?? 0;
+  const otherHolds = projection.holds.length - stoppingHolds;
+  const stoppingLabel =
+    stoppingHolds === 1 ? '1 hold stops work' : `${stoppingHolds} holds stop work`;
+  const behindLabel =
+    otherHolds === 0
+      ? ''
+      : stoppingHolds === 0
+        ? otherHolds === 1
+          ? '1 hold still blocks a safe step'
+          : `${otherHolds} holds still block a safe step`
+        : ` · ${otherHolds} more ${otherHolds === 1 ? 'hold' : 'holds'}`;
+  const holdTally = !projection.glance.countsKnown
+    ? 'Counts withheld · not a live tally'
+    : stoppingHolds === 0
+      ? behindLabel || '0 holds stop work'
+      : `${stoppingLabel}${behindLabel}`;
   return (
     <Card className="section-card owner-command-center">
       <div className="section-card__header">
         <div>
           <h2>{heading}</h2>
           <p className="owner-queue-tally">
-            {holdTally}
-            {' · '}
-            {ownerQueueCount(projection.decisions.length, 'decision')}
-            {' · '}
-            {ownerQueueCount(projection.followUps.length, 'follow-up')}
+            {projection.glance.countsKnown ? (
+              <>
+                {holdTally}
+                {' · '}
+                {ownerQueueCount(projection.decisions.length, 'decision')}
+                {' · '}
+                {ownerQueueCount(projection.followUps.length, 'follow-up')}
+              </>
+            ) : (
+              holdTally
+            )}
           </p>
           <p className="section-card__subtitle">
             {projection.mode} workspace · sourced {projection.sourcedAt}
           </p>
         </div>
-        <Badge tone={projection.holds.length > 0 ? 'danger' : 'info'}>
-          {projection.holds.length === 0 ? 'No holds' : 'Holds first'}
+        <Badge
+          tone={projection.glance.countsKnown && projection.holds.length === 0 ? 'info' : 'danger'}
+        >
+          {!projection.glance.countsKnown
+            ? 'Not current'
+            : projection.holds.length === 0
+              ? 'None in view'
+              : 'Holds first'}
         </Badge>
       </div>
       {projection.nextAction && <OwnerNextActionStrip action={projection.nextAction} />}
-      {projection.actions.length > 0 ? (
-        ownerQueueGroups.map((group) => (
-          <OwnerActionGroup
-            key={group.key}
-            heading={group.heading}
-            detail={group.detail}
-            items={projection[group.key]}
-            nextActionId={projection.nextAction?.id}
-          />
-        ))
-      ) : (
+      {!projection.glance.countsKnown && (
+        <p className="owner-queue-stale">
+          These rows are the last projection. They are not a live tally.
+        </p>
+      )}
+      {ownerQueueGroups.map((group) => (
+        <OwnerActionGroup
+          key={group.key}
+          heading={group.heading}
+          detail={group.detail}
+          items={projection[group.key]}
+          nextActionId={projection.nextAction?.id}
+          countsKnown={projection.glance.countsKnown}
+        />
+      ))}
+      {projection.actions.length === 0 && projection.glance.countsKnown && (
         <div className="incident-empty">
-          <CheckCircle2 size={22} />
+          <ShieldAlert size={22} />
           <div>
             <h3>No role-visible action is due</h3>
             <p>This does not claim that provider-side or hidden records are clear.</p>
@@ -590,24 +675,34 @@ function LeadStageCounts({ leads }: { leads: DemoState['leads'] }) {
           Open pipeline <ArrowRight size={12} />
         </Link>
       </div>
-      <div className="pipeline-pulse">
-        {leadStages.map((stage) => {
-          const count = leads.filter((lead) => lead.stage === stage).length;
-          return (
-            <div className="pulse-row" key={stage}>
-              <span>{stage}</span>
-              <Progress
-                value={count}
-                max={Math.max(1, leads.length)}
-                label={`${stage} leads`}
-                tone="green"
-              />
-              <strong>—</strong>
-              <small>{count}</small>
-            </div>
-          );
-        })}
-      </div>
+      {leads.length === 0 ? (
+        <div className="incident-empty">
+          <Inbox size={22} />
+          <div>
+            <h3>No leads in this projection</h3>
+            <p>This is not an empty pipeline. Hidden or unscoped leads are not counted here.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="pipeline-pulse">
+          {leadStages.map((stage) => {
+            const count = leads.filter((lead) => lead.stage === stage).length;
+            return (
+              <div className="pulse-row" key={stage}>
+                <span>{stage}</span>
+                <Progress
+                  value={count}
+                  max={Math.max(1, leads.length)}
+                  label={`${stage} leads`}
+                  tone="green"
+                />
+                <strong>—</strong>
+                <small>{count}</small>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
@@ -746,6 +841,7 @@ export function DashboardPage() {
 
   return (
     <div className="page">
+      <OwnerCommandGlance projection={ownerProjection} />
       <PageHeader
         eyebrow="Command center"
         title={`Good morning, ${ownerFirstName}.`}
@@ -998,8 +1094,21 @@ function LiveDashboardPage() {
   const visibleDashboardVisits =
     state.role === 'owner' ? ownerProjection.today.visits : state.visits;
 
+  const todayGap =
+    state.role === 'owner'
+      ? ownerTodayVisitGapNote(ownerProjection.today, ownerProjection.freshness)
+      : undefined;
+  const todayEmpty =
+    state.role === 'owner'
+      ? ownerTodayVisitEmptyCopy(ownerProjection.today, ownerProjection.freshness)
+      : {
+          heading: 'No visits in this projection',
+          detail: 'Technicians see assigned visits only; other roles receive company scope.',
+        };
+
   return (
     <div className="page">
+      {state.role === 'owner' && <OwnerCommandGlance projection={ownerProjection} />}
       <PageHeader
         eyebrow="Authenticated command center"
         title={state.live?.companyName ?? 'StoryOps workspace'}
@@ -1099,7 +1208,9 @@ function LiveDashboardPage() {
                 </h2>
                 <p className="section-card__subtitle">
                   {state.role === 'owner'
-                    ? `${ownerProjection.today.localDate ?? 'Date unavailable'} · ${ownerProjection.today.timeZone}`
+                    ? ownerProjection.freshness === 'untimed'
+                      ? `Today is unknown · ${ownerProjection.today.timeZone}`
+                      : `${ownerProjection.today.localDate ?? 'Date unavailable'} · ${ownerProjection.today.timeZone}`
                     : 'No availability, route, or weather state is inferred'}
                 </p>
               </div>
@@ -1131,19 +1242,12 @@ function LiveDashboardPage() {
               <div className="incident-empty">
                 <CalendarClock size={22} />
                 <div>
-                  <h3>
-                    {state.role === 'owner'
-                      ? 'No company-local visits today'
-                      : 'No visits in this projection'}
-                  </h3>
-                  <p>
-                    {state.role === 'owner'
-                      ? 'This uses exact server visit starts in the company timezone; it does not claim future capacity.'
-                      : 'Technicians see assigned visits only; other roles receive company scope.'}
-                  </p>
+                  <h3>{todayEmpty.heading}</h3>
+                  <p>{todayEmpty.detail}</p>
                 </div>
               </div>
             )}
+            {todayGap && <p className="owner-queue-stale">{todayGap}</p>}
           </Card>
 
           <LeadStageCounts leads={state.leads} />
