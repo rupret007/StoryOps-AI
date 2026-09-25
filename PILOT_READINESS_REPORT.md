@@ -1,4 +1,4 @@
-# StoryOps AI V1.1 pilot readiness
+# WashOps V1.1 pilot readiness
 
 **Assessment date:** July 30, 2026 (America/Chicago); evidence collected
 through `2026-07-31T03:04Z`  
@@ -13,7 +13,7 @@ screenshots or hosted/provider evidence exists
 
 ## Executive decision
 
-StoryOps AI V1.1 is a production-shaped operating system with an exterior-
+WashOps V1.1 is a production-shaped operating system with an exterior-
 cleaning starter pack, not a claim of universal industry support. The reusable
 kernel owns CRM, property, deterministic pricing, approvals, dispatch, offline
 field execution, billing truth, portal access, AI governance, integrations,

@@ -1,6 +1,6 @@
-# StoryOps AI
+# WashOps (formerly StoryOps AI)
 
-StoryOps AI is an AI-first service-business operating system. V1.1 runs one
+WashOps is an AI-first service-business operating system. V1.1 runs one
 company and ships its first complete industry pack for an owner-operated
 exterior-cleaning business: pressure washing, soft washing, gutter/downspout
 cleaning, roof washing, and window cleaning. The reusable kernel owns identity,

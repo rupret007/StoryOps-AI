@@ -225,7 +225,7 @@ function Brand() {
         <Sparkles size={18} strokeWidth={2.4} aria-hidden="true" />
       </span>
       <span className="brand__name">
-        StoryOps AI
+        WashOps
         <span className="brand__edition">Exterior services</span>
       </span>
     </div>
@@ -237,7 +237,7 @@ function Sidebar() {
   const pendingApprovals = state.approvals.filter((item) => item.status === 'pending').length;
   const newLeads = state.leads.filter((lead) => lead.stage === 'new').length;
   const sandboxOwner = state.setupProfile?.ownerName ?? 'Jeff Story';
-  const companyName = state.live?.companyName ?? state.setupProfile?.businessName ?? 'StoryOps';
+  const companyName = state.live?.companyName ?? state.setupProfile?.businessName ?? 'WashOps';
 
   const renderNav = (items: NavItem[]) => (
     <ul className="nav-list">
@@ -353,7 +353,7 @@ function Topbar({
       : state.serverVerifiedAt
         ? `The authenticated server was last verified at ${state.serverVerifiedAt}.`
         : state.online
-          ? 'The browser network is available, but StoryOps has not verified the authenticated server.'
+          ? 'The browser network is available, but WashOps has not verified the authenticated server.'
           : 'The browser reports no network connection.';
 
   const changeRole = (role: AppRole) => {
@@ -402,7 +402,7 @@ function Topbar({
         ref={searchButtonRef}
         className="command-trigger"
         type="button"
-        aria-label="Search StoryOps"
+        aria-label="Search WashOps"
         aria-haspopup="dialog"
         onClick={(event) => onSearch(event.currentTarget)}
       >
@@ -485,7 +485,7 @@ function Topbar({
             <button
               className="icon-button topbar__clear-device"
               type="button"
-              aria-label="Clear synced StoryOps data from this device"
+              aria-label="Clear synced WashOps data from this device"
               title="Clear this device and sign out"
               onClick={() => void actions.clearThisDevice()}
             >
@@ -554,7 +554,7 @@ function MobileMenu({ onClose }: { onClose(): void }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const pendingApprovals = state.approvals.filter((item) => item.status === 'pending').length;
   const newLeads = state.leads.filter((lead) => lead.stage === 'new').length;
-  const companyName = state.live?.companyName ?? state.setupProfile?.businessName ?? 'StoryOps';
+  const companyName = state.live?.companyName ?? state.setupProfile?.businessName ?? 'WashOps';
 
   useDialogKeyboard(dialogRef, onClose, closeButtonRef);
 
@@ -640,7 +640,7 @@ function MobileMenu({ onClose }: { onClose(): void }) {
         <header className="mobile-menu__header">
           <div>
             <p className="eyebrow">Navigation</p>
-            <h2 id="mobile-navigation-title">StoryOps workspace</h2>
+            <h2 id="mobile-navigation-title">WashOps workspace</h2>
           </div>
           <button
             ref={closeButtonRef}
@@ -726,7 +726,7 @@ function MobileMenu({ onClose }: { onClose(): void }) {
                   void actions.signOut();
                 }}
               >
-                Sign out of StoryOps
+                Sign out of WashOps
               </Button>
               <Button
                 variant="ghost"
@@ -812,7 +812,7 @@ function CommandPalette({ onClose }: { onClose(): void }) {
         className="command-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Search StoryOps"
+        aria-label="Search WashOps"
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >

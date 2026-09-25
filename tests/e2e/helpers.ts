@@ -103,7 +103,7 @@ export async function publishSandboxCompanyConfiguration(page: Page): Promise<vo
 
 async function openMobileNavigation(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Open navigation menu' }).click();
-  const menu = page.getByRole('dialog', { name: 'StoryOps workspace' });
+  const menu = page.getByRole('dialog', { name: 'WashOps workspace' });
   await expect(menu).toBeVisible();
   return menu;
 }

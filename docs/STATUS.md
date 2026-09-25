@@ -1,4 +1,4 @@
-# StoryOps AI current status
+# WashOps current status
 
 **Updated:** 2026-07-30  
 **Branch:** `main`  
@@ -22,7 +22,7 @@ stores.
 
 ## Executive status
 
-StoryOps AI V1.1 implements a single-company service-business kernel and one
+WashOps V1.1 implements a single-company service-business kernel and one
 exterior-cleaning industry pack. The pack covers pressure/soft washing,
 gutter/downspout cleaning, roof washing, exterior window cleaning, and related
 add-ons. The kernel covers CRM/property records, deterministic pricing,

@@ -12,7 +12,7 @@ test('mobile navigation and command search remain complete and keyboard-containe
   await menuTrigger.focus();
   await menuTrigger.click();
 
-  const menu = page.getByRole('dialog', { name: 'StoryOps workspace' });
+  const menu = page.getByRole('dialog', { name: 'WashOps workspace' });
   await expect(menu).toBeVisible();
   for (const destination of [
     'Command center',
@@ -45,11 +45,11 @@ test('mobile navigation and command search remain complete and keyboard-containe
   await expect(menu).toBeHidden();
   await expect(menuTrigger).toBeFocused();
 
-  const searchTrigger = page.getByRole('button', { name: 'Search StoryOps' });
+  const searchTrigger = page.getByRole('button', { name: 'Search WashOps' });
   await searchTrigger.focus();
   await searchTrigger.click();
 
-  const searchDialog = page.getByRole('dialog', { name: 'Search StoryOps' });
+  const searchDialog = page.getByRole('dialog', { name: 'Search WashOps' });
   const searchInput = searchDialog.getByRole('textbox', { name: 'Search' });
   await expect(searchInput).toBeFocused();
   await expect(page.locator('.app-shell__chrome')).toHaveAttribute('inert', '');
