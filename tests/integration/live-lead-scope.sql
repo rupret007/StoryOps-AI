@@ -166,4 +166,4 @@ $$;
 
 rollback;
 
-\echo 'StoryOps live lead-scope contract passed'
+\echo 'WashOps live lead-scope contract passed'

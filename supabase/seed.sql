@@ -130,7 +130,7 @@ insert into public.companies (
 )
 values (
   '10000000-0000-4000-8000-000000000001',
-  'StoryOps Exterior Services',
+  'WashOps Exterior Services',
   'America/Chicago',
   '{
     "serviceArea": "Dallas–Fort Worth",
@@ -190,7 +190,7 @@ values (
   '10000000-0000-4000-8000-000000000001',
   'terms-v1',
   'approved',
-  'Local sandbox service terms: scope is limited to the accepted quote; the customer provides safe access and working water; StoryOps stops work when conditions are unsafe. Replace with qualified, jurisdiction-specific review evidence before any production launch.',
+  'Local sandbox service terms: scope is limited to the accepted quote; the customer provides safe access and working water; WashOps stops work when conditions are unsafe. Replace with qualified, jurisdiction-specific review evidence before any production launch.',
   'LOCAL-SANDBOX-ONLY-NOT-LEGAL-ADVICE',
   '10000000-0000-4000-8000-000000000101',
   now(),
@@ -1616,7 +1616,7 @@ values (
   'outbound',
   '+12145550100',
   array['+12145550172'],
-  'Your StoryOps demo visit is confirmed. Reply STOP to opt out.',
+  'Your WashOps demo visit is confirmed. Reply STOP to opt out.',
   'mock-sms-demo-001',
   'delivered',
   '10000000-0000-4000-8000-000000000231',

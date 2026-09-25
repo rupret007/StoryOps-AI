@@ -6,7 +6,7 @@
 **Release evidence:** V1.1 final source-freeze verification and local release
 commit pending
 
-This runbook authorizes one signed-in owner to provision one StoryOps company in
+This runbook authorizes one signed-in owner to provision one WashOps company in
 `setup` status. It does not authorize launch, publish pricing or terms, activate
 services or providers, open the ordinary operational workspace, contact a
 customer, or move money.
@@ -57,7 +57,7 @@ that configured UUID.
 
 4. Confirm that the email belongs to the intended owner. Do not delegate the
    invitation to an AI agent or accept an owner-supplied JWT.
-5. Have the owner sign in through the StoryOps magic-link screen. A successful
+5. Have the owner sign in through the WashOps magic-link screen. A successful
    invitation yields `status: "required"` from
    `get_storyops_setup_state(company_uuid)`; it does not create a company yet.
 
@@ -101,7 +101,7 @@ workspace while the company remains `setup`.
 Before live publication, register every configured material that requires an
 SDS:
 
-1. Obtain the manufacturer-issued PDF and record its source/reference. StoryOps
+1. Obtain the manufacturer-issued PDF and record its source/reference. WashOps
    does not create mixing, application, PPE, disposal, emergency, or other
    chemical instructions.
 2. In configuration, select the reviewed PDF to calculate its SHA-256, complete

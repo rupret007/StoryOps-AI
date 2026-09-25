@@ -1,4 +1,4 @@
--- StoryOps authenticated, normalized, idempotent command boundary.
+-- WashOps authenticated, normalized, idempotent command boundary.
 -- This is intentionally a finite command vocabulary rather than a generic JSON
 -- row overwrite. Roles and assignment are derived from auth.uid() on every call.
 
@@ -69,7 +69,7 @@ begin
     'signature.capture', 'incident.report', 'incident.close', 'notification.read',
     'approval.decide'
   ) then
-    raise exception 'Unsupported StoryOps command type';
+    raise exception 'Unsupported WashOps command type';
   end if;
   if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
     raise exception 'Command payload must be a JSON object';
@@ -1133,7 +1133,7 @@ grant execute on function public.execute_storyops_command(
 comment on function public.execute_storyops_command(
   uuid, uuid, text, integer, jsonb, text
 ) is
-  'Authenticated normalized StoryOps command boundary with DB-derived RBAC, assignment checks, optimistic versions, atomic idempotency, and offline command IDs.';
+  'Authenticated normalized WashOps command boundary with DB-derived RBAC, assignment checks, optimistic versions, atomic idempotency, and offline command IDs.';
 
 create or replace function public.get_storyops_field_reference(p_company_id uuid)
 returns jsonb

@@ -672,4 +672,4 @@ $$;
 
 rollback;
 
-\echo 'StoryOps live field completion contract passed'
+\echo 'WashOps live field completion contract passed'

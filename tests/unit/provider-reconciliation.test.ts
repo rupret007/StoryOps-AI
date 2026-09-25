@@ -126,7 +126,7 @@ describe('provider webhook reconciliation contracts', () => {
     });
   });
 
-  it('requires an approved StoryOps reference on refund events', () => {
+  it('requires an approved WashOps reference on refund events', () => {
     const parsed = parseStripeReconciliation({
       id: 'evt_refund',
       type: 'refund.updated',

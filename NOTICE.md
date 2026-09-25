@@ -1,6 +1,6 @@
-# StoryOps AI notices
+# WashOps notices
 
-StoryOps AI is an original extension built on architectural and user-interface
+WashOps is an original extension built on architectural and user-interface
 patterns from [Atomic CRM](https://github.com/marmelab/atomic-crm), used under
 the MIT License. The preserved upstream license is in `LICENSE.atomic-crm.md`.
 

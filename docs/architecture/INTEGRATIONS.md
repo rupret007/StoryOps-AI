@@ -1,10 +1,10 @@
-# StoryOps Integration Architecture
+# WashOps Integration Architecture
 
 **Status:** V1 provider contracts, sandbox suite, server adapters, and webhook boundary  
 **Owner:** Company owner for accounts/consent; principal engineer for adapters/secrets  
 **Last reviewed:** 2026-07-29
 
-StoryOps runs fully in sandbox mode without keys. Live connections are server-only, opt-in, health
+WashOps runs fully in sandbox mode without keys. Live connections are server-only, opt-in, health
 checked, and activated individually. No provider result is treated as success until the provider
 returns an authoritative ID and state.
 
@@ -62,7 +62,7 @@ without reopening uploads.
 
 ## Shared guarantees
 
-StoryOps correlation/idempotency keys are derived from authenticated server execution context rather than model
+WashOps correlation/idempotency keys are derived from authenticated server execution context rather than model
 payload. Every provider exposes a health contract with
 provider, capability, mode, status, latency, message, and required environment names. Secrets are
 never included in this response.
@@ -147,7 +147,7 @@ and consent evidence IDs after checking the latest grant, customer suppression, 
 database-computed destination fingerprint; it never returns a phone number, email, or subject ID.
 
 Inbound SMS recognizes standard STOP-like and START-like keywords. After signature verification,
-StoryOps normalizes `From`, stores only its SHA-256 fingerprint in the durable receipt, and asks the
+WashOps normalizes `From`, stores only its SHA-256 fingerprint in the durable receipt, and asks the
 database to resolve exactly one company customer or lead by a database-computed fingerprint. STOP
 atomically sets a matched customer’s `do_not_contact`, appends withdrawn SMS consent for both
 transactional and marketing purposes, and records a redacted provider audit. A missing or ambiguous
@@ -183,7 +183,7 @@ workflow.
 10. apply the company/reference/amount/status transition atomically; and
 11. mark the event processed/ignored, or persist a bounded failure code.
 
-Stripe events reconcile local invoice/payment/refund state only when StoryOps metadata, stable
+Stripe events reconcile local invoice/payment/refund state only when WashOps metadata, stable
 provider IDs, USD integer amounts, and local deterministic records agree. Twilio/email callbacks
 reconcile one outbound communication by provider message ID; opt-in/out signals update the matching
 contact’s consent/suppression state without storing message bodies or raw contact data. Reusing an
@@ -193,7 +193,7 @@ currently processing duplicate returns a no-op receipt and does not apply a seco
 Stripe warns that signature verification requires the untouched raw request body; see
 [Stripe webhook signatures](https://docs.stripe.com/webhooks/signature). Twilio signs requests
 using the configured URL and request parameters; reverse proxies can change the apparent scheme or
-host, so StoryOps requires the canonical public URL in `TWILIO_WEBHOOK_URL`. See
+host, so WashOps requires the canonical public URL in `TWILIO_WEBHOOK_URL`. See
 [Twilio webhook security](https://www.twilio.com/docs/usage/tutorials/how-to-secure-your-servlet-app-by-validating-incoming-twilio-requests).
 
 ## Provider-specific notes
@@ -205,7 +205,7 @@ host, so StoryOps requires the canonical public URL in `TWILIO_WEBHOOK_URL`. See
 - Agents SDK code exists only in Node/Edge server adapters.
 - Structured output is validated again in application code.
 - SDK trace spans omit sensitive inputs/outputs; application traces are redacted.
-- Tools remain outside the SDK model run and execute only after StoryOps policy.
+- Tools remain outside the SDK model run and execute only after WashOps policy.
 
 ### Twilio and email
 

@@ -1,4 +1,4 @@
-# StoryOps AI administrator guide
+# WashOps administrator guide
 
 **Audience:** owner and designated dispatcher/operator  
 **Status:** V1 sandbox operations plus production activation controls  
@@ -134,7 +134,7 @@ be processed by the trusted orphan-cleanup worker.
 Do not disable reconciliation just because the company is paused. Signed
 callbacks/provider retrieval for already accepted external work, bounded
 failure bookkeeping, approved retention processing, and orphan cleanup remain
-available so StoryOps does not lose external truth or leave abandoned objects.
+available so WashOps does not lose external truth or leave abandoned objects.
 Do not use those narrow paths to start new customer work.
 
 To reactivate:
@@ -186,7 +186,7 @@ not editing history. Existing estimates/quotes retain their source version and
 calculation snapshot.
 
 Mileage bands are optional descriptive metadata; they never select a fee.
-StoryOps resolves a travel fee only from one exact reviewed ZIP mapping.
+WashOps resolves a travel fee only from one exact reviewed ZIP mapping.
 Unmapped or multiply mapped ZIPs block the estimate. After upgrading an
 installation with a legacy active price book, check
 `companies.settings.travelZoneRemediationRequired`. If true, review the ZIP
@@ -299,7 +299,7 @@ still not healthy until its active probe and canary are recorded.
   durable pre-submit boundary but lacks a safely completed local receipt. It is
   excluded from automatic claims. Do not resend it; reconcile the signed
   callback/provider account and preserve the exact SID if one exists.
-- `post-service:<followup UUID>` is a StoryOps correlation key, not a Twilio
+- `post-service:<followup UUID>` is a WashOps correlation key, not a Twilio
   Message-create idempotency guarantee.
 - Live post-service marketing email is disabled in V1 until a signed
   unsubscribe endpoint and durable suppression/bounce/complaint path pass
@@ -340,7 +340,7 @@ may register evidence. Live queue state is scoped to the signed-in user and
 company and is purged on sign-out or identity mismatch. Media uploads are not
 discarded when offline: original bytes, local SHA-256, stable UUID, upload,
 finalization work, and signature dependencies remain in the scoped IndexedDB
-packet. On replay, StoryOps reads uploaded bytes back before the database may
+packet. On replay, WashOps reads uploaded bytes back before the database may
 register the matching Storage object. A completion request remains visibly
 pending and the visit is not completed until those dependencies and the exact
 completion RPC reconcile. Do not clear a failed packet; record the conflict and
@@ -432,5 +432,5 @@ complete. The
 [field safety checklist](launch/EXTERIOR-CLEANING-SAFETY-CHECKLIST.md) is a
 control framework, not a chemical recipe, disposal authorization, equipment
 manual, rescue plan, or substitute for a qualified reviewer. The approved
-retention schedule, production restore drill, and StoryOps AI root-project
+retention schedule, production restore drill, and WashOps root-project
 distribution license are separate manual YELLOW gates.

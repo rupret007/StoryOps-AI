@@ -135,7 +135,7 @@ export function ownerActionGlanceLine(action: OwnerActionItem): string {
     records === 0
       ? 'No named record on this line.'
       : records === 1
-        ? `Record: ${action.entities![0].label}.`
+        ? `Record: ${action.entities?.[0]?.label}.`
         : `${records} named records.`;
   if (action.kind === 'hold' && action.priority === 'P0') return `Stops work. ${named}`;
   if (action.kind === 'hold') return `Still blocks a safe step. ${named}`;

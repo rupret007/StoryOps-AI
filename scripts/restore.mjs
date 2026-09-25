@@ -196,7 +196,7 @@ const argv = process.argv.slice(2);
 let activeRestoreStagingDirectory;
 
 function usage() {
-  process.stdout.write(`StoryOps AI Supabase restore
+  process.stdout.write(`WashOps Supabase restore
 
 Usage:
   node scripts/restore.mjs --backup DIRECTORY [options]
@@ -591,7 +591,7 @@ async function assertPilotBackupAuthority(backup) {
       canonicalJson(expectedSchemaSentinels);
   if (!migrationEvidenceIsExact || !schemaEvidenceIsExact) {
     throw new Error(
-      `Pilot restore evidence requires a backup produced from the exact StoryOps release migration ${REQUIRED_STORYOPS_MIGRATION}.`,
+      `Pilot restore evidence requires a backup produced from the exact WashOps release migration ${REQUIRED_STORYOPS_MIGRATION}.`,
     );
   }
   if (

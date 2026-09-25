@@ -1,4 +1,4 @@
-# StoryOps bounded-pilot operator runbook
+# WashOps bounded-pilot operator runbook
 
 **Audience:** owner/operator, dispatcher, and assigned technician  
 **Status:** operating checklist; not legal, tax, insurance, environmental, or safety advice  

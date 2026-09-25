@@ -34,7 +34,7 @@ async function completeSandboxSetup() {
   await screen.findByText('AI office ready · manual runs', {}, lazyRouteTimeout);
 }
 
-describe('StoryOps application shell', () => {
+describe('WashOps application shell', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });

@@ -44,7 +44,7 @@ describe('live public integration adapters', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ features: [] }));
     vi.stubGlobal('fetch', fetchMock);
-    const provider = new NwsWeatherProvider('StoryOps AI test (ops@example.test)');
+    const provider = new NwsWeatherProvider('WashOps test (ops@example.test)');
 
     const result = await provider.forecast({
       coordinates: { latitude: 33.0462, longitude: -96.9942 },
@@ -145,7 +145,7 @@ describe('live public integration adapters', () => {
       .mockResolvedValueOnce(jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
 
-    const provider = new NwsWeatherProvider('StoryOps AI test (ops@example.test)');
+    const provider = new NwsWeatherProvider('WashOps test (ops@example.test)');
     await expect(
       provider.forecast({
         coordinates: { latitude: 33.0462, longitude: -96.9942 },

@@ -21,7 +21,7 @@ known.
 - [ ] Stable IDs agree
 - [ ] Duplicate/conflicting events investigated
 - [ ] Failed items have owners
-- [ ] Manual actions entered into StoryOps
+- [ ] Manual actions entered into WashOps
 - [ ] Audit evidence preserved
 
 - Completed by:

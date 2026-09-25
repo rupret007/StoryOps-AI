@@ -607,4 +607,4 @@ $$;
 
 rollback;
 
-\echo 'StoryOps immutable setup receipt authority contract passed.'
+\echo 'WashOps immutable setup receipt authority contract passed.'

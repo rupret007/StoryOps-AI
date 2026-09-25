@@ -1539,7 +1539,7 @@ Deno.serve(async (request) => {
     try {
       calendarEntry = await suite.calendar.createBooking({
         calendarId: suite.calendar.allowedCalendarIds[0]!,
-        title: `StoryOps ${textValue(job, 'job_number')}`,
+        title: `WashOps ${textValue(job, 'job_number')}`,
         window: normalizedWindow,
         timeZone,
         jobId: input.jobId,

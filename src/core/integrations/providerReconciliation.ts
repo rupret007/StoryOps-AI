@@ -222,7 +222,7 @@ function failureCode(object: JsonObject): string | undefined {
 }
 
 /**
- * Parses only identifiers, statuses, integer provider amounts, and StoryOps
+ * Parses only identifiers, statuses, integer provider amounts, and WashOps
  * metadata. The returned receipt intentionally excludes customer, card,
  * address, body, email, and phone fields before durable storage.
  */

@@ -17,7 +17,7 @@ const mocked = vi.hoisted(() => ({
 
 vi.mock('@/state/StoryOpsProvider', () => ({
   useStoryOps: () => {
-    if (!mocked.value) throw new Error('Test StoryOps context was not initialized.');
+    if (!mocked.value) throw new Error('Test WashOps context was not initialized.');
     return mocked.value;
   },
 }));

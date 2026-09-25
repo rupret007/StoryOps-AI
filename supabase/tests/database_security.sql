@@ -718,4 +718,4 @@ $$;
 reset role;
 
 rollback;
-\echo 'StoryOps database security contract passed'
+\echo 'WashOps database security contract passed'

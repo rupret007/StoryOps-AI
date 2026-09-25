@@ -473,7 +473,7 @@ async function executeLeadCommand(
   });
   if (error) {
     throw boundaryError(
-      `StoryOps ${commandType} command was rejected.`,
+      `WashOps ${commandType} command was rejected.`,
       'STORYOPS_COMMAND_REJECTED',
       error,
     );
@@ -481,7 +481,7 @@ async function executeLeadCommand(
   const parsed = commandReceiptSchema.safeParse(data);
   if (!parsed.success || parsed.data.commandId !== commandId) {
     throw boundaryError(
-      `StoryOps ${commandType} command returned an invalid receipt.`,
+      `WashOps ${commandType} command returned an invalid receipt.`,
       'INVALID_COMMAND_RECEIPT',
     );
   }

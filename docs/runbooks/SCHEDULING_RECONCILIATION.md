@@ -3,10 +3,10 @@
 ## Purpose
 
 The scheduling reconciliation worker safely closes Google Calendar booking
-attempts that did not become a StoryOps visit. It covers two durable ambiguity
+attempts that did not become a WashOps visit. It covers two durable ambiguity
 windows:
 
-1. StoryOps recorded a pre-provider booking attempt, but the provider call or
+1. WashOps recorded a pre-provider booking attempt, but the provider call or
    exact read-back became uncertain.
 2. Google Calendar confirmed an event, but the scheduling-evidence receipt was
    not persisted or was never consumed before expiry.
@@ -168,15 +168,15 @@ reviewed operator environment.
 1. Set `SCHEDULING_RECONCILIATION_LIVE_ENABLED=false` if failures suggest a
    systemic provider/configuration issue. Confirm the worker returns
    `status: inactive` and `claimed: 0`.
-2. Open an incident. Record the StoryOps case ID, attempt ID, job ID, calendar
+2. Open an incident. Record the WashOps case ID, attempt ID, job ID, calendar
    ID, deterministic event ID, expected window, expected etag, and error code.
    Do not copy customer details into the incident unless required.
 3. In Google Calendar, retrieve that exact event ID from the configured calendar.
-   Verify its StoryOps private properties, time window, status, and current etag.
+   Verify its WashOps private properties, time window, status, and current etag.
    A title or customer name is not sufficient identity evidence.
 4. If any identity field differs, do not delete the event. Escalate for database
    and provider review.
-5. If identity is exact and StoryOps has no consumed visit, cancel the exact
+5. If identity is exact and WashOps has no consumed visit, cancel the exact
    event with the observed etag under the incident/change approval. If a visit
    exists, retain the event and investigate the booking-versus-cleanup fence.
 6. Release equipment only after exact calendar cleanup is confirmed and no visit

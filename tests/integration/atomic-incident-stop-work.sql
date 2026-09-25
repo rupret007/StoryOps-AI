@@ -1123,4 +1123,4 @@ $$;
 
 rollback;
 
-\echo 'StoryOps atomic incident stop-work contract passed'
+\echo 'WashOps atomic incident stop-work contract passed'

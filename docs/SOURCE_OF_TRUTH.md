@@ -1,4 +1,4 @@
-# StoryOps AI source-of-truth policy
+# WashOps source-of-truth policy
 
 **Status:** authoritative V1.1 governance policy  
 **Owner:** company owner (business policy) and principal engineer (technical controls)  
@@ -6,11 +6,11 @@
 **Review trigger:** any change to pricing, SOPs, roles, approvals, AI tools,
 providers, retention, or launch status
 
-StoryOps is safe only when every decision can name the record that controls it.
+WashOps is safe only when every decision can name the record that controls it.
 An AI summary, chat message, dashboard card, photo inference, stale cache, or
 customer claim never becomes truth merely because it is plausible.
 
-StoryOps is a reusable service-business operating kernel plus a versioned
+WashOps is a reusable service-business operating kernel plus a versioned
 industry pack. V1.1 supports the `exterior-services` pack. A pack may define
 services, measurement schemas, deterministic formulas, evidence policy,
 checklists, skills, equipment, and reviewed operating guidance; it may never

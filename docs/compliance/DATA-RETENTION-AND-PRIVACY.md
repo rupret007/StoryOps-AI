@@ -16,7 +16,7 @@
 - Separate identity/contact data, service evidence, payments, communications,
   agent traces, and audit records so access and retention can differ.
 - Do not place SSNs, full payment-card/bank data, passwords, API/OAuth tokens,
-  chemical formulas, or unneeded health information in StoryOps.
+  chemical formulas, or unneeded health information in WashOps.
 - A customer-facing deletion does not erase audit evidence without an approved
   retention decision; minimize/deidentify retained evidence where permitted.
 - Backup retention is not an exception to privacy. Deleted primary data expires
@@ -75,7 +75,7 @@ reserved for narrowly scoped server/operations paths and must never be a client
 fallback.
 
 The V1 browser cache is scoped by signed-in user/company and purged on sign-out
-or identity mismatch, but StoryOps does not provide application-level
+or identity mismatch, but WashOps does not provide application-level
 encryption for IndexedDB. Production device encryption, OS/browser access,
 session lifetime, lost-device response, managed-device policy, and whether
 offline customer data is permitted are manual YELLOW privacy/security gates.
@@ -133,7 +133,7 @@ retention.
 
 ## Payment and finance data
 
-- Stripe-hosted pages collect card data. StoryOps stores provider customer/
+- Stripe-hosted pages collect card data. WashOps stores provider customer/
   checkout/invoice/payment IDs, decimal amounts, currency, timestamps, and
   verified status—not card numbers, CVC, bank credentials, or checkout-session
   secrets.
@@ -163,7 +163,7 @@ classified as production-sensitive:
 
 Supabase states that database backups do not include Storage object bytes:
 [Supabase Database Backups](https://supabase.com/docs/guides/platform/backups).
-The StoryOps backup script exports Storage only when explicitly requested with a
+The WashOps backup script exports Storage only when explicitly requested with a
 server-side service-role credential and records each object checksum.
 
 ## Breach and security incident handoff

@@ -36,7 +36,7 @@ const LOCAL_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postg
 const argv = process.argv.slice(2);
 
 function usage() {
-  process.stdout.write(`StoryOps AI Supabase backup
+  process.stdout.write(`WashOps Supabase backup
 
 Usage:
   node scripts/backup.mjs [options]
@@ -393,7 +393,7 @@ async function main() {
   if (dryRun) {
     await runDump({ cli, database, targetDirectory: temporaryDirectory, dryRun: true });
     process.stdout.write(
-      'PLAN verify StoryOps schema sentinels, required migration, schema fingerprint, and estimated table counts\n',
+      'PLAN verify WashOps schema sentinels, required migration, schema fingerprint, and estimated table counts\n',
     );
     if (includeStorage) {
       process.stdout.write(`PLAN export Storage from ${new URL(storageUrl).host}\n`);
@@ -425,7 +425,7 @@ async function main() {
       databaseFiles.push(await fileRecord(temporaryDirectory, filePath));
     }
     const schemaFile = databaseFiles.find((record) => record.path === 'schema.sql');
-    if (!schemaFile) throw new Error('Validated StoryOps schema dump record is missing.');
+    if (!schemaFile) throw new Error('Validated WashOps schema dump record is missing.');
     validateStoryOpsStoragePolicyDump(
       await readFile(resolve(temporaryDirectory, 'storage-policies.sql'), 'utf8'),
     );

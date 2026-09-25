@@ -1,4 +1,4 @@
-# StoryOps AI and Integration Incident Playbook
+# WashOps and Integration Incident Playbook
 
 **Purpose:** Contain unsafe automation or provider inconsistency without losing evidence.  
 **Incident commander:** Company owner until explicitly handed off  

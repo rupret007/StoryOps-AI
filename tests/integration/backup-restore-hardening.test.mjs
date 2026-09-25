@@ -112,7 +112,7 @@ if (args.includes('db') && args.includes('dump')) {
   const output = args[args.indexOf('--file') + 1];
   const name = output.split('/').at(-1);
   const bodies = {
-    'roles.sql': '-- StoryOps roles\\n',
+    'roles.sql': '-- WashOps roles\\n',
     'schema.sql': [
       'CREATE TABLE public.companies (id uuid);',
       'CREATE TABLE public.audit_events (id uuid);',
@@ -251,7 +251,7 @@ if (args.includes('db') && args.includes('dump')) {
       ...${JSON.stringify(fakeStoragePolicyStatements)},
       ''
     ].join('\\n'),
-    'data.sql': process.env.FAKE_DATA_SQL || '-- StoryOps data\\n'
+    'data.sql': process.env.FAKE_DATA_SQL || '-- WashOps data\\n'
   };
   fs.writeFileSync(output, bodies[name], { mode: 0o600, flag: 'wx' });
   process.exit(0);
@@ -747,7 +747,7 @@ async function assertMissing(filePath) {
   await assert.rejects(stat(filePath), { code: 'ENOENT' });
 }
 
-test('backup source evidence requires the exact release migration set and StoryOps sentinels', () => {
+test('backup source evidence requires the exact release migration set and WashOps sentinels', () => {
   assert.throws(
     () =>
       storyOpsSourceEvidence({
@@ -1072,7 +1072,7 @@ test('backup and restore reject forged Storage DML and malformed policy artifact
     assert.notEqual(transientRestore.status, 0);
     assert.match(transientRestore.stderr, /transient dispatch-origin rows/u);
 
-    await replaceBackupDatabaseFile(forgedBackup, 'data.sql', '-- StoryOps data\n');
+    await replaceBackupDatabaseFile(forgedBackup, 'data.sql', '-- WashOps data\n');
     await replaceBackupDatabaseFile(
       forgedBackup,
       'storage-policies.sql',

@@ -176,7 +176,7 @@ This means the implemented order is:
 4. record the aggregate evidence through the service-only RPC; and
 5. consume the receipt in the local booking transaction.
 
-The ordering prevents StoryOps from confirming a local visit without a
+The ordering prevents WashOps from confirming a local visit without a
 reconciled calendar event. It also creates the explicit compensation case
 described below if steps 2–4 succeed but step 5 fails.
 

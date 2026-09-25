@@ -320,7 +320,7 @@ join public.audit_events creation
  and creation.after_data ->> 'visitId' = run.visit_id::text
 where run.kind = 'field_media_canary'
   and crew.name =
-    'StoryOps controlled rehearsal ' || left(run.id::text, 8)
+    'WashOps controlled rehearsal ' || left(run.id::text, 8)
   and crew.lead_technician_id = run.assigned_user_id
   and crew.home_base_postal_code = '00000'
   and customer.lifecycle = 'inactive'
@@ -826,7 +826,7 @@ begin
         where run.id = p_verification_run_id
           and run.company_id = p_company_id
           and crew.name =
-            'StoryOps controlled rehearsal ' || left(run.id::text, 8)
+            'WashOps controlled rehearsal ' || left(run.id::text, 8)
           and crew.lead_technician_id = run.assigned_user_id
           and crew.home_base_postal_code = '00000'
           and not crew.active
@@ -846,7 +846,7 @@ begin
         and crew.company_id = p_company_id
         and crew.active
         and crew.name <>
-          'StoryOps controlled rehearsal '
+          'WashOps controlled rehearsal '
             || left(p_verification_run_id::text, 8)
         and crew.home_base_postal_code <> '00000'
       )

@@ -19,7 +19,7 @@ Covered by the `storyops-supabase-logical-v2` format:
 - application database roles/schema/data produced by pinned Supabase CLI;
 - managed Auth rows retained by the data dump;
 - a strictly scoped, checksummed `storage-policies.sql` containing only the
-  current StoryOps policies on managed Storage tables;
+  current WashOps policies on managed Storage tables;
 - checksums, byte counts, source target metadata, CLI version;
 - optional bucket configuration and every Storage object byte/checksum;
 - safe restore to local or a separately confirmed remote target.

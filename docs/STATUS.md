@@ -103,7 +103,7 @@ alerting have not been proven, so worker readiness remains YELLOW.
 | Backup/restore                  | Isolated loopback restore proved migration 66 plus 3 private Storage objects/204 bytes with detached manifest and signed HMAC evidence; the disposable target was cleaned up                                                     | Hosted encryption, off-site retention, independently operated restore drill, RPO/RTO measurement, and recovery acceptance remain open                               |
 | Observability                   | Runtime health, logs, traces, incidents, and runbooks present                                                                                                                                                                    | Production collector, dashboards, alerts, paging, on-call, and rollback evidence                                                                                    |
 | DFW launch/compliance           | Official-source engineering checklists present                                                                                                                                                                                   | Professional and jurisdiction-specific legal/tax/insurance/environmental/safety/privacy/communications sign-offs                                                    |
-| Distribution license            | Upstream notices and third-party inventory preserved                                                                                                                                                                             | Select and record StoryOps AI's root license before distribution                                                                                                    |
+| Distribution license            | Upstream notices and third-party inventory preserved                                                                                                                                                                             | Select and record WashOps's root license before distribution                                                                                                    |
 | Release evidence                | Frozen implementation `83950180d63e3455fa2047cd838ba5a2df8d9491` passed the complete local matrix; independent audit ended at P0=0/P1=0; fresh V1.1 screenshots were unavailable                                                 | Evidence-only report commit must remain distinct; fresh manual screenshots and all hosted/manual launch proofs remain open                                          |
 | Deployment                      | Not performed                                                                                                                                                                                                                    | Reviewed hosting, TLS, secret manager, access controls, monitoring, backup, and rollback proof                                                                      |
 
@@ -189,7 +189,7 @@ success.
 - Establish TLS, secrets, database/network restrictions, monitoring/alerts,
   on-call/incident ownership, privacy-request handling, retention jobs,
   capacity/rate/spend limits, and deployment/rollback evidence.
-- Select the StoryOps AI root-project license before distribution and preserve
+- Select the WashOps root-project license before distribution and preserve
   `LICENSE.atomic-crm.md`, `NOTICE.md`, `THIRD_PARTY.md`, and
   `NPM_THIRD_PARTY_NOTICES.txt`, plus
   `infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt` with the optional
@@ -202,7 +202,7 @@ approval.
 
 ## Current operating rule
 
-Despite the passing local matrix, use StoryOps only with synthetic data and
+Despite the passing local matrix, use WashOps only with synthetic data and
 sandbox providers until every hosted and manual gate above is closed. Local
 Supabase mode may be used for synthetic RLS/RPC/Storage verification. Keep
 every live enable flag false.

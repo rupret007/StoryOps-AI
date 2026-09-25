@@ -215,7 +215,7 @@ const bootstrapSql = `
 insert into public.companies(id, name, timezone, settings, status)
 values (
   ${sqlLiteral(companyId)}::uuid,
-  'StoryOps SDS Edge Canary',
+  'WashOps SDS Edge Canary',
   'America/Chicago',
   '{}'::jsonb,
   'active'

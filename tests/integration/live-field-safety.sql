@@ -885,4 +885,4 @@ $$;
 
 rollback;
 
-\echo 'StoryOps live field safety contract passed'
+\echo 'WashOps live field safety contract passed'

@@ -77,7 +77,7 @@ on conflict (id) do nothing;
 insert into public.companies(id, name, timezone, status, settings)
 values (
   '10000000-0000-4000-8000-000000000001',
-  'StoryOps operational intake fixture',
+  'WashOps operational intake fixture',
   'America/Chicago',
   'active',
   '{}'::jsonb
@@ -657,4 +657,4 @@ reset role;
 
 rollback;
 
-\echo 'StoryOps lead-intake operational disposition contract passed'
+\echo 'WashOps lead-intake operational disposition contract passed'

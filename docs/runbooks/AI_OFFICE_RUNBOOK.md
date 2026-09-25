@@ -1,4 +1,4 @@
-# StoryOps AI Office Operations Runbook
+# WashOps Office Operations Runbook
 
 **Purpose:** Keep the AI back office grounded, reviewable, and safely delegated.  
 **Primary owner:** Company owner  

@@ -1,4 +1,4 @@
--- Server-controlled mapping from StoryOps customers to provider customer IDs.
+-- Server-controlled mapping from WashOps customers to provider customer IDs.
 create table public.provider_customers (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,

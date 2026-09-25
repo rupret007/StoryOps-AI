@@ -1,4 +1,4 @@
-# StoryOps AI developer guide
+# WashOps developer guide
 
 **Audience:** engineers changing application, data, AI, integration, or
 operations controls  
@@ -337,7 +337,7 @@ secrets.
   `NPM_THIRD_PARTY_NOTICES.txt`, the VROOM runtime inventory at
   `infra/vroom/runtime-package/NPM_THIRD_PARTY_NOTICES.txt`, and the exact pins
   in `THIRD_PARTY.md`.
-- StoryOps AI has no root-project distribution license selected. Do not add a
+- WashOps has no root-project distribution license selected. Do not add a
   package/container license claim or distribute the project until the owner
   records that manual YELLOW decision.
 - Scan the lockfile/container and review `npm audit` results; do not use a

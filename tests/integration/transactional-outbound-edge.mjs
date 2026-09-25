@@ -149,14 +149,14 @@ where message.thread_id = thread.id
   and message.sent_by_user_id = '${OWNER_ID}'
   and thread.subject in (
     'Quote Q-OUTBOUND-EDGE is ready',
-    'Your StoryOps crew is on the way'
+    'Your WashOps crew is on the way'
   );
 delete from public.communication_threads
 where company_id = '${COMPANY_ID}'
   and assigned_user_id = '${OWNER_ID}'
   and subject in (
     'Quote Q-OUTBOUND-EDGE is ready',
-    'Your StoryOps crew is on the way'
+    'Your WashOps crew is on the way'
   )
   and not exists (
     select 1 from public.communication_messages message

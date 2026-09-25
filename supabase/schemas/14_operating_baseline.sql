@@ -1,4 +1,4 @@
--- Explicit operating-baseline publication for StoryOps company configuration.
+-- Explicit operating-baseline publication for WashOps company configuration.
 -- A live-reviewed configuration remains inert until an owner executes this
 -- finite command. The command publishes deterministic prices, packages, terms,
 -- retention, selected catalog items, and owner-operated resources atomically.
