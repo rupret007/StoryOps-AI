@@ -1,27 +1,60 @@
 import { assessCompanyConfiguration } from '@/domain/companyConfiguration';
-import type { DemoState } from '@/state/model';
+import type { DemoState, DemoVisit, LiveTransactionalDelivery } from '@/state/model';
+
+export type OwnerActionKind = 'hold' | 'decision' | 'follow_up';
+
+export interface OwnerActionEntity {
+  label: string;
+  href: string;
+}
 
 export interface OwnerActionItem {
   id: string;
   priority: 'P0' | 'P1' | 'P2';
+  kind: OwnerActionKind;
   title: string;
   fact: string;
   recommendation: string;
   blockedBy?: string;
   source: string;
   href: string;
+  entities?: OwnerActionEntity[];
+}
+
+export type OwnerCommandFreshness = 'sandbox' | 'current' | 'offline' | 'untimed';
+
+export type OwnerTodayStatus = 'fixture' | 'dated' | 'unknown' | 'incomplete';
+
+export interface OwnerCommandGlance {
+  freshness: OwnerCommandFreshness;
+  countsKnown: boolean;
+  headline: string;
+  caveat: string;
+  clockLabel: string;
+  holds: number | null;
+  decisions: number | null;
+  followUps: number | null;
+  p0Holds: number | null;
 }
 
 export interface OwnerCommandCenterProjection {
   mode: 'sandbox' | 'authenticated';
   sourcedAt: string;
+  freshness: OwnerCommandFreshness;
+  glance: OwnerCommandGlance;
   today: {
     localDate?: string;
     timeZone: string;
     visits: DemoState['visits'];
     evidenceFacts: string[];
+    status: OwnerTodayStatus;
+    missingExactStarts: number;
   };
   actions: OwnerActionItem[];
+  nextAction?: OwnerActionItem;
+  holds: OwnerActionItem[];
+  decisions: OwnerActionItem[];
+  followUps: OwnerActionItem[];
   unknowns: string[];
 }
 
@@ -34,6 +67,7 @@ type OwnerProjectionState = Pick<
   | 'leads'
   | 'estimate'
   | 'visits'
+  | 'incidents'
   | 'invoices'
   | 'traces'
   | 'integrations'
@@ -42,8 +76,251 @@ type OwnerProjectionState = Pick<
   | 'reviewRequested'
   | 'recurringPlanActive'
   | 'recurringDueWork'
+  | 'offlineQueue'
   | 'live'
+  | 'online'
 >;
+
+export function pickNextOwnerAction(actions: OwnerActionItem[]): OwnerActionItem | undefined {
+  return (
+    actions.find((action) => action.priority === 'P0' && action.kind === 'hold') ??
+    actions.find((action) => action.priority === 'P0') ??
+    actions.find((action) => action.priority === 'P1' && action.kind === 'hold') ??
+    actions[0]
+  );
+}
+
+const ownerActionSurfaces: ReadonlyArray<readonly [string, string]> = [
+  ['/operations#safety', 'Safety & incidents'],
+  ['/operations#recurring', 'Recurring care'],
+  ['/operations', 'Operations'],
+  ['/estimates/new', 'New estimate'],
+  ['/estimates/', 'Estimate'],
+  ['/setup', 'Owner configuration'],
+  ['/field', 'Field'],
+  ['/dispatch', 'Dispatch'],
+  ['/finance', 'Finance'],
+  ['/approvals', 'Approvals'],
+  ['/pipeline', 'Pipeline'],
+  ['/portal', 'Customer portal'],
+  ['/integrations', 'Integrations'],
+  ['/office', 'AI office'],
+];
+
+export function ownerActionSurface(href: string): string {
+  return ownerActionSurfaces.find(([prefix]) => href.startsWith(prefix))?.[1] ?? 'Workspace';
+}
+
+export function explainNextOwnerAction(action: OwnerActionItem): string {
+  if (action.kind === 'hold' && action.priority === 'P0') {
+    return 'This hold stops work. Handle it before any decision or follow-up.';
+  }
+  if (action.kind === 'hold') {
+    return action.priority === 'P1'
+      ? 'No P0 item is waiting. This hold is the next thing that still blocks a safe step.'
+      : 'No higher-priority item is waiting. This hold still blocks a safe step.';
+  }
+  if (action.priority === 'P0') {
+    return 'This is the highest-priority item. No P0 hold is waiting in front of it.';
+  }
+  if (action.kind === 'decision') {
+    return 'No hold is in front of this. It needs your yes or no on the exact record.';
+  }
+  return 'No hold is in front of this. This follow-up can wait behind anything that stops work.';
+}
+
+export function ownerActionGlanceLine(action: OwnerActionItem): string {
+  const records = action.entities?.length ?? 0;
+  const named =
+    records === 0
+      ? 'No named record on this line.'
+      : records === 1
+        ? '1 named record.'
+        : `${records} named records.`;
+  if (action.kind === 'hold' && action.priority === 'P0') return `Stops work. ${named}`;
+  if (action.kind === 'hold') return `Still blocks a safe step. ${named}`;
+  if (action.kind === 'decision') return `Needs your yes or no. ${named}`;
+  return `Can wait behind holds. ${named}`;
+}
+
+export function deriveOwnerCommandGlance(input: {
+  freshness: OwnerCommandFreshness;
+  sourcedAt: string;
+  holds: readonly OwnerActionItem[];
+  decisions: readonly OwnerActionItem[];
+  followUps: readonly OwnerActionItem[];
+  nextAction?: OwnerActionItem;
+}): OwnerCommandGlance {
+  const countsKnown = input.freshness === 'sandbox' || input.freshness === 'current';
+  const clockLabel =
+    input.freshness === 'sandbox'
+      ? 'Sandbox fixture. Not a live tally.'
+      : input.freshness === 'current'
+        ? `Server time ${input.sourcedAt}.`
+        : input.freshness === 'offline'
+          ? 'Offline. The last read is not a live tally.'
+          : 'Server time unavailable.';
+  const holds = countsKnown ? input.holds.length : null;
+  const decisions = countsKnown ? input.decisions.length : null;
+  const followUps = countsKnown ? input.followUps.length : null;
+  const p0Holds = countsKnown
+    ? input.holds.filter((action) => action.priority === 'P0').length
+    : null;
+
+  if (!countsKnown) {
+    return {
+      freshness: input.freshness,
+      countsKnown,
+      headline: 'This command center is not current.',
+      caveat:
+        input.freshness === 'offline'
+          ? 'This device is offline. Do not read these rows as a live tally, and do not read an empty list as all clear.'
+          : 'Server time is missing. Do not read an empty list as all clear. Refresh the workspace before you act.',
+      clockLabel,
+      holds,
+      decisions,
+      followUps,
+      p0Holds,
+    };
+  }
+
+  const next = input.nextAction;
+  if (!next) {
+    return {
+      freshness: input.freshness,
+      countsKnown,
+      headline: 'Nothing in this projection is waiting.',
+      caveat: 'This is not a clearance. Hidden records and provider state can still block work.',
+      clockLabel,
+      holds,
+      decisions,
+      followUps,
+      p0Holds,
+    };
+  }
+
+  if ((p0Holds ?? 0) > 0) {
+    const stopping = p0Holds === 1 ? '1 hold stops work.' : `${p0Holds} holds stop work.`;
+    const behind = (holds ?? 0) - (p0Holds ?? 0);
+    const extra =
+      behind > 0 ? ` ${behind} more ${behind === 1 ? 'hold is' : 'holds are'} behind it.` : '';
+    return {
+      freshness: input.freshness,
+      countsKnown,
+      headline: stopping,
+      caveat: `First: ${next.title}.${extra} This is not a clearance of hidden records.`,
+      clockLabel,
+      holds,
+      decisions,
+      followUps,
+      p0Holds,
+    };
+  }
+
+  const headline =
+    next.kind === 'decision'
+      ? 'No hold stops work. A decision is waiting.'
+      : next.kind === 'follow_up'
+        ? 'No hold stops work. A follow-up is waiting.'
+        : 'A hold still blocks the next safe step.';
+  return {
+    freshness: input.freshness,
+    countsKnown,
+    headline,
+    caveat: `${next.title}. This is not a clearance of hidden records.`,
+    clockLabel,
+    holds,
+    decisions,
+    followUps,
+    p0Holds,
+  };
+}
+
+export function ownerTodayVisitEmptyCopy(
+  today: OwnerCommandCenterProjection['today'],
+  freshness: OwnerCommandFreshness,
+): { heading: string; detail: string } {
+  if (today.status === 'unknown' || freshness === 'untimed') {
+    return {
+      heading: 'Today is unknown',
+      detail:
+        'Server time is missing. An empty list is not an empty day, and it does not claim future capacity.',
+    };
+  }
+  if (freshness === 'offline') {
+    return {
+      heading: 'No visits on the last server day',
+      detail: `The last server day was ${today.localDate ?? 'unknown'}. This device is offline, so this is not a live empty day.`,
+    };
+  }
+  if (today.status === 'incomplete') {
+    const count = today.missingExactStarts;
+    return {
+      heading: 'Today is incomplete',
+      detail: `${count} role-visible visit${count === 1 ? ' has' : 's have'} no exact server start. An empty list is not an empty day.`,
+    };
+  }
+  return {
+    heading: 'No company-local visits today',
+    detail:
+      'This uses exact server visit starts in the company timezone. It does not claim future capacity.',
+  };
+}
+
+export function ownerTodayVisitGapNote(
+  today: OwnerCommandCenterProjection['today'],
+  freshness: OwnerCommandFreshness,
+): string | undefined {
+  if (freshness === 'offline' && today.visits.length > 0) {
+    return 'Offline. These visits use the last server time, not a live calendar.';
+  }
+  if (today.status !== 'incomplete' || today.visits.length === 0) return undefined;
+  const count = today.missingExactStarts;
+  return `${count} role-visible visit${count === 1 ? ' has' : 's have'} no exact server start and ${
+    count === 1 ? 'is' : 'are'
+  } left off this day.`;
+}
+
+function transactionalDeliveryIsHeld(delivery: LiveTransactionalDelivery): boolean {
+  return (
+    delivery.manualReconciliationRequired ||
+    delivery.status === 'submitted_unknown' ||
+    delivery.status === 'failed'
+  );
+}
+
+function collectHeldDeliveries(state: OwnerProjectionState): OwnerActionEntity[] {
+  const seen = new Set<string>();
+  const held: OwnerActionEntity[] = [];
+  const add = (
+    delivery: LiveTransactionalDelivery | undefined,
+    label: string,
+    href: string,
+  ): void => {
+    if (!delivery || !transactionalDeliveryIsHeld(delivery) || seen.has(delivery.id)) return;
+    seen.add(delivery.id);
+    held.push({
+      label: `${label} · ${delivery.status.replaceAll('_', ' ')}`,
+      href,
+    });
+  };
+
+  add(state.live?.quoteDelivery, 'Quote delivery', `/estimates/${state.estimate.id}`);
+  add(state.live?.onMyWayDelivery, 'On-my-way delivery', '/field');
+  for (const [visitId, reference] of Object.entries(state.live?.fieldVisitReferences ?? {})) {
+    const visit = state.visits.find((candidate) => candidate.id === visitId);
+    add(
+      reference.onMyWayDelivery,
+      visit ? `${visit.jobNumber} on-my-way` : 'On-my-way delivery',
+      '/field',
+    );
+  }
+  return held;
+}
+
+function visitEntities(visits: DemoVisit[], href: string): OwnerActionEntity[] {
+  return visits.map((visit) => ({ label: visit.jobNumber, href }));
+}
 
 function localDateKey(value: string, timeZone: string): string | undefined {
   const parsed = Date.parse(value);
@@ -72,9 +349,15 @@ export function deriveOwnerCommandCenter(
     state.live?.companyTimezone ??
     state.companyConfiguration?.published?.territory.timezone ??
     'UTC';
-  const localDate = state.live?.serverTime
-    ? localDateKey(state.live.serverTime, timeZone)
-    : undefined;
+  const rawServerTime = state.live?.serverTime?.trim() ?? '';
+  const localDate = rawServerTime ? localDateKey(rawServerTime, timeZone) : undefined;
+  const freshness: OwnerCommandFreshness = !live
+    ? 'sandbox'
+    : state.online !== true
+      ? 'offline'
+      : !rawServerTime || !localDate
+        ? 'untimed'
+        : 'current';
   const todayVisits = localDate
     ? state.visits.filter((visit) => {
         const exactStart = state.live?.fieldVisitReferences?.[visit.id]?.visitStartsAt;
@@ -122,20 +405,28 @@ export function deriveOwnerCommandCenter(
       );
     }
   }
-  if (
-    live &&
-    localDate &&
-    state.visits.some((visit) => !state.live?.fieldVisitReferences?.[visit.id]?.visitStartsAt)
-  ) {
+  const missingExactStarts = live
+    ? state.visits.filter((visit) => !state.live?.fieldVisitReferences?.[visit.id]?.visitStartsAt)
+        .length
+    : 0;
+  if (live && localDate && missingExactStarts > 0) {
     visitEvidenceUnknowns.push(
       'At least one role-visible visit lacks an exact server-projected start, so its company-local today status is unknown.',
     );
   }
+  const todayStatus: OwnerTodayStatus = !live
+    ? 'fixture'
+    : !localDate
+      ? 'unknown'
+      : missingExactStarts > 0
+        ? 'incomplete'
+        : 'dated';
 
   if (!state.companyConfiguration) {
     actions.push({
       id: 'configuration-missing',
       priority: 'P0',
+      kind: 'hold',
       title: 'Complete the owner configuration',
       fact: 'No versioned company configuration record is visible.',
       recommendation:
@@ -152,6 +443,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'configuration-unpublished',
       priority: 'P0',
+      kind: 'hold',
       title: 'Review configuration revision',
       fact: `Revision ${state.companyConfiguration.revision} is ${state.companyConfiguration.status}; readiness is ${readiness.score}%.`,
       recommendation:
@@ -174,6 +466,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'operating-baseline-unpublished',
       priority: 'P0',
+      kind: 'hold',
       title: 'Publish the reviewed operating baseline',
       fact: `Configuration revision ${state.companyConfiguration.revision} is immutable but does not drive the active operating records.`,
       recommendation:
@@ -189,12 +482,17 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'pending-approvals',
       priority: 'P1',
+      kind: 'decision',
       title: 'Review held actions',
       fact: `${pendingApprovals.length} exact-payload approval${pendingApprovals.length === 1 ? ' is' : 's are'} pending.`,
       recommendation: 'Approve or reject each exact payload; do not approve from a summary alone.',
       blockedBy: 'Owner decision',
       source: `${sourcePrefix} · approval records`,
       href: '/approvals',
+      entities: pendingApprovals.map((approval) => ({
+        label: approval.title,
+        href: '/approvals',
+      })),
     });
   }
 
@@ -205,6 +503,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'estimate-evidence',
       priority: 'P1',
+      kind: 'hold',
       title: 'Finish estimate evidence',
       fact: `${state.estimate.estimateNumber} is ${state.estimate.status}; photo evidence is ${
         state.estimate.photoEvidence.humanVerified ? 'human verified' : 'not human verified'
@@ -216,11 +515,13 @@ export function deriveOwnerCommandCenter(
         : 'Human scope verification',
       source: `${sourcePrefix} · estimate and photo-evidence projection`,
       href: `/estimates/${state.estimate.id}`,
+      entities: [{ label: state.estimate.estimateNumber, href: `/estimates/${state.estimate.id}` }],
     });
   } else if (state.estimate.status === 'approved') {
     actions.push({
       id: 'approved-quote-draft',
       priority: 'P1',
+      kind: 'decision',
       title: 'Publish the approved quote',
       fact: `${state.estimate.estimateNumber} is within policy but has not entered the quote-awaiting-customer stage.`,
       recommendation:
@@ -228,17 +529,20 @@ export function deriveOwnerCommandCenter(
       blockedBy: 'Explicit quote publication',
       source: `${sourcePrefix} · estimate and quote projection`,
       href: `/estimates/${state.estimate.id}`,
+      entities: [{ label: state.estimate.estimateNumber, href: `/estimates/${state.estimate.id}` }],
     });
   } else if (state.estimate.status === 'quoted' && !state.customerQuoteAccepted) {
     actions.push({
       id: 'quote-awaiting-customer',
       priority: 'P2',
+      kind: 'follow_up',
       title: 'Quote awaits customer action',
       fact: `${state.estimate.estimateNumber} is published; no authenticated acceptance is projected.`,
       recommendation:
         'Inspect delivery/reconciliation evidence and follow up only through a currently consented channel.',
       source: `${sourcePrefix} · quote acceptance and communication projection`,
       href: '/portal',
+      entities: [{ label: state.estimate.estimateNumber, href: '/portal' }],
     });
   }
 
@@ -246,6 +550,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'deposit-awaiting-reconciliation',
       priority: 'P0',
+      kind: 'hold',
       title: 'Deposit is not proven',
       fact: 'The quote is accepted, but no reconciled provider payment is projected.',
       recommendation:
@@ -261,12 +566,14 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'new-leads',
       priority: 'P1',
+      kind: 'follow_up',
       title: 'Qualify new leads',
       fact: `${newLeads.length} role-visible lead${newLeads.length === 1 ? ' is' : 's are'} still new.`,
       recommendation:
         'Verify contact, consent, property, service scope, and unknowns before estimating.',
       source: `${sourcePrefix} · lead stage projection`,
       href: '/pipeline',
+      entities: newLeads.map((lead) => ({ label: lead.name, href: '/pipeline' })),
     });
   }
 
@@ -275,13 +582,17 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'weather-held-visits',
       priority: 'P0',
+      kind: 'hold',
       title: 'Visits are on weather hold',
-      fact: `${weatherHolds.length} role-visible visit${weatherHolds.length === 1 ? ' is' : 's are'} blocked by the current visit state.`,
+      fact: `${weatherHolds.length} role-visible visit${weatherHolds.length === 1 ? ' is' : 's are'} blocked by the current visit state: ${weatherHolds
+        .map((visit) => visit.jobNumber)
+        .join(', ')}.`,
       recommendation:
         'Review fresh NWS, route, capacity, and customer-reschedule evidence before proposing a new window.',
       blockedBy: 'Fresh service-window evidence and dispatcher decision',
       source: `${sourcePrefix} · visit status projection`,
       href: '/dispatch',
+      entities: visitEntities(weatherHolds, '/dispatch'),
     });
   }
 
@@ -290,13 +601,125 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'field-evidence-blocked',
       priority: 'P0',
+      kind: 'hold',
       title: 'Field work is paused',
-      fact: `${pausedFieldVisits.length} visit${pausedFieldVisits.length === 1 ? ' is' : 's are'} paused and cannot be completed.`,
+      fact: `${pausedFieldVisits.length} visit${pausedFieldVisits.length === 1 ? ' is' : 's are'} paused and cannot be completed: ${pausedFieldVisits
+        .map((visit) => visit.jobNumber)
+        .join(', ')}.`,
       recommendation:
         'Open the field packet and resolve checklist, media, signature, material/SDS, notes, or incident blockers.',
       blockedBy: 'Durably reconciled completion evidence',
       source: `${sourcePrefix} · visit and field packet projection`,
       href: '/field',
+      entities: visitEntities(pausedFieldVisits, '/field'),
+    });
+  }
+
+  const openIncidents = state.incidents.filter((incident) => incident.status === 'open');
+  if (openIncidents.length > 0) {
+    actions.push({
+      id: 'open-incidents',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Open incidents pause automation',
+      fact: `${openIncidents.length} open incident${openIncidents.length === 1 ? '' : 's'} ${
+        openIncidents.length === 1 ? 'has' : 'have'
+      } paused affected automation: ${openIncidents
+        .map((incident) => `${incident.jobNumber} · ${incident.kind.replaceAll('_', ' ')}`)
+        .join('; ')}.`,
+      recommendation:
+        'Review the exact evidence packet on Safety & incidents. Do not admit fault, contact insurers, or send incident communications from a summary.',
+      blockedBy: 'Owner incident review and factual closure',
+      source: `${sourcePrefix} · incident records`,
+      href: '/operations#safety',
+      entities: openIncidents.map((incident) => ({
+        label: `${incident.jobNumber} · ${incident.kind.replaceAll('_', ' ')}`,
+        href: '/operations#safety',
+      })),
+    });
+  }
+
+  const fieldChangeRequests = state.visits.flatMap((visit) =>
+    (visit.changeRequests ?? [])
+      .filter((request) => ['submitted', 'reviewing'].includes(request.status))
+      .map((request) => ({ visit, request })),
+  );
+  if (fieldChangeRequests.length > 0) {
+    actions.push({
+      id: 'field-change-requests',
+      priority: 'P1',
+      kind: 'hold',
+      title: 'Field change requests need office review',
+      fact: `${fieldChangeRequests.length} field change request${
+        fieldChangeRequests.length === 1 ? ' is' : 's are'
+      } still open: ${fieldChangeRequests
+        .map(
+          ({ visit, request }) => `${visit.jobNumber} · ${request.reasonCode.replaceAll('_', ' ')}`,
+        )
+        .join('; ')}.`,
+      recommendation:
+        'Review the exact reason code and summary. A field note is not booking, payment, or completion evidence.',
+      blockedBy: 'Staff review of the submitted field change',
+      source: `${sourcePrefix} · visit field-change records`,
+      href: '/field',
+      entities: fieldChangeRequests.map(({ visit, request }) => ({
+        label: `${visit.jobNumber} · ${request.reasonCode.replaceAll('_', ' ')}`,
+        href: '/field',
+      })),
+    });
+  }
+
+  const pendingOfflinePackets = state.offlineQueue.filter((packet) =>
+    ['queued', 'syncing', 'failed'].includes(packet.status),
+  );
+  const failedOfflinePackets = pendingOfflinePackets.filter((packet) => packet.status === 'failed');
+  if (pendingOfflinePackets.length > 0) {
+    actions.push({
+      id: 'offline-packet-holds',
+      priority: failedOfflinePackets.length > 0 ? 'P0' : 'P1',
+      kind: 'hold',
+      title:
+        failedOfflinePackets.length > 0
+          ? 'Offline packets failed to reconcile'
+          : 'Offline packets are waiting to reconcile',
+      fact: `${pendingOfflinePackets.length} device packet${
+        pendingOfflinePackets.length === 1 ? ' is' : 's are'
+      } not reconciled${
+        failedOfflinePackets.length > 0 ? `; ${failedOfflinePackets.length} failed` : ''
+      }.`,
+      recommendation:
+        failedOfflinePackets.length > 0
+          ? 'Open field recovery and inspect the failed packet. Do not invent completion from local storage.'
+          : 'Refresh the server workspace, then reconcile the original queue. Pending packets are not completion proof.',
+      blockedBy:
+        failedOfflinePackets.length > 0
+          ? 'Failed device-to-server reconciliation'
+          : 'Device queue reconciliation',
+      source: `${sourcePrefix} · device offline queue`,
+      href: '/field',
+      entities: pendingOfflinePackets.slice(0, 6).map((packet) => ({
+        label: `${packet.kind ?? packet.action} · ${packet.status}`,
+        href: '/field',
+      })),
+    });
+  }
+
+  const heldDeliveries = collectHeldDeliveries(state);
+  if (heldDeliveries.length > 0) {
+    actions.push({
+      id: 'transactional-delivery-holds',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Outbound delivery needs reconciliation',
+      fact: `${heldDeliveries.length} quote or on-my-way submission${
+        heldDeliveries.length === 1 ? ' has' : 's have'
+      } an unknown or failed provider outcome.`,
+      recommendation:
+        'Read the authoritative provider state. Do not resend while the original submission may have succeeded.',
+      blockedBy: 'Provider retrieval or signed callback evidence',
+      source: `${sourcePrefix} · transactional delivery projection`,
+      href: heldDeliveries[0]!.href,
+      entities: heldDeliveries,
     });
   }
 
@@ -305,12 +728,16 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'past-due-invoices',
       priority: 'P1',
+      kind: 'hold',
       title: 'Review past-due invoices',
-      fact: `${pastDue.length} role-visible invoice${pastDue.length === 1 ? ' is' : 's are'} past due.`,
+      fact: `${pastDue.length} role-visible invoice${pastDue.length === 1 ? ' is' : 's are'} past due: ${pastDue
+        .map((invoice) => invoice.number)
+        .join(', ')}.`,
       recommendation:
         'Reconcile payment state before an approved reminder; never infer settlement.',
       source: `${sourcePrefix} · invoice status projection`,
       href: '/finance',
+      entities: pastDue.map((invoice) => ({ label: invoice.number, href: '/finance' })),
     });
   }
 
@@ -322,6 +749,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'provider-reconciliation',
       priority: 'P0',
+      kind: 'hold',
       title: 'Provider submissions need reconciliation',
       fact: `${reconciliationStates.length} post-service submission${reconciliationStates.length === 1 ? ' has' : 's have'} an unknown or exhausted delivery outcome.`,
       recommendation:
@@ -337,6 +765,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'review-opportunity',
       priority: 'P2',
+      kind: 'follow_up',
       title: 'Review opportunity is eligible',
       fact: `${paidInvoices.length} role-visible invoice${paidInvoices.length === 1 ? ' is' : 's are'} paid; no review request is projected.`,
       recommendation:
@@ -350,6 +779,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'maintenance-opportunity',
       priority: 'P2',
+      kind: 'follow_up',
       title: 'Maintenance follow-up is available',
       fact: 'Completed paid work exists, but no active source-linked maintenance plan is projected.',
       recommendation:
@@ -367,19 +797,21 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'recurring-due-generation',
       priority: 'P1',
+      kind: 'hold',
       title: 'Recurring maintenance is due',
       fact: `${duePlans.length} active maintenance plan${duePlans.length === 1 ? ' is' : 's are'} due for a fresh-estimate work item.`,
       recommendation:
         'Create one idempotent due-work item. Do not reuse the historical price or contact the customer yet.',
       blockedBy: 'Current measurements and a new deterministic estimate',
       source: `${sourcePrefix} · recurring due-work projection`,
-      href: '/operations',
+      href: '/operations#recurring',
     });
   }
   if (estimateTasks.length > 0) {
     actions.push({
       id: 'recurring-fresh-estimate-queue',
       priority: 'P1',
+      kind: 'hold',
       title: 'Fresh maintenance estimates need preparation',
       fact: `${estimateTasks.length} due-work item${estimateTasks.length === 1 ? ' requires' : 's require'} current scope and deterministic pricing.`,
       recommendation:
@@ -395,6 +827,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'ai-blocked-actions',
       priority: 'P2',
+      kind: 'decision',
       title: 'Inspect blocked AI actions',
       fact: `${blockedAiActions.length} role-visible trace${blockedAiActions.length === 1 ? ' is' : 's are'} blocked by guardrails or policy.`,
       recommendation:
@@ -409,6 +842,7 @@ export function deriveOwnerCommandCenter(
     actions.push({
       id: 'integration-readiness',
       priority: 'P2',
+      kind: 'hold',
       title: 'Resolve provider readiness',
       fact: `${unhealthy.length} integration record${unhealthy.length === 1 ? ' is' : 's are'} not healthy.`,
       recommendation:
@@ -422,16 +856,40 @@ export function deriveOwnerCommandCenter(
   actions.sort(
     (left, right) => left.priority.localeCompare(right.priority) || left.id.localeCompare(right.id),
   );
+  const holds = actions.filter((action) => action.kind === 'hold');
+  const decisions = actions.filter((action) => action.kind === 'decision');
+  const followUps = actions.filter((action) => action.kind === 'follow_up');
+  const nextAction = pickNextOwnerAction(actions);
+  const sourcedAt = !live
+    ? 'fixed local fixture'
+    : freshness === 'untimed'
+      ? 'server time unavailable'
+      : rawServerTime;
   return {
     mode: live ? 'authenticated' : 'sandbox',
-    sourcedAt: live ? (state.live?.serverTime ?? 'server time unavailable') : 'fixed local fixture',
+    sourcedAt,
+    freshness,
+    glance: deriveOwnerCommandGlance({
+      freshness,
+      sourcedAt,
+      holds,
+      decisions,
+      followUps,
+      nextAction,
+    }),
     today: {
       localDate,
       timeZone,
       visits: todayVisits,
       evidenceFacts: todayEvidenceFacts,
+      status: todayStatus,
+      missingExactStarts,
     },
     actions,
+    nextAction,
+    holds,
+    decisions,
+    followUps,
     unknowns: [
       ...visitEvidenceUnknowns,
       'Provider-side payment and delivery state are unknown until signed reconciliation succeeds.',
