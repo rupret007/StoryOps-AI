@@ -7,7 +7,9 @@ test('sandbox command center opens the next derived hold', async ({ page }) => {
   const glance = page.getByRole('region', { name: 'Phone glance' });
   await expect(glance).toBeVisible();
   await expect(glance.getByRole('heading', { name: /hold stops work/u })).toBeVisible();
-  await expect(glance.getByText('Stops work. No named record on this line.')).toBeVisible();
+  await expect(glance.getByText('Stops work. See the source for details.')).toBeVisible();
+  await expect(glance.getByText(/Do:\s*Record identity/u)).toBeVisible();
+  await expect(glance.getByRole('button', { name: 'Copy for SMS' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Do this next' })).toBeVisible();
   await expect(page.getByText('Complete the owner configuration').first()).toBeVisible();
   await expect(
