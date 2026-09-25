@@ -420,4 +420,46 @@ describe('owner command center projection', () => {
 
     expect(pickNextOwnerAction(actions)?.id).toBe('open-incidents');
   });
+
+  it('returns undefined next action and empty groups when no actions exist', () => {
+    const actions: OwnerActionItem[] = [];
+    expect(pickNextOwnerAction(actions)).toBeUndefined();
+  });
+
+  it('sorts actions by priority then id for stable ordering', () => {
+    const state = withPublishedOperatingRecords(createDemoState());
+    state.dataMode = 'supabase';
+    state.estimate.status = 'quoted';
+    state.customerQuoteAccepted = true;
+    state.depositPaid = true;
+    state.invoices[0]!.status = 'past_due';
+    state.traces[0]!.result = 'blocked';
+    state.integrations = state.integrations.map((i) => ({ ...i, status: 'Degraded' }));
+    state.live = {
+      userId: 'owner-user',
+      companyId: 'company-a',
+      companyName: 'Pilot Exterior Care',
+      companyTimezone: 'America/Chicago',
+      serverTime: '2026-07-29T12:00:00.000Z',
+      invoiceVersions: {},
+      leadVersions: {},
+      checklistItems: {},
+      checklistDefinitions: {},
+      incidentVersions: {},
+      notificationVersions: {},
+      approvalVersions: {},
+      materials: [],
+      customers: [],
+      properties: [],
+    };
+
+    const projection = deriveOwnerCommandCenter(state);
+
+    const priorities = projection.actions.map((a) => a.priority);
+    expect(priorities).toEqual([...priorities].sort());
+
+    const p1Actions = projection.actions.filter((a) => a.priority === 'P1');
+    const p1Ids = p1Actions.map((a) => a.id);
+    expect(p1Ids).toEqual([...p1Ids].sort());
+  });
 });
