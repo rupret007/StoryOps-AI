@@ -148,6 +148,51 @@ export function ownerActionGlanceLine(action: OwnerActionItem): string {
   return `Can wait behind holds. ${named}`;
 }
 
+export function formatOwnerPhoneGlanceShare(input: {
+  glance: OwnerCommandGlance;
+  nextAction?: OwnerActionItem;
+  mode?: OwnerCommandCenterProjection['mode'];
+}): string {
+  const { glance, nextAction } = input;
+  const lines: string[] = [];
+
+  if (!glance.countsKnown) {
+    lines.push('WashOps · NOT CURRENT');
+    lines.push('Fail closed. Counts withheld.');
+    lines.push(glance.caveat);
+    if (nextAction) {
+      lines.push(`Last seen next: ${nextAction.title}`);
+      lines.push(ownerActionGlanceLine(nextAction));
+      lines.push(`Open: ${ownerActionSurface(nextAction.href)}`);
+    }
+    lines.push(glance.clockLabel);
+    return lines.join('\n');
+  }
+
+  lines.push(`WashOps · ${glance.headline.replace(/\.$/, '')}`);
+  if (glance.holds !== null) {
+    const bits = [
+      `${glance.holds} hold${glance.holds === 1 ? '' : 's'}`,
+      `${glance.decisions ?? 0} decision${glance.decisions === 1 ? '' : 's'}`,
+      `${glance.followUps ?? 0} follow-up${glance.followUps === 1 ? '' : 's'}`,
+    ];
+    lines.push(bits.join(' · '));
+  }
+
+  if (nextAction) {
+    lines.push(`Do next: ${nextAction.title}`);
+    lines.push(ownerActionGlanceLine(nextAction));
+    lines.push(`Do: ${nextAction.recommendation}`);
+    lines.push(`Open: ${ownerActionSurface(nextAction.href)}`);
+  } else {
+    lines.push(glance.caveat);
+  }
+
+  lines.push(glance.clockLabel);
+  lines.push('Not a clearance of hidden records.');
+  return lines.join('\n');
+}
+
 export function deriveOwnerCommandGlance(input: {
   freshness: OwnerCommandFreshness;
   sourcedAt: string;

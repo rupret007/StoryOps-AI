@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  Copy,
   Bot,
   CalendarClock,
   CheckCircle2,
@@ -30,6 +31,7 @@ import { deriveSandboxPilotRehearsal } from '@/core/pilot/rehearsal';
 import {
   deriveOwnerCommandCenter,
   explainNextOwnerAction,
+  formatOwnerPhoneGlanceShare,
   ownerActionGlanceLine,
   ownerActionSurface,
   ownerTodayVisitEmptyCopy,
@@ -427,8 +429,30 @@ function OwnerNextActionStrip({ action }: { action: OwnerActionItem }) {
 
 function OwnerCommandGlance({ projection }: { projection: OwnerCommandCenterProjection }) {
   const { glance, nextAction } = projection;
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const countLabel = (value: number | null) => (value === null ? 'withheld' : String(value));
   const countText = (value: number | null) => (value === null ? '—' : String(value));
+  const shareText = formatOwnerPhoneGlanceShare({
+    glance,
+    nextAction,
+    mode: projection.mode,
+  });
+
+  const copyShare = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+      } else {
+        throw new Error('clipboard unavailable');
+      }
+      setCopyState('copied');
+      window.setTimeout(() => setCopyState('idle'), 2000);
+    } catch {
+      setCopyState('failed');
+      window.setTimeout(() => setCopyState('idle'), 2500);
+    }
+  };
+
   return (
     <section
       className={glance.countsKnown ? 'owner-glance' : 'owner-glance owner-glance--stale'}
@@ -460,12 +484,37 @@ function OwnerCommandGlance({ projection }: { projection: OwnerCommandCenterProj
         <>
           <p className="owner-glance__next">{nextAction.title}</p>
           <p className="owner-glance__line">{ownerActionGlanceLine(nextAction)}</p>
+          <p className="owner-glance__do">
+            <span>Do: </span>
+            {nextAction.recommendation}
+          </p>
           <Link className="button button--dark button--md full-width" to={nextAction.href}>
             Do this: Open {ownerActionSurface(nextAction.href)}{' '}
             <ArrowRight size={15} aria-hidden="true" />
           </Link>
         </>
       )}
+      <div className="owner-glance__share">
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          className="full-width"
+          icon={<Copy size={15} aria-hidden="true" />}
+          onClick={() => void copyShare()}
+        >
+          {copyState === 'copied'
+            ? 'Copied for SMS'
+            : copyState === 'failed'
+              ? 'Copy failed — select text'
+              : 'Copy for SMS'}
+        </Button>
+        <p className="owner-glance__share-hint" aria-live="polite">
+          {copyState === 'copied'
+            ? 'Paste into Messages. Counts only when WashOps is current.'
+            : 'One paste for the road: holds, next record, and where to open.'}
+        </p>
+      </div>
       <p className="owner-glance__clock">{glance.clockLabel}</p>
     </section>
   );

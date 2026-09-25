@@ -3,6 +3,7 @@ import {
   deriveOwnerCommandCenter,
   deriveOwnerCommandGlance,
   explainNextOwnerAction,
+  formatOwnerPhoneGlanceShare,
   ownerActionGlanceLine,
   ownerActionSurface,
   ownerTodayVisitEmptyCopy,
@@ -737,5 +738,52 @@ describe('owner command center projection', () => {
       'First: Visits are on weather hold. This is not a clearance of hidden records.',
     );
     expect(glance.caveat).not.toContain('JOB-1048');
+  });
+
+  it('formats a paste-ready WashOps share for SMS with the next hold and surface', () => {
+    const stopping: OwnerActionItem = {
+      id: 'open-incidents',
+      priority: 'P0',
+      kind: 'hold',
+      title: 'Open incidents pause automation',
+      fact: 'One open incident.',
+      recommendation: 'Review Safety & incidents.',
+      source: 'test',
+      href: '/operations#safety',
+      entities: [{ label: 'JOB-1048 · property damage', href: '/operations#safety' }],
+    };
+    const glance = deriveOwnerCommandGlance({
+      freshness: 'current',
+      sourcedAt: '2026-07-31T14:00:00.000Z',
+      holds: [stopping],
+      decisions: [],
+      followUps: [],
+      nextAction: stopping,
+    });
+    const share = formatOwnerPhoneGlanceShare({ glance, nextAction: stopping });
+    expect(share).toContain('WashOps · 1 hold stops work');
+    expect(share).toContain('1 hold · 0 decisions · 0 follow-ups');
+    expect(share).toContain('Do next: Open incidents pause automation');
+    expect(share).toContain('Stops work. Record: JOB-1048 · property damage.');
+    expect(share).toContain('Do: Review Safety & incidents.');
+    expect(share).toContain('Open: Safety & incidents');
+    expect(share).toContain('Not a clearance of hidden records.');
+    expect(share).not.toContain('A long fact');
+  });
+
+  it('formats a fail-closed share that never claims an empty clear day', () => {
+    const glance = deriveOwnerCommandGlance({
+      freshness: 'offline',
+      sourcedAt: '2026-07-31T14:00:00.000Z',
+      holds: [],
+      decisions: [],
+      followUps: [],
+    });
+    const share = formatOwnerPhoneGlanceShare({ glance });
+    expect(share).toContain('WashOps · NOT CURRENT');
+    expect(share).toContain('Fail closed. Counts withheld.');
+    expect(share).toContain('offline');
+    expect(share).not.toMatch(/no holds stop/i);
+    expect(share).toContain('do not read an empty list as all clear');
   });
 });

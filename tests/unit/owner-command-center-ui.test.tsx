@@ -197,6 +197,9 @@ describe('owner command-center UI', () => {
     expect(
       within(glance).getByRole('link', { name: 'Do this: Open Owner configuration' }),
     ).toHaveAttribute('href', '/setup');
+    expect(within(glance).getByText(/Record identity, territory/u)).toBeVisible();
+    expect(within(glance).getByText(/^Do:$/u)).toBeVisible();
+    expect(within(glance).getByRole('button', { name: 'Copy for SMS' })).toBeVisible();
     expect(
       glance.compareDocumentPosition(screen.getByRole('heading', { name: /Good morning/u })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
