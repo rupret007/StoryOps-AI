@@ -12,7 +12,7 @@ named or coupled to an exterior-cleaning company.
 
 ## Stable kernel versus industry pack
 
-| Stable WashOps kernel                                          | Versioned industry pack                                                      |
+| Stable WashOps kernel                                           | Versioned industry pack                                                      |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | Auth, company membership, RBAC, RLS, audit                      | Service codes, names, categories, and aliases                                |
 | Leads, customers, properties, communications, consent           | Required scope inputs and measurement units                                  |

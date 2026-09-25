@@ -112,9 +112,7 @@ test('pilot rehearsal shows the next local checkpoint and restart requires confi
 
   page.once('dialog', (dialog) => dialog.accept());
   await restartSandboxRehearsal(page);
-  await expect(
-    page.getByRole('heading', { name: 'Tell WashOps who it works for.' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tell WashOps who it works for.' })).toBeVisible();
 });
 
 test('offline field changes recover through an idempotent outbox', async ({

@@ -308,9 +308,7 @@ async function main() {
   }
 
   if (dryRun) {
-    process.stdout.write(
-      '\nWashOps demo-proof plan validated; no proof checks were executed.\n',
-    );
+    process.stdout.write('\nWashOps demo-proof plan validated; no proof checks were executed.\n');
     return;
   }
   await writeReport('passed');

@@ -137,7 +137,10 @@ export function ownerActionGlanceLine(action: OwnerActionItem): string {
       : records === 1
         ? `Record: ${action.entities?.[0]?.label}.`
         : records <= 3
-          ? `Records: ${action.entities!.slice(0, 3).map((e) => e.label).join(', ')}.`
+          ? `Records: ${action
+              .entities!.slice(0, 3)
+              .map((e) => e.label)
+              .join(', ')}.`
           : `${action.entities![0]!.label} + ${records - 1} more.`;
   if (action.kind === 'hold' && action.priority === 'P0') return `Stops work. ${named}`;
   if (action.kind === 'hold') return `Still blocks a safe step. ${named}`;
@@ -206,8 +209,7 @@ export function deriveOwnerCommandGlance(input: {
     const behind = (holds ?? 0) - (p0Holds ?? 0);
     const extra =
       behind > 0 ? ` ${behind} more ${behind === 1 ? 'hold is' : 'holds are'} behind it.` : '';
-    const singleEntity =
-      next.entities?.length === 1 ? ` — ${next.entities[0]!.label}` : '';
+    const singleEntity = next.entities?.length === 1 ? ` — ${next.entities[0]!.label}` : '';
     return {
       freshness: input.freshness,
       countsKnown,

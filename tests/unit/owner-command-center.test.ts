@@ -520,9 +520,7 @@ describe('owner command center projection', () => {
         { label: 'JOB-1049', href: '/dispatch' },
       ],
     };
-    expect(ownerActionGlanceLine(twoEntities)).toBe(
-      'Stops work. Records: JOB-1048, JOB-1049.',
-    );
+    expect(ownerActionGlanceLine(twoEntities)).toBe('Stops work. Records: JOB-1048, JOB-1049.');
 
     const threeEntities: OwnerActionItem = {
       ...twoEntities,
@@ -570,9 +568,7 @@ describe('owner command center projection', () => {
       source: 'test',
       href: '/setup',
     };
-    expect(ownerActionGlanceLine(noEntities)).toBe(
-      'Stops work. See the source for details.',
-    );
+    expect(ownerActionGlanceLine(noEntities)).toBe('Stops work. See the source for details.');
   });
 
   it('withholds counts when the authenticated workspace has no server time', () => {

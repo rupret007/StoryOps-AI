@@ -235,9 +235,7 @@ describe('owner command-center UI', () => {
     );
 
     const glance = screen.getByRole('region', { name: 'Phone glance' });
-    expect(
-      within(glance).getByRole('heading', { name: 'WashOps is not current.' }),
-    ).toBeVisible();
+    expect(within(glance).getByRole('heading', { name: 'WashOps is not current.' })).toBeVisible();
     expect(within(glance).getByRole('alert')).toHaveTextContent('Fail closed');
     expect(within(glance).getAllByLabelText('withheld')).toHaveLength(3);
     expect(screen.getByText('Not current')).toBeVisible();
